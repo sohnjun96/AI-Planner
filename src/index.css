@@ -41,6 +41,23 @@ body {
   grid-template-columns: 250px 1fr;
 }
 
+.skip-link {
+  position: absolute;
+  left: 10px;
+  top: -40px;
+  z-index: 3000;
+  background: #0f172a;
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.skip-link:focus {
+  top: 10px;
+}
+
 .sidebar {
   border-right: 1px solid var(--border);
   background: linear-gradient(175deg, #ecfeff 0%, #f8fafc 80%);
@@ -88,6 +105,14 @@ body {
   border-bottom: 1px solid var(--border);
   background: #ffffffaa;
   backdrop-filter: blur(6px);
+}
+
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .page-content {
@@ -254,6 +279,10 @@ body {
   background: #fff;
 }
 
+.task-item.conflict {
+  box-shadow: inset 0 0 0 1px #dc262655;
+}
+
 .task-item.clickable {
   cursor: pointer;
 }
@@ -264,6 +293,21 @@ body {
 
 .task-item.selected {
   outline: 2px solid #0f766e66;
+}
+
+.badge-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conflict-badge {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #991b1b;
+  background: #fee2e2;
 }
 
 .task-item header {
@@ -389,6 +433,10 @@ body {
   gap: 16px;
 }
 
+.ai-layout.compact {
+  grid-template-columns: minmax(0, 1.2fr) 320px;
+}
+
 .ai-chat-panel,
 .ai-proposal-panel {
   align-content: start;
@@ -400,6 +448,10 @@ body {
   max-height: 56vh;
   overflow: auto;
   padding-right: 4px;
+}
+
+.ai-layout.compact .ai-chat-log {
+  max-height: 38vh;
 }
 
 .ai-chat-item {
@@ -447,6 +499,96 @@ body {
   line-height: 1.4;
 }
 
+.proposal-item-toggle {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.endpoint-status {
+  margin: 0;
+  font-weight: 700;
+}
+
+.endpoint-status.ok {
+  color: #15803d;
+}
+
+.endpoint-status.checking {
+  color: #0369a1;
+}
+
+.endpoint-status.error {
+  color: #b91c1c;
+}
+
+.conflict-warning {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.conflict-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: #7f1d1d;
+}
+
+.mini-list-block {
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+}
+
+.mini-list-block h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.mini-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.backup-list-block {
+  display: grid;
+  gap: 8px;
+}
+
+.backup-list-block h3 {
+  margin: 0;
+}
+
+.backup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.backup-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .project-task-panel {
   align-content: start;
 }
@@ -468,6 +610,7 @@ body {
   align-items: center;
   gap: 8px;
   background: #fff;
+  cursor: pointer;
 }
 
 .entity-item.selected {
@@ -509,6 +652,17 @@ textarea {
 
 textarea {
   resize: vertical;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.entity-item:focus-visible,
+.task-item.clickable:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
 }
 
 .form-grid {
@@ -618,6 +772,11 @@ textarea {
   background: #fee2e2;
   border-color: #fecaca;
   color: var(--danger);
+}
+
+.btn.is-active {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 2px #0f766e22;
 }
 
 .file-upload {
@@ -775,5 +934,9 @@ textarea {
 
   .status-toggle-group {
     grid-template-columns: 1fr;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
   }
 }

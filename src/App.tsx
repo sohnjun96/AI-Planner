@@ -2,7 +2,6 @@
 import { AppShell } from "./components/AppShell";
 import { AppDataProvider, useAppData } from "./context/AppDataContext";
 import { ArchivePage } from "./pages/ArchivePage";
-import { AiAssistantPage } from "./pages/AiAssistantPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -22,7 +21,7 @@ function RoutedApp() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/ai" element={<AiAssistantPage />} />
+          <Route path="/ai" element={<Navigate to="/dashboard" replace />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/types" element={<Navigate to="/settings" replace />} />
           <Route path="/archive" element={<ArchivePage />} />

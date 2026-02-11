@@ -55,11 +55,22 @@ export async function bootstrapDatabase(): Promise<void> {
     return;
   }
 
-  if (setting.llmApiKey === undefined || setting.llmModel === undefined) {
+  if (
+    setting.llmApiKey === undefined ||
+    setting.llmModel === undefined ||
+    setting.notificationsEnabled === undefined ||
+    setting.notifyBeforeMinutes === undefined ||
+    setting.autoBackupEnabled === undefined ||
+    setting.autoBackupIntervalMinutes === undefined
+  ) {
     await db.settings.put({
       ...setting,
       llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
       llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
+      notificationsEnabled: setting.notificationsEnabled ?? DEFAULT_SETTING.notificationsEnabled,
+      notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_SETTING.notifyBeforeMinutes,
+      autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
+      autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_SETTING.autoBackupIntervalMinutes,
       updatedAt: now,
     });
   }

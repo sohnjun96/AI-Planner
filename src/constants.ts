@@ -1,4 +1,4 @@
-﻿import type { AppSetting, Project, TaskStatus, TaskType } from "./models";
+﻿import type { AppSetting, Project, RecurrencePattern, TaskStatus, TaskType } from "./models";
 
 export const SETTINGS_ID = "default";
 export const DEFAULT_PROJECT_ID = "project-general";
@@ -6,6 +6,9 @@ export const DEFAULT_PROJECT_ID = "project-general";
 // LLM endpoint is intentionally fixed in code for intranet deployment.
 export const LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
 export const LLM_DEFAULT_MODEL = "gpt-4o-mini";
+
+export const DEFAULT_NOTIFY_BEFORE_MINUTES = 30;
+export const DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES = 360;
 
 export const COLOR_PRESETS = [
   "#ef4444",
@@ -40,15 +43,22 @@ export function pickRandomPresetColor(excludeColor?: string): string {
 }
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  NOT_DONE: "\uBBF8\uC644\uB8CC",
-  ON_HOLD: "\uBCF4\uB958",
-  DONE: "\uC644\uB8CC",
+  NOT_DONE: "미완료",
+  ON_HOLD: "보류",
+  DONE: "완료",
+};
+
+export const RECURRENCE_LABELS: Record<RecurrencePattern, string> = {
+  NONE: "반복 없음",
+  DAILY: "매일",
+  WEEKLY: "매주",
+  MONTHLY: "매월",
 };
 
 export const DEFAULT_TASK_TYPES: TaskType[] = [
   {
     id: "type-write",
-    name: "\uC791\uC131",
+    name: "작성",
     color: "#2563eb",
     isDefault: true,
     isActive: true,
@@ -58,7 +68,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
   },
   {
     id: "type-submit",
-    name: "\uC81C\uCD9C",
+    name: "제출",
     color: "#dc2626",
     isDefault: true,
     isActive: true,
@@ -68,7 +78,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
   },
   {
     id: "type-report",
-    name: "\uBCF4\uACE0",
+    name: "보고",
     color: "#0f766e",
     isDefault: true,
     isActive: true,
@@ -78,7 +88,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
   },
   {
     id: "type-event",
-    name: "\uD589\uC0AC",
+    name: "행사",
     color: "#f59e0b",
     isDefault: true,
     isActive: true,
@@ -88,7 +98,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
   },
   {
     id: "type-trip",
-    name: "\uCD9C\uC7A5",
+    name: "출장",
     color: "#7c3aed",
     isDefault: true,
     isActive: true,
@@ -98,7 +108,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
   },
   {
     id: "type-leave",
-    name: "\uC5F0\uAC00",
+    name: "연가",
     color: "#0ea5e9",
     isDefault: true,
     isActive: true,
@@ -108,7 +118,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
   },
   {
     id: "type-etc",
-    name: "\uAE30\uD0C0",
+    name: "기타",
     color: "#6b7280",
     isDefault: true,
     isActive: true,
@@ -120,9 +130,9 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
 
 export const DEFAULT_PROJECT: Project = {
   id: DEFAULT_PROJECT_ID,
-  name: "\uC77C\uBC18",
+  name: "일반",
   color: "#334155",
-  description: "\uAE30\uBCF8 \uD504\uB85C\uC81D\uD2B8",
+  description: "기본 프로젝트",
   isActive: true,
   createdAt: "",
   updatedAt: "",
@@ -135,5 +145,9 @@ export const DEFAULT_SETTING: AppSetting = {
   timeFormat: "24h",
   llmApiKey: "",
   llmModel: LLM_DEFAULT_MODEL,
+  notificationsEnabled: true,
+  notifyBeforeMinutes: DEFAULT_NOTIFY_BEFORE_MINUTES,
+  autoBackupEnabled: true,
+  autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   updatedAt: "",
 };

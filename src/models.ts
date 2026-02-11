@@ -1,4 +1,5 @@
 export type TaskStatus = "NOT_DONE" | "ON_HOLD" | "DONE";
+export type RecurrencePattern = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
 
 export interface Task {
   id: string;
@@ -13,6 +14,9 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  recurrencePattern?: RecurrencePattern;
+  recurrenceGroupId?: string;
+  recurrenceIndex?: number;
 }
 
 export interface Project {
@@ -50,6 +54,10 @@ export interface AppSetting {
   timeFormat: "24h" | "12h";
   llmApiKey?: string;
   llmModel?: string;
+  notificationsEnabled?: boolean;
+  notifyBeforeMinutes?: number;
+  autoBackupEnabled?: boolean;
+  autoBackupIntervalMinutes?: number;
   updatedAt: string;
 }
 
@@ -62,4 +70,6 @@ export interface TaskFormInput {
   startAt: string;
   endAt?: string;
   isMajor: boolean;
+  recurrencePattern?: RecurrencePattern;
+  recurrenceCount?: number;
 }

@@ -6,7 +6,7 @@
   "action": {
     "default_title": "Open Work Schedule Manager"
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

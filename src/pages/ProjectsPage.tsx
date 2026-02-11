@@ -7,6 +7,7 @@ import { DEFAULT_PROJECT_ID, pickRandomPresetColor } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Project, Task, TaskFormInput, TaskStatus } from "../models";
 import { compareByStartAtAsc } from "../utils/date";
+import { buildTaskConflictMap } from "../utils/taskConflicts";
 
 interface ProjectFormState {
   id?: string;
@@ -324,6 +325,7 @@ export function ProjectsPage() {
 
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
+  const conflictMap = useMemo(() => buildTaskConflictMap(tasks), [tasks]);
 
   const projectTasks = useMemo(() => {
     if (!selectedProject) {
@@ -337,10 +339,12 @@ export function ProjectsPage() {
           return true;
         }
         const keyword = taskKeyword.trim().toLowerCase();
-        return `${task.title} ${task.content}`.toLowerCase().includes(keyword);
+        const typeName = typeMap[task.taskTypeId]?.name ?? "";
+        const projectName = projectMap[task.projectId]?.name ?? "";
+        return `${task.title} ${task.content} ${typeName} ${projectName}`.toLowerCase().includes(keyword);
       })
       .sort(compareByStartAtAsc);
-  }, [selectedProject, tasks, taskKeyword]);
+  }, [selectedProject, tasks, taskKeyword, typeMap, projectMap]);
 
   const editingTask = useMemo(() => {
     if (taskModalState?.mode !== "edit") {
@@ -447,6 +451,7 @@ export function ProjectsPage() {
               }}
               role="button"
               tabIndex={0}
+              aria-label={`${project.name} 프로젝트 선택`}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
@@ -506,6 +511,7 @@ export function ProjectsPage() {
               project={projectMap[task.projectId]}
               taskType={typeMap[task.taskTypeId]}
               timeFormat={setting.timeFormat}
+              hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
               onClick={() => {
                 setTaskModalState({ mode: "edit", taskId: task.id });
               }}
@@ -562,6 +568,7 @@ export function ProjectsPage() {
                 key={`project-task-new-${selectedProject.id}-${taskFormSerial}`}
                 projects={projects}
                 taskTypes={taskTypes}
+                allTasks={tasks}
                 fixedProjectId={selectedProject.id}
                 timeFormat={setting.timeFormat}
                 onSubmit={handleCreateProjectTask}
@@ -573,6 +580,7 @@ export function ProjectsPage() {
                 key={`project-task-edit-${editingTask.id}`}
                 projects={projects}
                 taskTypes={taskTypes}
+                allTasks={tasks}
                 fixedProjectId={selectedProject.id}
                 initialTask={editingTask}
                 timeFormat={setting.timeFormat}

@@ -2,6 +2,7 @@
 import { ColorSelector } from "../components/ColorSelector";
 import { LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL, pickRandomPresetColor } from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { formatDateTime } from "../utils/date";
 
 interface TypeFormState {
   id?: string;
@@ -64,10 +65,17 @@ export function SettingsPage() {
     taskTypes,
     upsertTaskType,
     deleteTaskType,
+    autoBackups,
+    createAutoBackup,
+    restoreAutoBackup,
+    deleteAutoBackup,
+    refreshAutoBackups,
   } = useAppData();
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [backupMessage, setBackupMessage] = useState("");
+  const [backupError, setBackupError] = useState("");
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -76,6 +84,10 @@ export function SettingsPage() {
   const lastTypeIdRef = useRef<string | undefined>(undefined);
 
   const sortedTypes = useMemo(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
+
+  useEffect(() => {
+    void refreshAutoBackups();
+  }, [refreshAutoBackups]);
 
   useEffect(() => {
     if (!typeForm.id) {
@@ -155,6 +167,47 @@ export function SettingsPage() {
     }
   }
 
+  async function handleCreateManualBackup() {
+    setBackupError("");
+    setBackupMessage("");
+
+    try {
+      await createAutoBackup("수동");
+      setBackupMessage("자동 백업 저장소에 백업을 추가했습니다.");
+    } catch (backupCreateError) {
+      setBackupError(backupCreateError instanceof Error ? backupCreateError.message : "백업 생성에 실패했습니다.");
+    }
+  }
+
+  async function handleRestoreBackup(backupId: string) {
+    const shouldRestore = window.confirm("선택한 백업으로 복원할까요? 현재 데이터가 교체됩니다.");
+    if (!shouldRestore) {
+      return;
+    }
+
+    setBackupError("");
+    setBackupMessage("");
+
+    try {
+      await restoreAutoBackup(backupId);
+      setBackupMessage("백업에서 데이터를 복원했습니다.");
+    } catch (backupRestoreError) {
+      setBackupError(backupRestoreError instanceof Error ? backupRestoreError.message : "백업 복원에 실패했습니다.");
+    }
+  }
+
+  async function handleDeleteBackup(backupId: string) {
+    setBackupError("");
+    setBackupMessage("");
+
+    try {
+      await deleteAutoBackup(backupId);
+      setBackupMessage("백업을 삭제했습니다.");
+    } catch (backupDeleteError) {
+      setBackupError(backupDeleteError instanceof Error ? backupDeleteError.message : "백업 삭제에 실패했습니다.");
+    }
+  }
+
   async function handleTypeSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTypeError("");
@@ -222,7 +275,7 @@ export function SettingsPage() {
     <div className="settings-layout">
       <section className="panel settings-panel">
         <header className="panel-header">
-          <h2>설정</h2>
+          <h2>일반 설정</h2>
         </header>
 
         <div className="form-grid two-col">
@@ -263,6 +316,130 @@ export function SettingsPage() {
           />
           지난 완료 업무를 기본으로 표시
         </label>
+      </section>
+
+      <section className="panel settings-panel">
+        <header className="panel-header">
+          <h2>알림 및 백업</h2>
+        </header>
+
+        <div className="form-grid two-col">
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={Boolean(setting.notificationsEnabled)}
+              onChange={(event) => {
+                void updateSetting({ notificationsEnabled: event.target.checked });
+              }}
+            />
+            일정 알림 사용
+          </label>
+
+          <label>
+            알림 사전 시간(분)
+            <input
+              type="text"
+              inputMode="numeric"
+              value={String(setting.notifyBeforeMinutes ?? 30)}
+              onChange={(event) => {
+                const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                void updateSetting({ notifyBeforeMinutes: Number.isFinite(next) ? next : 0 });
+              }}
+            />
+          </label>
+        </div>
+
+        <div className="form-grid two-col">
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={Boolean(setting.autoBackupEnabled)}
+              onChange={(event) => {
+                void updateSetting({ autoBackupEnabled: event.target.checked });
+              }}
+            />
+            자동 백업 사용
+          </label>
+
+          <label>
+            자동 백업 주기(분)
+            <input
+              type="text"
+              inputMode="numeric"
+              value={String(setting.autoBackupIntervalMinutes ?? 360)}
+              onChange={(event) => {
+                const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                void updateSetting({ autoBackupIntervalMinutes: Number.isFinite(next) ? next : 15 });
+              }}
+            />
+          </label>
+        </div>
+
+        <div className="button-row">
+          <button className="btn btn-primary" type="button" onClick={() => void handleCreateManualBackup()}>
+            지금 자동 백업 생성
+          </button>
+          <button className="btn btn-soft" type="button" onClick={() => void refreshAutoBackups()}>
+            백업 목록 새로고침
+          </button>
+        </div>
+
+        <div className="button-row">
+          <button className="btn btn-primary" type="button" onClick={() => void handleExport()}>
+            JSON 내보내기
+          </button>
+          <label className="btn btn-soft file-upload">
+            JSON 가져오기
+            <input type="file" accept=".json,application/json" onChange={handleImport} />
+          </label>
+        </div>
+
+        {backupMessage ? <p className="success-text">{backupMessage}</p> : null}
+        {backupError ? <p className="error-text">{backupError}</p> : null}
+        {message ? <p className="success-text">{message}</p> : null}
+        {error ? <p className="error-text">{error}</p> : null}
+
+        <div className="backup-list-block">
+          <h3>자동 백업 목록</h3>
+          {autoBackups.length === 0 ? <p className="empty-text">저장된 자동 백업이 없습니다.</p> : null}
+
+          <ul className="backup-list">
+            {autoBackups.map((backup) => (
+              <li key={backup.id} className="backup-item">
+                <div>
+                  <strong>{formatDateTime(backup.createdAt, setting.timeFormat)}</strong>
+                  <p className="description-text">사유: {backup.reason} / 크기: {(backup.size / 1024).toFixed(1)} KB</p>
+                </div>
+                <div className="button-row compact">
+                  <button
+                    className="btn btn-soft"
+                    type="button"
+                    onClick={() => {
+                      void handleRestoreBackup(backup.id);
+                    }}
+                  >
+                    복원
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    type="button"
+                    onClick={() => {
+                      void handleDeleteBackup(backup.id);
+                    }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className="panel settings-panel">
+        <header className="panel-header">
+          <h2>AI 설정</h2>
+        </header>
 
         <div className="form-grid two-col">
           <label>
@@ -293,19 +470,6 @@ export function SettingsPage() {
 
         <p className="description-text">LLM Endpoint(코드 고정): {LLM_CHAT_COMPLETIONS_URL}</p>
         <p className="description-text">모델명/API Key는 입력 즉시 저장됩니다.</p>
-
-        <div className="button-row">
-          <button className="btn btn-primary" type="button" onClick={() => void handleExport()}>
-            데이터 내보내기
-          </button>
-          <label className="btn btn-soft file-upload">
-            데이터 가져오기
-            <input type="file" accept=".json,application/json" onChange={handleImport} />
-          </label>
-        </div>
-
-        {message ? <p className="success-text">{message}</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
       </section>
 
       <section className="panel">
@@ -323,6 +487,7 @@ export function SettingsPage() {
                 onClick={() => handleSelectType(type)}
                 role="button"
                 tabIndex={0}
+                aria-label={`${type.name} 종류 선택`}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
@@ -403,4 +568,3 @@ export function SettingsPage() {
     </div>
   );
 }
-

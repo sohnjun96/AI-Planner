@@ -42,11 +42,21 @@ export function MonthCalendar({
   return (
     <section className="panel calendar-panel">
       <div className="calendar-header">
-        <button type="button" className="btn btn-soft" onClick={() => setVisibleMonth((prev) => addMonths(prev, -1))}>
+        <button
+          type="button"
+          className="btn btn-soft"
+          aria-label="이전 달 보기"
+          onClick={() => setVisibleMonth((prev) => addMonths(prev, -1))}
+        >
           이전
         </button>
         <strong>{monthLabel}</strong>
-        <button type="button" className="btn btn-soft" onClick={() => setVisibleMonth((prev) => addMonths(prev, 1))}>
+        <button
+          type="button"
+          className="btn btn-soft"
+          aria-label="다음 달 보기"
+          onClick={() => setVisibleMonth((prev) => addMonths(prev, 1))}
+        >
           다음
         </button>
       </div>
@@ -74,6 +84,7 @@ export function MonthCalendar({
                 todayKey === key ? "today" : ""
               } ${isOtherMonth ? "muted" : ""}`}
               onClick={() => onSelectDate(key)}
+              aria-label={`${key} 선택, 일정 ${count}건`}
             >
               <span>{date.getDate()}</span>
               {firstEventTitle ? (

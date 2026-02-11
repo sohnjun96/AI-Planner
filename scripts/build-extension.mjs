@@ -21,6 +21,7 @@ async function runBuild() {
     bundle: true,
     platform: "browser",
     format: "esm",
+    charset: "utf8",
     target: ["chrome107"],
     jsx: "automatic",
     minify: false,

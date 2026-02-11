@@ -4,6 +4,7 @@ import { TaskItem } from "../components/TaskItem";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput, TaskStatus } from "../models";
 import { isPastCompletedHidden } from "../utils/date";
+import { buildTaskConflictMap } from "../utils/taskConflicts";
 
 type TaskSortKey = "priority" | "startAt" | "completedAt";
 type SortDirection = "asc" | "desc";
@@ -71,6 +72,7 @@ export function TasksPage() {
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const conflictMap = useMemo(() => buildTaskConflictMap(tasks), [tasks]);
 
   const sortedTasks = useMemo(() => {
     return tasks
@@ -80,12 +82,19 @@ export function TasksPage() {
           return true;
         }
         const keyword = sortState.keyword.trim().toLowerCase();
-        return `${task.title} ${task.content}`.toLowerCase().includes(keyword);
+        const projectName = projectMap[task.projectId]?.name ?? "";
+        const typeName = typeMap[task.taskTypeId]?.name ?? "";
+        return `${task.title} ${task.content} ${projectName} ${typeName}`.toLowerCase().includes(keyword);
       })
       .sort((a, b) => compareBySortRule(a, b, sortState.sortBy, sortState.direction));
-  }, [tasks, setting.showPastCompleted, sortState]);
+  }, [tasks, setting.showPastCompleted, sortState, projectMap, typeMap]);
 
   const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedTaskId), [selectedTaskId, tasks]);
+
+  const conflictTasks = useMemo(
+    () => sortedTasks.filter((task) => (conflictMap[task.id]?.length ?? 0) > 0).slice(0, 8),
+    [sortedTasks, conflictMap],
+  );
 
   async function handleCreate(input: TaskFormInput) {
     setError("");
@@ -120,7 +129,7 @@ export function TasksPage() {
             type="text"
             value={sortState.keyword}
             onChange={(event) => setSortState((prev) => ({ ...prev, keyword: event.target.value }))}
-            placeholder="제목 또는 내용 검색"
+            placeholder="제목/내용/프로젝트/종류 검색"
           />
         </label>
 
@@ -160,6 +169,18 @@ export function TasksPage() {
         >
           초기화
         </button>
+
+        <section className="mini-list-block" aria-label="충돌 일정 요약">
+          <h3>충돌 일정</h3>
+          {conflictTasks.length === 0 ? <p className="empty-text">충돌이 없습니다.</p> : null}
+          <ul className="mini-list">
+            {conflictTasks.map((task) => (
+              <li key={`conflict-${task.id}`}>
+                {task.title} ({conflictMap[task.id]?.length ?? 0}건)
+              </li>
+            ))}
+          </ul>
+        </section>
       </section>
 
       <section className="panel">
@@ -177,6 +198,7 @@ export function TasksPage() {
               taskType={typeMap[task.taskTypeId]}
               timeFormat={setting.timeFormat}
               selected={selectedTaskId === task.id}
+              hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
               onClick={() => setSelectedTaskId(task.id)}
               onStatusChange={(status) => {
                 void updateTask(task.id, toTaskInput(task, status)).catch((updateError) => {
@@ -194,6 +216,7 @@ export function TasksPage() {
             key={selectedTask.id}
             projects={projects}
             taskTypes={taskTypes}
+            allTasks={tasks}
             initialTask={selectedTask}
             timeFormat={setting.timeFormat}
             onSubmit={handleUpdate}
@@ -205,6 +228,7 @@ export function TasksPage() {
             key="new-task-form"
             projects={projects}
             taskTypes={taskTypes}
+            allTasks={tasks}
             timeFormat={setting.timeFormat}
             onSubmit={handleCreate}
           />

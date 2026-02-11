@@ -1,10 +1,12 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { MonthCalendar } from "../components/MonthCalendar";
+import { AiAssistantWorkspace } from "../components/AiAssistantWorkspace";
 import { TaskForm } from "../components/TaskForm";
 import { TaskItem } from "../components/TaskItem";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput } from "../models";
 import { compareByStartAtAsc, getDateKey, isPastCompletedHidden } from "../utils/date";
+import { buildTaskConflictMap } from "../utils/taskConflicts";
 
 const GLOBAL_MEMO_KEY = "global";
 const GLOBAL_MEMO_AUTOSAVE_DELAY_MS = 900;
@@ -45,6 +47,7 @@ export function DashboardPage() {
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
   const memoMap = useMemo(() => Object.fromEntries(memos.map((memo) => [memo.date, memo])), [memos]);
+  const conflictMap = useMemo(() => buildTaskConflictMap(tasks), [tasks]);
 
   const taskCountByDate = useMemo(() => {
     const map: Record<string, number> = {};
@@ -180,6 +183,8 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-page">
+      <AiAssistantWorkspace compact showEndpointInfo={false} />
+
       <section className="panel global-memo-panel">
         <header className="panel-header">
           <h2>전체 메모</h2>
@@ -242,6 +247,7 @@ export function DashboardPage() {
                 project={projectMap[task.projectId]}
                 taskType={typeMap[task.taskTypeId]}
                 timeFormat={setting.timeFormat}
+                hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
                 onClick={() => {
                   setTaskModalState({ mode: "edit", taskId: task.id });
                 }}
@@ -263,6 +269,7 @@ export function DashboardPage() {
                 project={projectMap[task.projectId]}
                 taskType={typeMap[task.taskTypeId]}
                 timeFormat={setting.timeFormat}
+                hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
                 onClick={() => {
                   setTaskModalState({ mode: "edit", taskId: task.id });
                 }}
@@ -306,6 +313,7 @@ export function DashboardPage() {
                 key={`dashboard-new-task-${selectedDate}-${taskFormSerial}`}
                 projects={projects}
                 taskTypes={taskTypes}
+                allTasks={tasks}
                 defaultStartDate={selectedDate}
                 timeFormat={setting.timeFormat}
                 onSubmit={handleCreateTask}
@@ -315,6 +323,7 @@ export function DashboardPage() {
                 key={`dashboard-edit-task-${editingTask.id}`}
                 projects={projects}
                 taskTypes={taskTypes}
+                allTasks={tasks}
                 initialTask={editingTask}
                 timeFormat={setting.timeFormat}
                 onSubmit={handleUpdateTask}

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import type { Project, Task, TaskFormInput, TaskStatus, TaskType } from "../models";
-import { STATUS_LABELS } from "../constants";
+import type { Project, RecurrencePattern, Task, TaskFormInput, TaskStatus, TaskType } from "../models";
+import { RECURRENCE_LABELS, STATUS_LABELS } from "../constants";
 import {
   combineDateTimeToIso,
   formatDateTime,
@@ -8,10 +8,12 @@ import {
   toLocalDateInputValue,
   toLocalTimeInputValue,
 } from "../utils/date";
+import { findTaskConflictsForRange } from "../utils/taskConflicts";
 
 interface TaskFormProps {
   projects: Project[];
   taskTypes: TaskType[];
+  allTasks?: Task[];
   initialTask?: Task;
   defaultStartDate?: string;
   fixedProjectId?: string;
@@ -32,6 +34,8 @@ interface FormState {
   endDate: string;
   endTime: string;
   isMajor: boolean;
+  recurrencePattern: RecurrencePattern;
+  recurrenceCount: string;
 }
 
 const AUTOSAVE_DELAY_MS = 700;
@@ -52,6 +56,8 @@ function buildDefaultState(projects: Project[], taskTypes: TaskType[], defaultSt
     endDate: "",
     endTime: "",
     isMajor: false,
+    recurrencePattern: "NONE",
+    recurrenceCount: "1",
   };
 }
 
@@ -67,6 +73,8 @@ function buildStateFromTask(task: Task): FormState {
     endDate: task.endAt ? toLocalDateInputValue(task.endAt) : "",
     endTime: task.endAt ? toLocalTimeInputValue(task.endAt) : "",
     isMajor: task.isMajor,
+    recurrencePattern: "NONE",
+    recurrenceCount: "1",
   };
 }
 
@@ -94,6 +102,8 @@ function buildInputFromForm(form: FormState, fixedProjectId?: string): { input?:
     return { error: "종료 시간은 시작 시간보다 빠를 수 없습니다." };
   }
 
+  const recurrenceCount = Math.max(1, Math.min(60, Math.floor(Number(form.recurrenceCount) || 1)));
+
   return {
     input: {
       title: form.title,
@@ -104,6 +114,8 @@ function buildInputFromForm(form: FormState, fixedProjectId?: string): { input?:
       startAt,
       endAt,
       isMajor: form.isMajor,
+      recurrencePattern: form.recurrencePattern,
+      recurrenceCount,
     },
   };
 }
@@ -124,6 +136,7 @@ function serializeTaskInput(input: TaskFormInput): string {
 export function TaskForm({
   projects,
   taskTypes,
+  allTasks = [],
   initialTask,
   defaultStartDate,
   fixedProjectId,
@@ -150,6 +163,24 @@ export function TaskForm({
       })),
     [],
   );
+
+  const draftRange = useMemo(() => {
+    if (!form.startDate || !form.startTime) {
+      return undefined;
+    }
+
+    const startAt = combineDateTimeToIso(form.startDate, form.startTime);
+    const endAt = form.endDate && form.endTime ? combineDateTimeToIso(form.endDate, form.endTime) : undefined;
+    return { startAt, endAt };
+  }, [form.startDate, form.startTime, form.endDate, form.endTime]);
+
+  const conflictingTasks = useMemo(() => {
+    if (!draftRange) {
+      return [];
+    }
+
+    return findTaskConflictsForRange(allTasks, draftRange.startAt, draftRange.endAt, initialTask?.id);
+  }, [allTasks, draftRange, initialTask?.id]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -183,6 +214,7 @@ export function TaskForm({
         .then(() => {
           autoSaveSnapshotRef.current = snapshot;
           setAutoSaveMessage("자동 저장됨");
+          setError("");
         })
         .catch((submitError) => {
           setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
@@ -221,7 +253,7 @@ export function TaskForm({
   }
 
   return (
-    <form className="task-form" onSubmit={handleSubmit}>
+    <form className="task-form" onSubmit={handleSubmit} aria-label={isEdit ? "일정 수정 폼" : "일정 추가 폼"}>
       <h3>{isEdit ? "일정 수정" : "일정 추가"}</h3>
 
       <label>
@@ -231,6 +263,7 @@ export function TaskForm({
           value={form.title}
           onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
           placeholder="일정 제목"
+          autoFocus
           required
         />
       </label>
@@ -292,7 +325,7 @@ export function TaskForm({
 
       <div className="status-toggle-block">
         <span>상태</span>
-        <div className="status-toggle-group">
+        <div className="status-toggle-group" role="group" aria-label="일정 상태 선택">
           {statusOptions.map((item) => (
             <button
               key={item.value}
@@ -301,6 +334,8 @@ export function TaskForm({
               onClick={() => {
                 setForm((prev) => ({ ...prev, status: item.value }));
               }}
+              aria-pressed={form.status === item.value}
+              aria-label={`상태를 ${item.label}로 변경`}
             >
               {item.label}
             </button>
@@ -347,14 +382,65 @@ export function TaskForm({
         </label>
       </div>
 
+      {!isEdit ? (
+        <div className="form-grid two-col">
+          <label>
+            반복
+            <select
+              value={form.recurrencePattern}
+              onChange={(event) => {
+                const nextPattern = event.target.value as RecurrencePattern;
+                setForm((prev) => ({
+                  ...prev,
+                  recurrencePattern: nextPattern,
+                  recurrenceCount: nextPattern === "NONE" ? "1" : prev.recurrenceCount,
+                }));
+              }}
+            >
+              {(Object.keys(RECURRENCE_LABELS) as RecurrencePattern[]).map((pattern) => (
+                <option key={pattern} value={pattern}>
+                  {RECURRENCE_LABELS[pattern]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            생성 횟수
+            <input
+              type="text"
+              inputMode="numeric"
+              value={form.recurrenceCount}
+              onChange={(event) => setForm((prev) => ({ ...prev, recurrenceCount: event.target.value.replace(/[^0-9]/g, "") }))}
+              placeholder="1"
+              disabled={form.recurrencePattern === "NONE"}
+            />
+          </label>
+        </div>
+      ) : null}
+
       <label className="checkbox-inline">
         <input
           type="checkbox"
           checked={form.isMajor}
           onChange={(event) => setForm((prev) => ({ ...prev, isMajor: event.target.checked }))}
         />
-        {"\uC8FC\uC694 \uC77C\uC815"}
+        주요 일정
       </label>
+
+      {conflictingTasks.length > 0 ? (
+        <div className="conflict-warning" role="alert" aria-live="polite">
+          <strong>시간 충돌 {conflictingTasks.length}건</strong>
+          <ul className="conflict-list">
+            {conflictingTasks.slice(0, 5).map((task) => (
+              <li key={task.id}>
+                {task.title} ({formatDateTime(task.startAt, timeFormat)}
+                {task.endAt ? ` - ${formatDateTime(task.endAt, timeFormat)}` : ""})
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {initialTask ? (
         <div className="meta-row">
@@ -363,8 +449,14 @@ export function TaskForm({
         </div>
       ) : null}
 
-      {isEdit ? <p className="success-text">{autoSaveMessage || "자동 저장 켜짐"}</p> : null}
-      {error ? <p className="error-text">{error}</p> : null}
+      <p className="success-text" aria-live="polite">
+        {isEdit ? autoSaveMessage || "자동 저장 켜짐" : ""}
+      </p>
+      {error ? (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       <div className="button-row">
         <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
