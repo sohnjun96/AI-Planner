@@ -30621,6 +30621,26 @@ function combineDateTimeToIso(date, time) {
   const composed = new Date(year, month - 1, day, hour, minute, 0);
   return composed.toISOString();
 }
+function shiftIsoToDateKey(isoValue, dateKey) {
+  const source = new Date(isoValue);
+  if (!Number.isFinite(source.getTime())) {
+    return isoValue;
+  }
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return isoValue;
+  }
+  const shifted = new Date(
+    year,
+    month - 1,
+    day,
+    source.getHours(),
+    source.getMinutes(),
+    source.getSeconds(),
+    source.getMilliseconds()
+  );
+  return shifted.toISOString();
+}
 function compareByStartAtAsc(a, b) {
   return new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
 }
@@ -31834,15 +31854,61 @@ var NAV_ITEMS = [
 ];
 function AppShell() {
   const { setting, updateSetting, projects, taskTypes, tasks, createTask, canUndo, undoLastChange, undoDescription } = useAppData();
+  const navigate = useNavigate();
   const [isQuickAddOpen, setIsQuickAddOpen] = (0, import_react4.useState)(false);
+  const [isCommandOpen, setIsCommandOpen] = (0, import_react4.useState)(false);
+  const [commandQuery, setCommandQuery] = (0, import_react4.useState)("");
+  const commandItems = (0, import_react4.useMemo)(
+    () => [
+      { id: "go-dashboard", label: "Go: Dashboard", keywords: "dashboard home", run: () => navigate("/dashboard") },
+      { id: "go-tasks", label: "Go: Tasks", keywords: "tasks list", run: () => navigate("/tasks") },
+      { id: "go-projects", label: "Go: Projects", keywords: "projects", run: () => navigate("/projects") },
+      { id: "go-archive", label: "Go: Archive", keywords: "archive history", run: () => navigate("/archive") },
+      { id: "go-settings", label: "Go: Settings", keywords: "settings", run: () => navigate("/settings") },
+      { id: "quick-add", label: "Action: Quick Add Task", keywords: "new create task", run: () => setIsQuickAddOpen(true) },
+      {
+        id: "toggle-show-past",
+        label: `Action: ${setting.showPastCompleted ? "Hide" : "Show"} Past Completed`,
+        keywords: "toggle past completed",
+        run: () => {
+          void updateSetting({ showPastCompleted: !setting.showPastCompleted });
+        }
+      },
+      {
+        id: "undo-last",
+        label: "Action: Undo Last Change",
+        keywords: "undo revert",
+        run: () => {
+          if (!canUndo) {
+            return;
+          }
+          void undoLastChange().catch(() => {
+          });
+        }
+      }
+    ],
+    [navigate, setting.showPastCompleted, updateSetting, canUndo, undoLastChange]
+  );
+  const filteredCommandItems = (0, import_react4.useMemo)(() => {
+    const query = commandQuery.trim().toLowerCase();
+    if (!query) {
+      return commandItems;
+    }
+    return commandItems.filter((item) => `${item.label} ${item.keywords}`.toLowerCase().includes(query));
+  }, [commandItems, commandQuery]);
   (0, import_react4.useEffect)(() => {
     const handleKeyDown = (event) => {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setIsQuickAddOpen(true);
       }
+      if (event.ctrlKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsCommandOpen(true);
+      }
       if (event.key === "Escape") {
         setIsQuickAddOpen(false);
+        setIsCommandOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -31853,6 +31919,11 @@ function AppShell() {
   async function handleQuickCreate(input) {
     await createTask(input);
     setIsQuickAddOpen(false);
+  }
+  function handleExecuteCommand(commandItem) {
+    commandItem.run();
+    setIsCommandOpen(false);
+    setCommandQuery("");
   }
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "app-shell", children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("a", { className: "skip-link", href: "#main-content", children: "본문으로 건너뛰기" }),
@@ -31901,6 +31972,18 @@ function AppShell() {
           "button",
           {
             type: "button",
+            className: "btn btn-soft",
+            onClick: () => {
+              setIsCommandOpen(true);
+            },
+            "aria-label": "Open command palette, shortcut Ctrl+K",
+            children: "Command"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+          "button",
+          {
+            type: "button",
             className: "btn btn-primary",
             onClick: () => {
               setIsQuickAddOpen(true);
@@ -31912,6 +31995,69 @@ function AppShell() {
       ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("main", { className: "page-content", id: "main-content", tabIndex: -1, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Outlet, {}) })
     ] }),
+    isCommandOpen ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+      "div",
+      {
+        className: "modal-backdrop",
+        onClick: () => {
+          setIsCommandOpen(false);
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+          "section",
+          {
+            className: "modal-card panel command-palette",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-label": "Command palette",
+            onClick: (event) => {
+              event.stopPropagation();
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: "panel-header", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "Command Palette" }),
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn btn-soft",
+                    onClick: () => {
+                      setIsCommandOpen(false);
+                    },
+                    children: "Close"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                "input",
+                {
+                  type: "text",
+                  placeholder: "Type a command...",
+                  value: commandQuery,
+                  onChange: (event) => setCommandQuery(event.target.value),
+                  autoFocus: true
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("ul", { className: "command-list", children: filteredCommandItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                "li",
+                {
+                  children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                    "button",
+                    {
+                      type: "button",
+                      className: "command-item",
+                      onClick: () => handleExecuteCommand(item),
+                      children: item.label
+                    }
+                  )
+                },
+                item.id
+              )) }),
+              filteredCommandItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "empty-text", children: "No command found." }) : null
+            ]
+          }
+        )
+      }
+    ) : null,
     isQuickAddOpen ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
       "div",
       {
@@ -31967,14 +32113,44 @@ var import_react5 = __toESM(require_react(), 1);
 
 // src/components/TaskItem.tsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
-function TaskItem({ task, project, taskType, timeFormat, selected, hasConflict, onClick, onStatusChange }) {
+function TaskItem({
+  task,
+  project,
+  taskType,
+  timeFormat,
+  selected,
+  hasConflict,
+  onClick,
+  onStatusChange,
+  draggableTask = false,
+  onDragTaskStateChange,
+  selectable = false,
+  selectedForBulk = false,
+  onToggleSelect
+}) {
   const navigate = useNavigate();
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
     "article",
     {
-      className: `task-item ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${hasConflict ? "conflict" : ""}`,
+      className: `task-item ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${hasConflict ? "conflict" : ""} ${draggableTask ? "draggable" : ""}`,
       style: { borderLeftColor: project?.color ?? "#94a3b8" },
       onClick,
+      draggable: draggableTask,
+      onDragStart: (event) => {
+        if (!draggableTask) {
+          return;
+        }
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("application/x-task-id", task.id);
+        event.dataTransfer.setData("text/plain", task.id);
+        onDragTaskStateChange?.(task.id);
+      },
+      onDragEnd: () => {
+        if (!draggableTask) {
+          return;
+        }
+        onDragTaskStateChange?.(null);
+      },
       role: onClick ? "button" : void 0,
       tabIndex: onClick ? 0 : void 0,
       "aria-label": `${task.title} 일정 카드`,
@@ -31985,6 +32161,20 @@ function TaskItem({ task, project, taskType, timeFormat, selected, hasConflict, 
         }
       },
       children: [
+        selectable ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "task-select-row", onClick: (event) => event.stopPropagation(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: selectedForBulk,
+              onChange: (event) => {
+                onToggleSelect?.(event.target.checked);
+              },
+              "aria-label": `${task.title} selection`
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "Select for bulk actions" })
+        ] }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("header", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { children: task.title }),
           /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "badge-row", children: [
@@ -32282,9 +32472,11 @@ function MonthCalendar({
   weekStartsOn,
   taskCountByDate,
   eventTitlesByDate = {},
-  onSelectDate
+  onSelectDate,
+  onDropTaskToDate
 }) {
   const [visibleMonth, setVisibleMonth] = (0, import_react6.useState)(() => startOfMonth(new Date(selectedDate)));
+  const [dragOverDateKey, setDragOverDateKey] = (0, import_react6.useState)(null);
   const selectedKey = getDateKey(selectedDate);
   const todayKey = getDateKey(/* @__PURE__ */ new Date());
   const days = (0, import_react6.useMemo)(() => {
@@ -32334,8 +32526,39 @@ function MonthCalendar({
         "button",
         {
           type: "button",
-          className: `calendar-day ${selectedKey === key ? "selected" : ""} ${todayKey === key ? "today" : ""} ${isOtherMonth ? "muted" : ""}`,
+          className: `calendar-day ${selectedKey === key ? "selected" : ""} ${todayKey === key ? "today" : ""} ${isOtherMonth ? "muted" : ""} ${dragOverDateKey === key ? "drag-target" : ""}`,
           onClick: () => onSelectDate(key),
+          onDragOver: (event) => {
+            if (!onDropTaskToDate) {
+              return;
+            }
+            const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+            if (!taskId) {
+              return;
+            }
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            if (dragOverDateKey !== key) {
+              setDragOverDateKey(key);
+            }
+          },
+          onDragLeave: () => {
+            if (dragOverDateKey === key) {
+              setDragOverDateKey(null);
+            }
+          },
+          onDrop: (event) => {
+            if (!onDropTaskToDate) {
+              return;
+            }
+            const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+            if (!taskId) {
+              return;
+            }
+            event.preventDefault();
+            setDragOverDateKey(null);
+            void onDropTaskToDate(taskId, key);
+          },
           "aria-label": `${key} 선택, 일정 ${count}건`,
           children: [
             /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: date.getDate() }),
@@ -32498,30 +32721,132 @@ function parseToolCalls(value) {
     };
   }).filter((item) => item !== null);
 }
-function parseCreateOperation(value) {
-  if (!isRecord(value) || value.action !== "create_task") {
+function getPreferredItemId(items, fallbackId) {
+  return items.find((item) => item.isActive)?.id ?? items[0]?.id ?? fallbackId ?? "";
+}
+function normalizeLookupValue(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+function pickFirstString(record, keys) {
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return "";
+}
+function pickFirstBoolean(record, keys) {
+  for (const key of keys) {
+    if (typeof record[key] === "boolean") {
+      return record[key];
+    }
+  }
+  return false;
+}
+function normalizeDateTime(value, fallbackTime) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return "";
+  }
+  const raw = String(value).trim();
+  if (!raw) {
+    return "";
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const localDate = new Date(`${raw}T${fallbackTime}:00`);
+    return Number.isNaN(localDate.getTime()) ? "" : localDate.toISOString();
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+}
+function resolveEntityId(rawValue, items, fallbackId) {
+  const trimmed = typeof rawValue === "string" ? rawValue.trim() : "";
+  if (!trimmed) {
+    return fallbackId ?? "";
+  }
+  const exactMatch = items.find((item) => item.id === trimmed);
+  if (exactMatch) {
+    return exactMatch.id;
+  }
+  const normalized = normalizeLookupValue(trimmed);
+  const nameMatch = items.find((item) => normalizeLookupValue(item.name) === normalized);
+  if (nameMatch) {
+    return nameMatch.id;
+  }
+  return fallbackId ?? "";
+}
+function getOperationCandidates(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (!isRecord(value)) {
+    return [];
+  }
+  const candidates = [value.operations, value.tasks, value.draftTasks, value.items, value.drafts];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+  return [];
+}
+function parseCreateOperation(value, options = {}) {
+  if (!isRecord(value)) {
     return null;
   }
-  if (typeof value.title !== "string" || typeof value.taskTypeId !== "string" || typeof value.projectId !== "string" || typeof value.startAt !== "string") {
+  const action = typeof value.action === "string" ? value.action : "";
+  if (action && action !== "create_task" && action !== "create" && action !== "draft_task") {
+    return null;
+  }
+  const title = pickFirstString(value, ["title", "name", "taskTitle"]);
+  const startAt = normalizeDateTime(
+    pickFirstString(value, ["startAt", "start", "startsAt", "scheduledAt", "dateTime", "date"]),
+    "09:00"
+  );
+  const endAtRaw = pickFirstString(value, ["endAt", "end", "endsAt", "endTime"]);
+  let endAt = normalizeDateTime(endAtRaw, "10:00");
+  const durationMinutes = typeof value.durationMinutes === "number" ? Math.max(0, Math.floor(value.durationMinutes)) : 0;
+  if (!endAt && startAt && durationMinutes > 0) {
+    endAt = new Date(new Date(startAt).getTime() + durationMinutes * 6e4).toISOString();
+  }
+  const projectId = resolveEntityId(
+    pickFirstString(value, ["projectId", "project", "projectName"]),
+    options.projects ?? [],
+    options.fallbackProjectId ?? DEFAULT_PROJECT_ID
+  );
+  const taskTypeId = resolveEntityId(
+    pickFirstString(value, ["taskTypeId", "taskType", "taskTypeName", "type", "typeName"]),
+    options.taskTypes ?? [],
+    options.fallbackTaskTypeId ?? DEFAULT_TASK_TYPES[0]?.id ?? ""
+  );
+  if (!title || !startAt || !projectId || !taskTypeId) {
     return null;
   }
   return {
     action: "create_task",
-    title: value.title,
-    content: typeof value.content === "string" ? value.content : "",
-    taskTypeId: value.taskTypeId,
-    projectId: value.projectId,
+    title,
+    content: pickFirstString(value, ["content", "description", "notes", "memo"]),
+    taskTypeId,
+    projectId,
     status: isTaskStatus(value.status) ? value.status : "NOT_DONE",
-    startAt: value.startAt,
-    endAt: typeof value.endAt === "string" ? value.endAt : void 0,
-    isMajor: typeof value.isMajor === "boolean" ? value.isMajor : false
+    startAt,
+    endAt: endAt || void 0,
+    isMajor: pickFirstBoolean(value, ["isMajor", "major", "important"])
   };
 }
-function parseUpdateOperation(value) {
-  if (!isRecord(value) || value.action !== "update_task" || typeof value.taskId !== "string") {
+function parseUpdateOperation(value, options = {}) {
+  if (!isRecord(value)) {
     return null;
   }
-  const sourceChanges = isRecord(value.changes) ? value.changes : {};
+  const action = typeof value.action === "string" ? value.action : "";
+  if (action && action !== "update_task" && action !== "update") {
+    return null;
+  }
+  const taskId = typeof value.taskId === "string" ? value.taskId : typeof value.id === "string" ? value.id : "";
+  if (!taskId) {
+    return null;
+  }
+  const sourceChanges = isRecord(value.changes) ? value.changes : value;
   const changes = {};
   if (typeof sourceChanges.title === "string") {
     changes.title = sourceChanges.title;
@@ -32529,71 +32854,112 @@ function parseUpdateOperation(value) {
   if (typeof sourceChanges.content === "string") {
     changes.content = sourceChanges.content;
   }
-  if (typeof sourceChanges.taskTypeId === "string") {
-    changes.taskTypeId = sourceChanges.taskTypeId;
+  const nextTaskTypeId = resolveEntityId(
+    pickFirstString(sourceChanges, ["taskTypeId", "taskType", "taskTypeName", "type", "typeName"]),
+    options.taskTypes ?? [],
+    void 0
+  );
+  if (nextTaskTypeId) {
+    changes.taskTypeId = nextTaskTypeId;
   }
-  if (typeof sourceChanges.projectId === "string") {
-    changes.projectId = sourceChanges.projectId;
+  const nextProjectId = resolveEntityId(
+    pickFirstString(sourceChanges, ["projectId", "project", "projectName"]),
+    options.projects ?? [],
+    void 0
+  );
+  if (nextProjectId) {
+    changes.projectId = nextProjectId;
   }
   if (isTaskStatus(sourceChanges.status)) {
     changes.status = sourceChanges.status;
   }
-  if (typeof sourceChanges.startAt === "string") {
-    changes.startAt = sourceChanges.startAt;
+  const nextStartAt = normalizeDateTime(
+    pickFirstString(sourceChanges, ["startAt", "start", "startsAt", "scheduledAt", "dateTime", "date"]),
+    "09:00"
+  );
+  if (nextStartAt) {
+    changes.startAt = nextStartAt;
   }
-  if (typeof sourceChanges.endAt === "string" || sourceChanges.endAt === null) {
-    changes.endAt = sourceChanges.endAt;
+  if (sourceChanges.endAt === null) {
+    changes.endAt = null;
+  } else {
+    const nextEndAt = normalizeDateTime(
+      pickFirstString(sourceChanges, ["endAt", "end", "endsAt", "endTime"]),
+      "10:00"
+    );
+    if (nextEndAt) {
+      changes.endAt = nextEndAt;
+    }
   }
-  if (typeof sourceChanges.isMajor === "boolean") {
-    changes.isMajor = sourceChanges.isMajor;
+  if (pickFirstBoolean(sourceChanges, ["isMajor", "major", "important"])) {
+    changes.isMajor = true;
+  } else if (sourceChanges.isMajor === false || sourceChanges.major === false || sourceChanges.important === false) {
+    changes.isMajor = false;
   }
   if (Object.keys(changes).length === 0) {
     return null;
   }
   return {
     action: "update_task",
-    taskId: value.taskId,
+    taskId,
     changes
   };
 }
 function parseDeleteOperation(value) {
-  if (!isRecord(value) || value.action !== "delete_task" || typeof value.taskId !== "string") {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const action = typeof value.action === "string" ? value.action : "";
+  if (action && action !== "delete_task" && action !== "delete" && action !== "remove_task") {
+    return null;
+  }
+  const taskId = typeof value.taskId === "string" ? value.taskId : typeof value.id === "string" ? value.id : "";
+  if (!taskId) {
     return null;
   }
   return {
     action: "delete_task",
-    taskId: value.taskId,
+    taskId,
     reason: typeof value.reason === "string" ? value.reason : void 0
   };
 }
-function parseProposal(value) {
-  if (!isRecord(value)) {
-    return void 0;
-  }
-  const operationsRaw = Array.isArray(value.operations) ? value.operations : [];
+function parseOperationCandidate(value, options = {}) {
+  return parseCreateOperation(value, options) ?? parseUpdateOperation(value, options) ?? parseDeleteOperation(value);
+}
+function parseProposal(value, options = {}) {
+  const operationsRaw = getOperationCandidates(value);
   const operations = [];
   for (const item of operationsRaw) {
-    const createOp = parseCreateOperation(item);
-    if (createOp) {
-      operations.push(createOp);
-      continue;
+    const operation = parseOperationCandidate(item, options);
+    if (operation) {
+      operations.push(operation);
     }
-    const updateOp = parseUpdateOperation(item);
-    if (updateOp) {
-      operations.push(updateOp);
-      continue;
-    }
-    const deleteOp = parseDeleteOperation(item);
-    if (deleteOp) {
-      operations.push(deleteOp);
+  }
+  if (operations.length === 0 && isRecord(value)) {
+    const singleOperation = parseOperationCandidate(value, options);
+    if (singleOperation) {
+      operations.push(singleOperation);
     }
   }
   if (operations.length === 0) {
     return void 0;
   }
   return {
-    summary: typeof value.summary === "string" ? value.summary : "변경 제안",
+    summary: isRecord(value) && typeof value.summary === "string" && value.summary.trim() ? value.summary : typeof options.fallbackSummary === "string" && options.fallbackSummary.trim() ? options.fallbackSummary : "변경 제안",
     operations
+  };
+}
+function buildSummaryOnlyProposal(value, fallbackSummary) {
+  if (!isRecord(value)) {
+    return void 0;
+  }
+  const summary = typeof value.summary === "string" && value.summary.trim() ? value.summary : typeof fallbackSummary === "string" && fallbackSummary.trim() ? fallbackSummary : "";
+  if (!summary) {
+    return void 0;
+  }
+  return {
+    summary,
+    operations: []
   };
 }
 function executeToolCall(call, tasks, projects, taskTypes) {
@@ -32737,7 +33103,14 @@ async function runScheduleAgent(input) {
       accumulatedToolResults.push(...roundResults);
       continue;
     }
-    const proposal = parseProposal(payload.proposal);
+    const proposalOptions = {
+      projects: input.projects,
+      taskTypes: input.taskTypes,
+      fallbackProjectId: getPreferredItemId(input.projects, DEFAULT_PROJECT_ID),
+      fallbackTaskTypeId: getPreferredItemId(input.taskTypes, DEFAULT_TASK_TYPES[0]?.id ?? ""),
+      fallbackSummary: typeof payload.summary === "string" ? payload.summary : typeof payload.assistantMessage === "string" ? payload.assistantMessage : void 0
+    };
+    const proposal = parseProposal(payload.proposal, proposalOptions) ?? buildSummaryOnlyProposal(payload.proposal, proposalOptions.fallbackSummary) ?? parseProposal(payload, proposalOptions);
     const assistantMessage = typeof payload.assistantMessage === "string" && payload.assistantMessage.trim() ? payload.assistantMessage : proposal ? "요청 내용을 바탕으로 변경안을 준비했습니다. 내용을 확인해 주세요." : "요청 내용을 해석했습니다.";
     const question = typeof payload.userQuestion === "string" ? payload.userQuestion : void 0;
     return {
@@ -33087,6 +33460,7 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
           setting.llmModel ?? "(미설정)",
           " / API Key: ",
           setting.llmApiKey ? "설정됨" : "미설정"
+        ] }),
         ] })
       ] }) : null,
       endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
@@ -33130,6 +33504,7 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
       !pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "empty-text", children: "아직 반영 대기 중인 변경안이 없습니다." }) : null,
       pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "proposal-block", children: [
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "description-text", children: pendingProposal.summary }),
+        pendingProposal.operations.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "empty-text", children: "AI가 초안 요약은 반환했지만 화면에 표시할 일정 항목은 포함하지 않았습니다. 응답 형식을 확인해 주세요." }) : /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "button-row", children: [
           /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
             "button",
@@ -33291,6 +33666,9 @@ function DashboardPage() {
   const [memoError, setMemoError] = (0, import_react8.useState)("");
   const [taskModalState, setTaskModalState] = (0, import_react8.useState)(null);
   const [taskFormSerial, setTaskFormSerial] = (0, import_react8.useState)(0);
+  const [draggingTaskId, setDraggingTaskId] = (0, import_react8.useState)(null);
+  const [dropMessage, setDropMessage] = (0, import_react8.useState)("");
+  const [dropError, setDropError] = (0, import_react8.useState)("");
   const memoSnapshotRef = (0, import_react8.useRef)("");
   const visibleTasks = (0, import_react8.useMemo)(
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
@@ -33334,6 +33712,56 @@ function DashboardPage() {
     () => visibleTasks.filter((task) => task.isMajor).sort(compareByStartAtAsc).slice(0, 8),
     [visibleTasks]
   );
+  const briefing = (0, import_react8.useMemo)(() => {
+    const now = Date.now();
+    const today = /* @__PURE__ */ new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime();
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime();
+    const weekEndDate = addDays(today, 6);
+    const weekEnd = new Date(
+      weekEndDate.getFullYear(),
+      weekEndDate.getMonth(),
+      weekEndDate.getDate(),
+      23,
+      59,
+      59,
+      999
+    ).getTime();
+    const todayItems = [];
+    const weekItems = [];
+    let overdueCount = 0;
+    for (const task of visibleTasks) {
+      if (task.status === "DONE") {
+        continue;
+      }
+      const startAt = new Date(task.startAt).getTime();
+      if (!Number.isFinite(startAt)) {
+        continue;
+      }
+      if (startAt < now) {
+        overdueCount += 1;
+      }
+      if (startAt >= todayStart && startAt <= todayEnd) {
+        todayItems.push(task);
+      }
+      if (startAt >= todayStart && startAt <= weekEnd) {
+        weekItems.push(task);
+      }
+    }
+    todayItems.sort(compareByStartAtAsc);
+    weekItems.sort(compareByStartAtAsc);
+    const conflictCount = visibleTasks.filter(
+      (task) => task.status !== "DONE" && (conflictMap[task.id]?.length ?? 0) > 0
+    ).length;
+    return {
+      todayItems: todayItems.slice(0, 3),
+      weekItems: weekItems.slice(0, 5),
+      todayCount: todayItems.length,
+      weekCount: weekItems.length,
+      overdueCount,
+      conflictCount
+    };
+  }, [visibleTasks, conflictMap]);
   const editingTask = (0, import_react8.useMemo)(() => {
     if (!taskModalState || taskModalState.mode !== "edit") {
       return void 0;
@@ -33398,6 +33826,32 @@ function DashboardPage() {
     await removeTask(editingTask.id);
     setTaskModalState(null);
   }
+  async function handleDropTaskToDate(taskId, dateKey) {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) {
+      return;
+    }
+    setDropError("");
+    setDropMessage("");
+    try {
+      const nextStartAt = shiftIsoToDateKey(task.startAt, dateKey);
+      const startAtMs = new Date(task.startAt).getTime();
+      const endAtMs = task.endAt ? new Date(task.endAt).getTime() : NaN;
+      const durationMs = Number.isFinite(startAtMs) && Number.isFinite(endAtMs) && endAtMs >= startAtMs ? endAtMs - startAtMs : null;
+      const nextEndAt = task.endAt ? durationMs !== null ? new Date(new Date(nextStartAt).getTime() + durationMs).toISOString() : shiftIsoToDateKey(task.endAt, dateKey) : void 0;
+      await updateTask(task.id, {
+        ...toTaskInput(task),
+        startAt: nextStartAt,
+        endAt: nextEndAt
+      });
+      setSelectedDate(dateKey);
+      setDropMessage(`Moved "${task.title}" to ${dateKey}.`);
+    } catch (moveError) {
+      setDropError(moveError instanceof Error ? moveError.message : "Failed to move task.");
+    } finally {
+      setDraggingTaskId(null);
+    }
+  }
   async function handleSaveGlobalMemo() {
     setMemoError("");
     try {
@@ -33410,6 +33864,53 @@ function DashboardPage() {
   }
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "dashboard-page", children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(AiAssistantWorkspace, { compact: true, showEndpointInfo: false }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel briefing-panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "Today / This Week Briefing" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("small", { children: [
+          "Today ",
+          briefing.todayCount,
+          " | Week ",
+          briefing.weekCount
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "briefing-grid", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "briefing-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "Today Top 3" }),
+          briefing.todayItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "empty-text", children: "No pending tasks today." }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "mini-list", children: briefing.todayItems.map((task) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
+            task.title,
+            " (",
+            formatDateTime(task.startAt, setting.timeFormat),
+            ")"
+          ] }, `briefing-today-${task.id}`)) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "briefing-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "Week Top 5" }),
+          briefing.weekItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "empty-text", children: "No pending tasks this week." }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "mini-list", children: briefing.weekItems.map((task) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
+            task.title,
+            " (",
+            getDateKey(task.startAt),
+            ")"
+          ] }, `briefing-week-${task.id}`)) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "briefing-card metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "Risk Snapshot" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { children: [
+            "Overdue: ",
+            briefing.overdueCount
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { children: [
+            "Conflicts: ",
+            briefing.conflictCount
+          ] }),
+          draggingTaskId ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "description-text", children: "Drag task is active. Drop it on a calendar date to reschedule." }) : null
+        ] })
+      ] }),
+      dropMessage ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "success-text", children: dropMessage }) : null,
+      dropError ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "error-text", children: dropError }) : null
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel global-memo-panel", children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "전체 메모" }),
@@ -33449,7 +33950,8 @@ function DashboardPage() {
           weekStartsOn: setting.weekStartsOn,
           taskCountByDate,
           eventTitlesByDate,
-          onSelectDate: setSelectedDate
+          onSelectDate: setSelectedDate,
+          onDropTaskToDate: handleDropTaskToDate
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel", children: [
@@ -33481,6 +33983,8 @@ function DashboardPage() {
               taskType: typeMap[task.taskTypeId],
               timeFormat: setting.timeFormat,
               hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
+              draggableTask: true,
+              onDragTaskStateChange: setDraggingTaskId,
               onClick: () => {
                 setTaskModalState({ mode: "edit", taskId: task.id });
               }
@@ -33501,6 +34005,8 @@ function DashboardPage() {
               taskType: typeMap[task.taskTypeId],
               timeFormat: setting.timeFormat,
               hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
+              draggableTask: true,
+              onDragTaskStateChange: setDraggingTaskId,
               onClick: () => {
                 setTaskModalState({ mode: "edit", taskId: task.id });
               }
@@ -34699,6 +35205,96 @@ function compareBySortRule(a, b, sortBy, direction) {
   const completedDiff = completedA - completedB;
   return direction === "asc" ? completedDiff : -completedDiff;
 }
+var TASK_VIEW_STORAGE_KEY = "tasks_saved_views_v1";
+function normalizeSortState(value) {
+  const fallback = {
+    keyword: "",
+    sortBy: "priority",
+    direction: "desc"
+  };
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+  const candidate = value;
+  const sortBy = candidate.sortBy === "startAt" || candidate.sortBy === "completedAt" || candidate.sortBy === "priority" ? candidate.sortBy : fallback.sortBy;
+  const direction = candidate.direction === "asc" || candidate.direction === "desc" ? candidate.direction : fallback.direction;
+  const keyword = typeof candidate.keyword === "string" ? candidate.keyword : fallback.keyword;
+  return {
+    keyword,
+    sortBy,
+    direction
+  };
+}
+var DEFAULT_TASK_FILTER_STATE = {
+  projectId: "",
+  taskTypeId: "",
+  status: "",
+  fromDate: "",
+  toDate: "",
+  majorOnly: false,
+  conflictOnly: false
+};
+function normalizeTaskFilterState(value) {
+  if (!value || typeof value !== "object") {
+    return { ...DEFAULT_TASK_FILTER_STATE };
+  }
+  const candidate = value;
+  return {
+    projectId: typeof candidate.projectId === "string" ? candidate.projectId : "",
+    taskTypeId: typeof candidate.taskTypeId === "string" ? candidate.taskTypeId : "",
+    status: candidate.status === "NOT_DONE" || candidate.status === "ON_HOLD" || candidate.status === "DONE" ? candidate.status : "",
+    fromDate: typeof candidate.fromDate === "string" ? candidate.fromDate : "",
+    toDate: typeof candidate.toDate === "string" ? candidate.toDate : "",
+    majorOnly: Boolean(candidate.majorOnly),
+    conflictOnly: Boolean(candidate.conflictOnly)
+  };
+}
+function escapeCsvValue(value) {
+  const normalized = `${value ?? ""}`;
+  if (!/[",\r\n]/.test(normalized)) {
+    return normalized;
+  }
+  return `"${normalized.replace(/"/g, '""')}"`;
+}
+function readSavedTaskViews() {
+  if (typeof localStorage === "undefined") {
+    return [];
+  }
+  try {
+    const raw = localStorage.getItem(TASK_VIEW_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((item) => item && typeof item === "object" && typeof item.id === "string" && typeof item.name === "string").map((item) => {
+      const candidate = item;
+      return {
+        id: candidate.id,
+        name: candidate.name,
+        sortState: normalizeSortState(candidate.sortState),
+        filterState: normalizeTaskFilterState(candidate.filterState),
+        updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : ""
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+function writeSavedTaskViews(views) {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  localStorage.setItem(TASK_VIEW_STORAGE_KEY, JSON.stringify(views));
+}
+function getTaskViewId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `view-${crypto.randomUUID()}`;
+  }
+  return `view-${Math.random().toString(36).slice(2, 10)}`;
+}
 function TasksPage() {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
   const [selectedTaskId, setSelectedTaskId] = (0, import_react11.useState)(null);
@@ -34708,11 +35304,39 @@ function TasksPage() {
     direction: "desc"
   });
   const [error, setError] = (0, import_react11.useState)("");
+  const [savedViews, setSavedViews] = (0, import_react11.useState)(() => readSavedTaskViews());
+  const [viewName, setViewName] = (0, import_react11.useState)("");
+  const [viewMessage, setViewMessage] = (0, import_react11.useState)("");
+  const [filterState, setFilterState] = (0, import_react11.useState)(() => ({ ...DEFAULT_TASK_FILTER_STATE }));
+  const [selectedTaskIdsForBulk, setSelectedTaskIdsForBulk] = (0, import_react11.useState)([]);
+  const [bulkMessage, setBulkMessage] = (0, import_react11.useState)("");
   const projectMap = (0, import_react11.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = (0, import_react11.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
   const conflictMap = (0, import_react11.useMemo)(() => buildTaskConflictMap(tasks), [tasks]);
   const sortedTasks = (0, import_react11.useMemo)(() => {
     return tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)).filter((task) => {
+      if (filterState.projectId && task.projectId !== filterState.projectId) {
+        return false;
+      }
+      if (filterState.taskTypeId && task.taskTypeId !== filterState.taskTypeId) {
+        return false;
+      }
+      if (filterState.status && task.status !== filterState.status) {
+        return false;
+      }
+      if (filterState.majorOnly && !task.isMajor) {
+        return false;
+      }
+      if (filterState.conflictOnly && (conflictMap[task.id]?.length ?? 0) === 0) {
+        return false;
+      }
+      const taskTime = new Date(task.startAt).getTime();
+      if (filterState.fromDate && taskTime < new Date(`${filterState.fromDate}T00:00:00`).getTime()) {
+        return false;
+      }
+      if (filterState.toDate && taskTime > new Date(`${filterState.toDate}T23:59:59`).getTime()) {
+        return false;
+      }
       if (!sortState.keyword.trim()) {
         return true;
       }
@@ -34721,12 +35345,38 @@ function TasksPage() {
       const typeName = typeMap[task.taskTypeId]?.name ?? "";
       return `${task.title} ${task.content} ${projectName} ${typeName}`.toLowerCase().includes(keyword);
     }).sort((a, b) => compareBySortRule(a, b, sortState.sortBy, sortState.direction));
-  }, [tasks, setting.showPastCompleted, sortState, projectMap, typeMap]);
+  }, [tasks, setting.showPastCompleted, sortState, filterState, projectMap, typeMap, conflictMap]);
   const selectedTask = (0, import_react11.useMemo)(() => tasks.find((task) => task.id === selectedTaskId), [selectedTaskId, tasks]);
+  const selectedTaskSet = (0, import_react11.useMemo)(() => new Set(selectedTaskIdsForBulk), [selectedTaskIdsForBulk]);
   const conflictTasks = (0, import_react11.useMemo)(
     () => sortedTasks.filter((task) => (conflictMap[task.id]?.length ?? 0) > 0).slice(0, 8),
     [sortedTasks, conflictMap]
   );
+  const taskStats = (0, import_react11.useMemo)(() => {
+    const now = Date.now();
+    const total = sortedTasks.length;
+    const done = sortedTasks.filter((task) => task.status === "DONE").length;
+    const onHold = sortedTasks.filter((task) => task.status === "ON_HOLD").length;
+    const overdue = sortedTasks.filter((task) => task.status !== "DONE" && new Date(task.startAt).getTime() < now).length;
+    const completionRate = total > 0 ? Math.round(done / total * 100) : 0;
+    return {
+      total,
+      done,
+      onHold,
+      overdue,
+      completionRate
+    };
+  }, [sortedTasks]);
+  const bulkTargetTasks = (0, import_react11.useMemo)(
+    () => sortedTasks.filter((task) => selectedTaskSet.has(task.id)),
+    [sortedTasks, selectedTaskSet]
+  );
+  (0, import_react11.useEffect)(() => {
+    writeSavedTaskViews(savedViews);
+  }, [savedViews]);
+  (0, import_react11.useEffect)(() => {
+    setSelectedTaskIdsForBulk((prev) => prev.filter((id) => sortedTasks.some((task) => task.id === id)));
+  }, [sortedTasks]);
   async function handleCreate(input) {
     setError("");
     await createTask(input);
@@ -34745,6 +35395,139 @@ function TasksPage() {
     setError("");
     await removeTask(selectedTaskId);
     setSelectedTaskId(null);
+  }
+  function handleSaveCurrentView() {
+    const name = viewName.trim();
+    if (!name) {
+      setError("뷰 이름을 입력해 주세요.");
+      return;
+    }
+    setError("");
+    const now = toIsoNow();
+    setSavedViews((prev) => {
+      const existingIndex = prev.findIndex((item) => item.name.toLowerCase() === name.toLowerCase());
+      const entry = {
+        id: existingIndex >= 0 ? prev[existingIndex].id : getTaskViewId(),
+        name,
+        sortState: normalizeSortState(sortState),
+        filterState: normalizeTaskFilterState(filterState),
+        updatedAt: now
+      };
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = entry;
+        return next;
+      }
+      return [entry, ...prev].slice(0, 20);
+    });
+    setViewName("");
+    setViewMessage(`저장됨: ${name}`);
+  }
+  function handleApplyView(view) {
+    setSortState(normalizeSortState(view.sortState));
+    setFilterState(normalizeTaskFilterState(view.filterState));
+    setViewMessage(`적용됨: ${view.name}`);
+  }
+  function handleDeleteView(viewId) {
+    setSavedViews((prev) => prev.filter((item) => item.id !== viewId));
+    setViewMessage("저장 뷰가 삭제되었습니다.");
+  }
+  function handleToggleTaskSelection(taskId, checked) {
+    setSelectedTaskIdsForBulk((prev) => {
+      if (checked) {
+        if (prev.includes(taskId)) {
+          return prev;
+        }
+        return [...prev, taskId];
+      }
+      return prev.filter((id) => id !== taskId);
+    });
+  }
+  async function handleBulkStatusChange(status) {
+    if (bulkTargetTasks.length === 0) {
+      setError("대량 변경할 일정을 먼저 선택해 주세요.");
+      return;
+    }
+    setError("");
+    setBulkMessage("");
+    let successCount = 0;
+    const failedTitles = [];
+    for (const task of bulkTargetTasks) {
+      try {
+        await updateTask(task.id, toTaskInput4(task, status));
+        successCount += 1;
+      } catch {
+        failedTitles.push(task.title);
+      }
+    }
+    setBulkMessage(`상태 변경 완료: ${successCount}건`);
+    if (failedTitles.length > 0) {
+      setError(`실패 ${failedTitles.length}건: ${failedTitles.slice(0, 3).join(", ")}`);
+    }
+    setSelectedTaskIdsForBulk([]);
+  }
+  async function handleBulkDelete() {
+    if (bulkTargetTasks.length === 0) {
+      setError("삭제할 일정을 먼저 선택해 주세요.");
+      return;
+    }
+    const shouldDelete = window.confirm(`선택한 ${bulkTargetTasks.length}개 일정을 삭제할까요?`);
+    if (!shouldDelete) {
+      return;
+    }
+    setError("");
+    setBulkMessage("");
+    let successCount = 0;
+    const failedTitles = [];
+    for (const task of bulkTargetTasks) {
+      try {
+        await removeTask(task.id);
+        successCount += 1;
+      } catch {
+        failedTitles.push(task.title);
+      }
+    }
+    setBulkMessage(`삭제 완료: ${successCount}건`);
+    if (failedTitles.length > 0) {
+      setError(`삭제 실패 ${failedTitles.length}건: ${failedTitles.slice(0, 3).join(", ")}`);
+    }
+    setSelectedTaskIdsForBulk([]);
+  }
+  function handleExportCsv(onlySelected = false) {
+    const source = onlySelected ? bulkTargetTasks : sortedTasks;
+    if (source.length === 0) {
+      setError("내보낼 일정이 없습니다.");
+      return;
+    }
+    const header = [
+      "title",
+      "content",
+      "project",
+      "taskType",
+      "status",
+      "startAt",
+      "endAt",
+      "isMajor"
+    ];
+    const rows = source.map((task) => [
+      task.title,
+      task.content,
+      projectMap[task.projectId]?.name ?? task.projectId,
+      typeMap[task.taskTypeId]?.name ?? task.taskTypeId,
+      task.status,
+      task.startAt,
+      task.endAt ?? "",
+      task.isMajor ? "Y" : "N"
+    ].map(escapeCsvValue).join(","));
+    const csv = [header.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `tasks-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setBulkMessage(`CSV 내보내기 완료: ${source.length}건`);
   }
   return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "tasks-layout", children: [
     /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "panel filter-panel", children: [
@@ -34790,19 +35573,163 @@ function TasksPage() {
           }
         )
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
+        "Project",
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+          "select",
+          {
+            value: filterState.projectId,
+            onChange: (event) => setFilterState((prev) => ({ ...prev, projectId: event.target.value })),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "", children: "All" }),
+              ...projects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: project.id, children: project.name }, `filter-project-${project.id}`))
+            ]
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
+        "Task Type",
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+          "select",
+          {
+            value: filterState.taskTypeId,
+            onChange: (event) => setFilterState((prev) => ({ ...prev, taskTypeId: event.target.value })),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "", children: "All" }),
+              ...taskTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: type.id, children: type.name }, `filter-type-${type.id}`))
+            ]
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
+        "Status",
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+          "select",
+          {
+            value: filterState.status,
+            onChange: (event) => setFilterState((prev) => ({ ...prev, status: event.target.value })),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "", children: "All" }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "NOT_DONE", children: STATUS_LABELS.NOT_DONE }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "ON_HOLD", children: STATUS_LABELS.ON_HOLD }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "DONE", children: STATUS_LABELS.DONE })
+            ]
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "form-grid two-col", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
+          "From",
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "input",
+            {
+              type: "date",
+              value: filterState.fromDate,
+              onChange: (event) => setFilterState((prev) => ({ ...prev, fromDate: event.target.value }))
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
+          "To",
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "input",
+            {
+              type: "date",
+              value: filterState.toDate,
+              onChange: (event) => setFilterState((prev) => ({ ...prev, toDate: event.target.value }))
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: "checkbox-inline", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: filterState.majorOnly,
+            onChange: (event) => setFilterState((prev) => ({ ...prev, majorOnly: event.target.checked }))
+          }
+        ),
+        "Major only"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: "checkbox-inline", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: filterState.conflictOnly,
+            onChange: (event) => setFilterState((prev) => ({ ...prev, conflictOnly: event.target.checked }))
+          }
+        ),
+        "Conflict only"
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
         "button",
         {
           type: "button",
           className: "btn btn-soft",
-          onClick: () => setSortState({
-            keyword: "",
-            sortBy: "priority",
-            direction: "desc"
-          }),
+          onClick: () => {
+            setSortState({
+              keyword: "",
+              sortBy: "priority",
+              direction: "desc"
+            });
+            setFilterState({ ...DEFAULT_TASK_FILTER_STATE });
+            setSelectedTaskIdsForBulk([]);
+            setBulkMessage("");
+          },
           children: "초기화"
         }
       ),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "mini-list-block", "aria-label": "저장된 뷰", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { children: "저장 뷰" }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
+          "뷰 이름",
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "input",
+            {
+              type: "text",
+              value: viewName,
+              onChange: (event) => setViewName(event.target.value),
+              placeholder: "예: 오늘 집중"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-soft",
+            onClick: handleSaveCurrentView,
+            children: "현재 필터 저장"
+          }
+        ),
+        viewMessage ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "success-text", children: viewMessage }) : null,
+        savedViews.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "empty-text", children: "저장된 뷰가 없습니다." }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "mini-list saved-view-list", children: savedViews.map((view) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("li", { className: "saved-view-item", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: view.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "button-row compact", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+              "button",
+              {
+                type: "button",
+                className: "btn btn-soft",
+                onClick: () => handleApplyView(view),
+                children: "적용"
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+              "button",
+              {
+                type: "button",
+                className: "btn btn-danger",
+                onClick: () => handleDeleteView(view.id),
+                children: "삭제"
+              }
+            )
+          ] })
+        ] }, view.id)) })
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "mini-list-block", "aria-label": "충돌 일정 요약", children: [
         /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { children: "충돌 일정" }),
         conflictTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "empty-text", children: "충돌이 없습니다." }) : null,
@@ -34822,6 +35749,112 @@ function TasksPage() {
           "개"
         ] })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "kpi-grid", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.total }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Visible" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.done }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Done" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.onHold }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "On hold" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card danger", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.overdue }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Overdue" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card accent", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("strong", { children: [
+            taskStats.completionRate,
+            "%"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Completion" })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "bulk-toolbar", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "description-text", children: [
+          "Bulk selected: ",
+          selectedTaskIdsForBulk.length
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "button-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => setSelectedTaskIdsForBulk(sortedTasks.map((task) => task.id)),
+              children: "Select all"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => setSelectedTaskIdsForBulk([]),
+              children: "Clear"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => void handleBulkStatusChange("NOT_DONE"),
+              children: STATUS_LABELS.NOT_DONE
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => void handleBulkStatusChange("ON_HOLD"),
+              children: STATUS_LABELS.ON_HOLD
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => void handleBulkStatusChange("DONE"),
+              children: STATUS_LABELS.DONE
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-danger",
+              onClick: () => void handleBulkDelete(),
+              children: "Delete selected"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => handleExportCsv(false),
+              children: "Export CSV (all)"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => handleExportCsv(true),
+              children: "Export CSV (selected)"
+            }
+          )
+        ] }),
+        bulkMessage ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "success-text", children: bulkMessage }) : null
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "task-stack", children: [
         sortedTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "empty-text", children: "등록된 일정이 없습니다." }) : null,
         sortedTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
@@ -34833,6 +35866,9 @@ function TasksPage() {
             timeFormat: setting.timeFormat,
             selected: selectedTaskId === task.id,
             hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
+            selectable: true,
+            selectedForBulk: selectedTaskSet.has(task.id),
+            onToggleSelect: (checked) => handleToggleTaskSelection(task.id, checked),
             onClick: () => setSelectedTaskId(task.id),
             onStatusChange: (status) => {
               void updateTask(task.id, toTaskInput4(task, status)).catch((updateError) => {
