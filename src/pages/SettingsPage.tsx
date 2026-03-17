@@ -455,14 +455,14 @@ export function SettingsPage() {
           </label>
 
           <label>
-            LLM API Key
+            LLM API 키
             <input
               type="password"
               value={setting.llmApiKey ?? ""}
               onChange={(event) => {
                 void updateSetting({ llmApiKey: event.target.value });
               }}
-              placeholder="API Key"
+              placeholder="API 키"
               autoComplete="off"
             />
           </label>

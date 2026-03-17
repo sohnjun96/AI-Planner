@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AiAssistantWorkspace } from "../components/AiAssistantWorkspace";
-import { MonthCalendar } from "../components/MonthCalendar";
+import { type CalendarDaySummary, MonthCalendar } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
 import { TaskItem } from "../components/TaskItem";
 import { useAppData } from "../context/AppDataContext";
@@ -21,13 +21,16 @@ type TaskModalState =
     }
   | null;
 
-function isEventTask(task: Task, taskTypeName: string | undefined): boolean {
-  if (task.taskTypeId === "type-event") {
-    return true;
-  }
-  const normalized = (taskTypeName ?? "").replace(/\s+/g, "");
-  return normalized.includes("행사");
-}
+type DayFilter = "ALL" | "PENDING" | "DONE" | "ON_HOLD" | "MAJOR" | "CONFLICT";
+
+const DAY_FILTER_OPTIONS: Array<{ value: DayFilter; label: string }> = [
+  { value: "ALL", label: "전체" },
+  { value: "PENDING", label: "미완료" },
+  { value: "DONE", label: "완료" },
+  { value: "ON_HOLD", label: "보류" },
+  { value: "MAJOR", label: "중요" },
+  { value: "CONFLICT", label: "충돌" },
+];
 
 function toTaskInput(task: Task): TaskFormInput {
   return {
@@ -42,6 +45,25 @@ function toTaskInput(task: Task): TaskFormInput {
   };
 }
 
+function matchesDayFilter(task: Task, filter: DayFilter, conflictCount: number): boolean {
+  if (filter === "ALL") {
+    return true;
+  }
+  if (filter === "PENDING") {
+    return task.status !== "DONE";
+  }
+  if (filter === "DONE") {
+    return task.status === "DONE";
+  }
+  if (filter === "ON_HOLD") {
+    return task.status === "ON_HOLD";
+  }
+  if (filter === "MAJOR") {
+    return task.isMajor;
+  }
+  return conflictCount > 0;
+}
+
 export function DashboardPage() {
   const { tasks, projects, taskTypes, memos, setting, createTask, updateTask, removeTask, saveMemo } = useAppData();
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
@@ -53,6 +75,7 @@ export function DashboardPage() {
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropMessage, setDropMessage] = useState("");
   const [dropError, setDropError] = useState("");
+  const [dayFilter, setDayFilter] = useState<DayFilter>("ALL");
   const memoSnapshotRef = useRef("");
 
   const visibleTasks = useMemo(
@@ -63,42 +86,83 @@ export function DashboardPage() {
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
   const memoMap = useMemo(() => Object.fromEntries(memos.map((memo) => [memo.date, memo])), [memos]);
-  const conflictMap = useMemo(() => buildTaskConflictMap(tasks), [tasks]);
+  const conflictMap = useMemo(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
 
-  const taskCountByDate = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const task of tasks) {
-      const key = getDateKey(task.startAt);
-      map[key] = (map[key] ?? 0) + 1;
-    }
-    return map;
-  }, [tasks]);
+  const daySummaryByDate = useMemo(() => {
+    const map: Record<string, CalendarDaySummary> = {};
 
-  const eventTitlesByDate = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    for (const task of tasks) {
-      const taskTypeName = typeMap[task.taskTypeId]?.name;
-      if (!isEventTask(task, taskTypeName)) {
-        continue;
-      }
+    for (const task of visibleTasks) {
       const key = getDateKey(task.startAt);
       if (!map[key]) {
-        map[key] = [];
+        map[key] = {
+          total: 0,
+          done: 0,
+          pending: 0,
+          onHold: 0,
+          conflicts: 0,
+          major: 0,
+          titles: [],
+        };
       }
-      map[key].push(task.title);
+
+      const summary = map[key];
+      summary.total += 1;
+      if (task.status === "DONE") {
+        summary.done += 1;
+      } else {
+        summary.pending += 1;
+      }
+      if (task.status === "ON_HOLD") {
+        summary.onHold += 1;
+      }
+      if (task.isMajor) {
+        summary.major += 1;
+      }
+      if ((conflictMap[task.id]?.length ?? 0) > 0) {
+        summary.conflicts += 1;
+      }
+      if (summary.titles.length < 3) {
+        summary.titles.push(task.title);
+      }
     }
-    for (const key of Object.keys(map)) {
-      map[key] = map[key].slice(0, 3);
-    }
+
     return map;
-  }, [tasks, typeMap]);
+  }, [visibleTasks, conflictMap]);
+
+  const selectedDaySummary: CalendarDaySummary = daySummaryByDate[selectedDate] ?? {
+    total: 0,
+    done: 0,
+    pending: 0,
+    onHold: 0,
+    conflicts: 0,
+    major: 0,
+    titles: [],
+  };
 
   const dayTasks = useMemo(
-    () => visibleTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStartAtAsc),
-    [visibleTasks, selectedDate],
+    () =>
+      visibleTasks
+        .filter((task) => getDateKey(task.startAt) === selectedDate)
+        .filter((task) => matchesDayFilter(task, dayFilter, conflictMap[task.id]?.length ?? 0))
+        .sort(compareByStartAtAsc),
+    [visibleTasks, selectedDate, dayFilter, conflictMap],
   );
 
   const majorTasks = useMemo(() => visibleTasks.filter((task) => task.isMajor).sort(compareByStartAtAsc).slice(0, 8), [visibleTasks]);
+
+  const upcomingTasks = useMemo(() => {
+    const todayStart = new Date(`${getDateKey(new Date())}T00:00:00`).getTime();
+    const nextWeekEnd = addDays(new Date(), 7).getTime();
+
+    return visibleTasks
+      .filter((task) => task.status !== "DONE")
+      .filter((task) => {
+        const startAt = new Date(task.startAt).getTime();
+        return Number.isFinite(startAt) && startAt >= todayStart && startAt <= nextWeekEnd;
+      })
+      .sort(compareByStartAtAsc)
+      .slice(0, 10);
+  }, [visibleTasks]);
 
   const briefing = useMemo(() => {
     const now = Date.now();
@@ -145,8 +209,8 @@ export function DashboardPage() {
     const conflictCount = visibleTasks.filter((task) => task.status !== "DONE" && (conflictMap[task.id]?.length ?? 0) > 0).length;
 
     return {
-      todayItems: todayItems.slice(0, 3),
-      weekItems: weekItems.slice(0, 5),
+      todayItems: todayItems.slice(0, 5),
+      weekItems: weekItems.slice(0, 7),
       todayCount: todayItems.length,
       weekCount: weekItems.length,
       overdueCount,
@@ -197,7 +261,7 @@ export function DashboardPage() {
       void saveMemo(GLOBAL_MEMO_KEY, globalMemoDraft)
         .then(() => {
           memoSnapshotRef.current = normalized;
-          setMemoSaved("자동 저장됨.");
+          setMemoSaved("자동 저장됨");
         })
         .catch((saveError) => {
           setMemoError(saveError instanceof Error ? saveError.message : "메모 저장에 실패했습니다.");
@@ -252,9 +316,9 @@ export function DashboardPage() {
         endAt: nextEndAt,
       });
       setSelectedDate(dateKey);
-      setDropMessage(`Moved "${task.title}" to ${dateKey}.`);
+      setDropMessage(`"${task.title}" 일정을 ${dateKey}(으)로 이동했습니다.`);
     } catch (moveError) {
-      setDropError(moveError instanceof Error ? moveError.message : "Failed to move task.");
+      setDropError(moveError instanceof Error ? moveError.message : "일정 이동에 실패했습니다.");
     } finally {
       setDraggingTaskId(null);
     }
@@ -265,10 +329,16 @@ export function DashboardPage() {
     try {
       await saveMemo(GLOBAL_MEMO_KEY, globalMemoContent);
       memoSnapshotRef.current = globalMemoContent.trim();
-      setMemoSaved("저장됨.");
+      setMemoSaved("저장 완료");
     } catch (saveError) {
       setMemoError(saveError instanceof Error ? saveError.message : "메모 저장에 실패했습니다.");
     }
+  }
+
+  function openCreateTaskForDate(dateKey: string) {
+    setSelectedDate(dateKey);
+    setTaskFormSerial((prev) => prev + 1);
+    setTaskModalState({ mode: "create" });
   }
 
   return (
@@ -277,16 +347,39 @@ export function DashboardPage() {
 
       <section className="panel briefing-panel">
         <header className="panel-header">
-          <h2>Today / This Week Briefing</h2>
+          <h2>오늘/주간 브리핑</h2>
           <small>
-            Today {briefing.todayCount} | Week {briefing.weekCount}
+            오늘 {briefing.todayCount}건 | 이번 주 {briefing.weekCount}건
           </small>
         </header>
 
+        <div className="kpi-grid">
+          <article className="kpi-card accent">
+            <small>오늘 남은 일정</small>
+            <strong>{briefing.todayCount}</strong>
+          </article>
+          <article className="kpi-card">
+            <small>이번 주 남은 일정</small>
+            <strong>{briefing.weekCount}</strong>
+          </article>
+          <article className="kpi-card danger">
+            <small>지연 위험</small>
+            <strong>{briefing.overdueCount}</strong>
+          </article>
+          <article className="kpi-card danger">
+            <small>충돌 일정</small>
+            <strong>{briefing.conflictCount}</strong>
+          </article>
+          <article className="kpi-card">
+            <small>선택 날짜</small>
+            <strong>{selectedDaySummary.total}</strong>
+          </article>
+        </div>
+
         <div className="briefing-grid">
           <article className="briefing-card">
-            <h3>Today Top 3</h3>
-            {briefing.todayItems.length === 0 ? <p className="empty-text">No pending tasks today.</p> : null}
+            <h3>오늘 우선순위</h3>
+            {briefing.todayItems.length === 0 ? <p className="empty-text">오늘 남은 일정이 없습니다.</p> : null}
             <ul className="mini-list">
               {briefing.todayItems.map((task) => (
                 <li key={`briefing-today-${task.id}`}>
@@ -297,8 +390,8 @@ export function DashboardPage() {
           </article>
 
           <article className="briefing-card">
-            <h3>Week Top 5</h3>
-            {briefing.weekItems.length === 0 ? <p className="empty-text">No pending tasks this week.</p> : null}
+            <h3>이번 주 주요 일정</h3>
+            {briefing.weekItems.length === 0 ? <p className="empty-text">이번 주 일정이 없습니다.</p> : null}
             <ul className="mini-list">
               {briefing.weekItems.map((task) => (
                 <li key={`briefing-week-${task.id}`}>
@@ -309,12 +402,11 @@ export function DashboardPage() {
           </article>
 
           <article className="briefing-card metrics">
-            <h3>Risk Snapshot</h3>
-            <p>Overdue: {briefing.overdueCount}</p>
-            <p>Conflicts: {briefing.conflictCount}</p>
-            {draggingTaskId ? (
-              <p className="description-text">Drag task is active. Drop it on a calendar date to reschedule.</p>
-            ) : null}
+            <h3>운영 상태</h3>
+            <p>선택 날짜 미완료: {selectedDaySummary.pending}건</p>
+            <p>선택 날짜 완료: {selectedDaySummary.done}건</p>
+            <p>선택 날짜 충돌: {selectedDaySummary.conflicts}건</p>
+            {draggingTaskId ? <p className="description-text">드래그 중입니다. 날짜 칸에 놓아 일정을 재배치하세요.</p> : null}
           </article>
         </div>
 
@@ -343,7 +435,7 @@ export function DashboardPage() {
             setGlobalMemoDraft(event.target.value);
           }}
           rows={4}
-          placeholder="전체 일정에 대한 메모를 작성하세요."
+          placeholder="전체 일정 공유 메모를 작성하세요."
         />
         {memoSaved ? <p className="success-text">{memoSaved}</p> : null}
         {memoError ? <p className="error-text">{memoError}</p> : null}
@@ -353,31 +445,46 @@ export function DashboardPage() {
         <MonthCalendar
           selectedDate={selectedDate}
           weekStartsOn={setting.weekStartsOn}
-          taskCountByDate={taskCountByDate}
-          eventTitlesByDate={eventTitlesByDate}
+          daySummaryByDate={daySummaryByDate}
           onSelectDate={setSelectedDate}
           onDropTaskToDate={handleDropTaskToDate}
+          onCreateTaskAtDate={openCreateTaskForDate}
         />
 
         <section className="panel">
           <header className="panel-header">
             <h2>날짜별 일정</h2>
             <div className="panel-header-actions">
-              <small>{selectedDate}</small>
+              <small>
+                {selectedDate} · 총 {selectedDaySummary.total}건
+              </small>
               <button
                 type="button"
                 className="btn btn-soft"
                 onClick={() => {
-                  setTaskFormSerial((prev) => prev + 1);
-                  setTaskModalState({ mode: "create" });
+                  openCreateTaskForDate(selectedDate);
                 }}
               >
                 일정 추가
               </button>
             </div>
           </header>
+
+          <div className="button-row">
+            {DAY_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`btn btn-soft ${dayFilter === option.value ? "is-active" : ""}`}
+                onClick={() => setDayFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
           <div className="task-stack">
-            {dayTasks.length === 0 ? <p className="empty-text">해당 날짜 일정이 없습니다.</p> : null}
+            {dayTasks.length === 0 ? <p className="empty-text">조건에 맞는 일정이 없습니다.</p> : null}
             {dayTasks.map((task) => (
               <TaskItem
                 key={task.id}
@@ -398,25 +505,41 @@ export function DashboardPage() {
 
         <section className="panel">
           <header className="panel-header">
-            <h2>주요 일정</h2>
+            <h2>중요/다가오는 일정</h2>
           </header>
-          <div className="task-stack">
-            {majorTasks.length === 0 ? <p className="empty-text">주요 일정이 없습니다.</p> : null}
-            {majorTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                project={projectMap[task.projectId]}
-                taskType={typeMap[task.taskTypeId]}
-                timeFormat={setting.timeFormat}
-                hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
-                draggableTask
-                onDragTaskStateChange={setDraggingTaskId}
-                onClick={() => {
-                  setTaskModalState({ mode: "edit", taskId: task.id });
-                }}
-              />
-            ))}
+
+          <div className="mini-list-block">
+            <h3>중요 일정</h3>
+            <div className="task-stack">
+              {majorTasks.length === 0 ? <p className="empty-text">중요 일정이 없습니다.</p> : null}
+              {majorTasks.map((task) => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  project={projectMap[task.projectId]}
+                  taskType={typeMap[task.taskTypeId]}
+                  timeFormat={setting.timeFormat}
+                  hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
+                  draggableTask
+                  onDragTaskStateChange={setDraggingTaskId}
+                  onClick={() => {
+                    setTaskModalState({ mode: "edit", taskId: task.id });
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="mini-list-block">
+            <h3>다가오는 7일</h3>
+            {upcomingTasks.length === 0 ? <p className="empty-text">다가오는 일정이 없습니다.</p> : null}
+            <ul className="mini-list">
+              {upcomingTasks.map((task) => (
+                <li key={`upcoming-${task.id}`}>
+                  {task.title} ({formatDateTime(task.startAt, setting.timeFormat)})
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
       </div>

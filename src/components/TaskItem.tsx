@@ -77,9 +77,9 @@ export function TaskItem({
             onChange={(event) => {
               onToggleSelect?.(event.target.checked);
             }}
-            aria-label={`${task.title} selection`}
+            aria-label={`${task.title} 선택`}
           />
-          <span>Select for bulk actions</span>
+          <span>일괄 작업에 포함</span>
         </label>
       ) : null}
 
@@ -118,7 +118,7 @@ export function TaskItem({
         >
           {taskType?.name ?? "종류 없음"}
         </span>
-        {task.isMajor ? <span className="tag major-tag">주요</span> : null}
+        {task.isMajor ? <span className="tag major-tag">중요</span> : null}
       </div>
 
       {task.content ? <p className="task-content">{task.content}</p> : null}

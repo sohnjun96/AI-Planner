@@ -29,29 +29,29 @@ export function AppShell() {
 
   const commandItems = useMemo<CommandItem[]>(
     () => [
-      { id: "go-dashboard", label: "Go: Dashboard", keywords: "dashboard home", run: () => navigate("/dashboard") },
-      { id: "go-tasks", label: "Go: Tasks", keywords: "tasks list", run: () => navigate("/tasks") },
-      { id: "go-projects", label: "Go: Projects", keywords: "projects", run: () => navigate("/projects") },
-      { id: "go-archive", label: "Go: Archive", keywords: "archive history", run: () => navigate("/archive") },
-      { id: "go-settings", label: "Go: Settings", keywords: "settings", run: () => navigate("/settings") },
+      { id: "go-dashboard", label: "이동: 대시보드", keywords: "대시보드 홈 dashboard", run: () => navigate("/dashboard") },
+      { id: "go-tasks", label: "이동: 일정 관리", keywords: "일정 목록 tasks", run: () => navigate("/tasks") },
+      { id: "go-projects", label: "이동: 프로젝트", keywords: "프로젝트 projects", run: () => navigate("/projects") },
+      { id: "go-archive", label: "이동: 지난 업무", keywords: "아카이브 archive", run: () => navigate("/archive") },
+      { id: "go-settings", label: "이동: 설정", keywords: "설정 settings", run: () => navigate("/settings") },
       {
         id: "quick-add",
-        label: "Action: Quick Add Task",
-        keywords: "new create task",
+        label: "실행: 빠른 일정 추가",
+        keywords: "새 일정 추가 quick add",
         run: () => setIsQuickAddOpen(true),
       },
       {
         id: "toggle-show-past",
-        label: `Action: ${setting.showPastCompleted ? "Hide" : "Show"} Past Completed`,
-        keywords: "toggle past completed",
+        label: `실행: 지난 완료 일정 ${setting.showPastCompleted ? "숨기기" : "보기"}`,
+        keywords: "지난 완료 일정 토글",
         run: () => {
           void updateSetting({ showPastCompleted: !setting.showPastCompleted });
         },
       },
       {
         id: "undo-last",
-        label: "Action: Undo Last Change",
-        keywords: "undo revert",
+        label: "실행: 마지막 작업 되돌리기",
+        keywords: "되돌리기 undo",
         run: () => {
           if (!canUndo) {
             return;
@@ -131,7 +131,7 @@ export function AppShell() {
                   void updateSetting({ showPastCompleted: event.target.checked });
                 }}
               />
-              지난 완료 업무 보기
+              지난 완료 일정 보기
             </label>
 
             <button
@@ -152,9 +152,9 @@ export function AppShell() {
               onClick={() => {
                 setIsCommandOpen(true);
               }}
-              aria-label="Open command palette, shortcut Ctrl+K"
+              aria-label="명령 팔레트 열기, 단축키 Ctrl+K"
             >
-              Command
+              명령
             </button>
 
             <button
@@ -186,13 +186,13 @@ export function AppShell() {
             className="modal-card panel command-palette"
             role="dialog"
             aria-modal="true"
-            aria-label="Command palette"
+            aria-label="명령 팔레트"
             onClick={(event) => {
               event.stopPropagation();
             }}
           >
             <header className="panel-header">
-              <h2>Command Palette</h2>
+              <h2>명령 팔레트</h2>
               <button
                 type="button"
                 className="btn btn-soft"
@@ -200,13 +200,13 @@ export function AppShell() {
                   setIsCommandOpen(false);
                 }}
               >
-                Close
+                닫기
               </button>
             </header>
 
             <input
               type="text"
-              placeholder="Type a command..."
+              placeholder="명령을 입력하세요..."
               value={commandQuery}
               onChange={(event) => setCommandQuery(event.target.value)}
               autoFocus
@@ -222,7 +222,7 @@ export function AppShell() {
               ))}
             </ul>
 
-            {filteredCommandItems.length === 0 ? <p className="empty-text">No command found.</p> : null}
+            {filteredCommandItems.length === 0 ? <p className="empty-text">일치하는 명령이 없습니다.</p> : null}
           </section>
         </div>
       ) : null}
