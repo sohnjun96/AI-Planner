@@ -32546,6 +32546,45 @@ function isRecord(value) {
 function isTaskStatus(value) {
   return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
 }
+function normalizeTaskStatus(value) {
+  if (isTaskStatus(value)) {
+    return value;
+  }
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return void 0;
+  }
+  if (["not_done", "notdone", "todo", "pending", "in_progress", "미완료", "대기"].includes(normalized)) {
+    return "NOT_DONE";
+  }
+  if (["on_hold", "hold", "paused", "보류", "홀드"].includes(normalized)) {
+    return "ON_HOLD";
+  }
+  if (["done", "complete", "completed", "완료", "끝남"].includes(normalized)) {
+    return "DONE";
+  }
+  return void 0;
+}
+function tryParseJsonLikeValue(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+  if (trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
 function extractJsonText(raw) {
   const trimmed = raw.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -32623,6 +32662,15 @@ function normalizeDateTime(value, fallbackTime) {
     const localDate = /* @__PURE__ */ new Date(`${raw}T${fallbackTime}:00`);
     return Number.isNaN(localDate.getTime()) ? "" : localDate.toISOString();
   }
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}$/.test(raw)) {
+    const localDate = new Date(raw.replace(" ", "T"));
+    return Number.isNaN(localDate.getTime()) ? "" : localDate.toISOString();
+  }
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(raw)) {
+    const normalizedDate = raw.replace(/\//g, "-");
+    const localDate = /* @__PURE__ */ new Date(`${normalizedDate}T${fallbackTime}:00`);
+    return Number.isNaN(localDate.getTime()) ? "" : localDate.toISOString();
+  }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
 }
@@ -32643,43 +32691,117 @@ function resolveEntityId(rawValue, items, fallbackId) {
   return fallbackId ?? "";
 }
 function getOperationCandidates(value) {
-  if (Array.isArray(value)) {
-    return value;
+  const normalizedValue = tryParseJsonLikeValue(value);
+  if (Array.isArray(normalizedValue)) {
+    return normalizedValue;
   }
-  if (!isRecord(value)) {
+  if (!isRecord(normalizedValue)) {
     return [];
   }
-  const candidates = [value.operations, value.tasks, value.draftTasks, value.items, value.drafts];
-  for (const candidate of candidates) {
+  const directCandidates = [
+    normalizedValue.operations,
+    normalizedValue.tasks,
+    normalizedValue.draftTasks,
+    normalizedValue.draft_tasks,
+    normalizedValue.items,
+    normalizedValue.drafts,
+    normalizedValue.actions,
+    normalizedValue.operationDrafts,
+    normalizedValue.operation_drafts
+  ];
+  for (const candidate of directCandidates) {
     if (Array.isArray(candidate)) {
       return candidate;
     }
   }
-  return [];
+  const groupedCandidates = [];
+  const groupedDefs = [
+    [normalizedValue.createTasks, "create_task"],
+    [normalizedValue.create_tasks, "create_task"],
+    [normalizedValue.creates, "create_task"],
+    [normalizedValue.additions, "create_task"],
+    [normalizedValue.updateTasks, "update_task"],
+    [normalizedValue.update_tasks, "update_task"],
+    [normalizedValue.updates, "update_task"],
+    [normalizedValue.deleteTasks, "delete_task"],
+    [normalizedValue.delete_tasks, "delete_task"],
+    [normalizedValue.deletes, "delete_task"],
+    [normalizedValue.removals, "delete_task"]
+  ];
+  for (const [candidate, action] of groupedDefs) {
+    if (!Array.isArray(candidate)) {
+      continue;
+    }
+    groupedCandidates.push(
+      ...candidate.map((item) => {
+        if (!isRecord(item) || typeof item.action === "string") {
+          return item;
+        }
+        return { ...item, action };
+      })
+    );
+  }
+  return groupedCandidates;
 }
 function parseCreateOperation(value, options = {}) {
-  if (!isRecord(value)) {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  if (!isRecord(normalizedValue)) {
     return null;
   }
-  const action = typeof value.action === "string" ? value.action : "";
-  if (action && action !== "create_task" && action !== "create" && action !== "draft_task") {
+  const action = typeof normalizedValue.action === "string" ? normalizedValue.action.trim().toLowerCase() : "";
+  if (action && ![
+    "create_task",
+    "create",
+    "draft_task",
+    "add_task",
+    "new_task",
+    "insert_task",
+    "upsert_task",
+    "append_task"
+  ].includes(action)) {
     return null;
   }
-  const title = pickFirstString(value, ["title", "name", "taskTitle"]);
-  const startAt = normalizeDateTime(pickFirstString(value, ["startAt", "start", "startsAt", "scheduledAt", "dateTime", "date"]), "09:00");
-  const endAtRaw = pickFirstString(value, ["endAt", "end", "endsAt", "endTime"]);
+  const title = pickFirstString(normalizedValue, ["title", "name", "taskTitle", "task_title"]);
+  const startAt = normalizeDateTime(
+    pickFirstString(normalizedValue, [
+      "startAt",
+      "start_at",
+      "start",
+      "startsAt",
+      "starts_at",
+      "scheduledAt",
+      "scheduled_at",
+      "dateTime",
+      "date_time",
+      "date"
+    ]),
+    "09:00"
+  );
+  const endAtRaw = pickFirstString(normalizedValue, ["endAt", "end_at", "end", "endsAt", "ends_at", "endTime", "end_time"]);
   let endAt = normalizeDateTime(endAtRaw, "10:00");
-  const durationMinutes = typeof value.durationMinutes === "number" ? Math.max(0, Math.floor(value.durationMinutes)) : 0;
+  const durationMinutes = typeof normalizedValue.durationMinutes === "number" ? Math.max(0, Math.floor(normalizedValue.durationMinutes)) : typeof normalizedValue.duration_minutes === "number" ? Math.max(0, Math.floor(normalizedValue.duration_minutes)) : 0;
   if (!endAt && startAt && durationMinutes > 0) {
     endAt = new Date(new Date(startAt).getTime() + durationMinutes * 6e4).toISOString();
   }
   const projectId = resolveEntityId(
-    pickFirstString(value, ["projectId", "project", "projectName"]),
+    pickFirstString(normalizedValue, ["projectId", "project_id", "project", "projectName", "project_name"]),
     options.projects ?? [],
     options.fallbackProjectId ?? DEFAULT_PROJECT_ID
   );
   const taskTypeId = resolveEntityId(
-    pickFirstString(value, ["taskTypeId", "taskType", "taskTypeName", "type", "typeName"]),
+    pickFirstString(normalizedValue, [
+      "taskTypeId",
+      "task_type_id",
+      "taskType",
+      "task_type",
+      "taskTypeName",
+      "task_type_name",
+      "type",
+      "typeId",
+      "type_id",
+      "typeName",
+      "type_name"
+    ]),
     options.taskTypes ?? [],
     options.fallbackTaskTypeId ?? DEFAULT_TASK_TYPES[0]?.id ?? ""
   );
@@ -32689,37 +32811,52 @@ function parseCreateOperation(value, options = {}) {
   return {
     action: "create_task",
     title,
-    content: pickFirstString(value, ["content", "description", "notes", "memo"]),
+    content: pickFirstString(normalizedValue, ["content", "description", "notes", "memo", "taskContent", "task_content"]),
     taskTypeId,
     projectId,
-    status: isTaskStatus(value.status) ? value.status : "NOT_DONE",
+    status: normalizeTaskStatus(normalizedValue.status) ?? "NOT_DONE",
     startAt,
     endAt: endAt || void 0,
-    isMajor: pickFirstBoolean(value, ["isMajor", "major", "important"])
+    isMajor: pickFirstBoolean(normalizedValue, ["isMajor", "is_major", "major", "important"])
   };
 }
 function parseUpdateOperation(value, options = {}) {
-  if (!isRecord(value)) {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  if (!isRecord(normalizedValue)) {
     return null;
   }
-  const action = typeof value.action === "string" ? value.action : "";
-  if (action && action !== "update_task" && action !== "update") {
+  const action = typeof normalizedValue.action === "string" ? normalizedValue.action.trim().toLowerCase() : "";
+  if (action && !["update_task", "update", "edit_task", "modify_task", "patch_task", "upsert_update", "change_task"].includes(action)) {
     return null;
   }
-  const taskId = typeof value.taskId === "string" ? value.taskId : typeof value.id === "string" ? value.id : "";
+  const taskId = pickFirstString(normalizedValue, ["taskId", "task_id", "targetTaskId", "target_task_id", "id"]);
   if (!taskId) {
     return null;
   }
-  const sourceChanges = isRecord(value.changes) ? value.changes : value;
+  const sourceChanges = isRecord(normalizedValue.changes) && normalizedValue.changes || isRecord(normalizedValue.changeSet) && normalizedValue.changeSet || isRecord(normalizedValue.change_set) && normalizedValue.change_set || isRecord(normalizedValue.fields) && normalizedValue.fields || normalizedValue;
   const changes = {};
-  if (typeof sourceChanges.title === "string") {
-    changes.title = sourceChanges.title;
+  const nextTitle = pickFirstString(sourceChanges, ["title", "taskTitle", "task_title", "name"]);
+  if (nextTitle) {
+    changes.title = nextTitle;
   }
-  if (typeof sourceChanges.content === "string") {
-    changes.content = sourceChanges.content;
+  const nextContent = pickFirstString(sourceChanges, ["content", "taskContent", "task_content", "description", "notes", "memo"]);
+  if (nextContent) {
+    changes.content = nextContent;
   }
   const nextTaskTypeId = resolveEntityId(
-    pickFirstString(sourceChanges, ["taskTypeId", "taskType", "taskTypeName", "type", "typeName"]),
+    pickFirstString(sourceChanges, [
+      "taskTypeId",
+      "task_type_id",
+      "taskType",
+      "task_type",
+      "taskTypeName",
+      "task_type_name",
+      "type",
+      "typeId",
+      "type_id",
+      "typeName",
+      "type_name"
+    ]),
     options.taskTypes ?? [],
     void 0
   );
@@ -32727,34 +32864,49 @@ function parseUpdateOperation(value, options = {}) {
     changes.taskTypeId = nextTaskTypeId;
   }
   const nextProjectId = resolveEntityId(
-    pickFirstString(sourceChanges, ["projectId", "project", "projectName"]),
+    pickFirstString(sourceChanges, ["projectId", "project_id", "project", "projectName", "project_name"]),
     options.projects ?? [],
     void 0
   );
   if (nextProjectId) {
     changes.projectId = nextProjectId;
   }
-  if (isTaskStatus(sourceChanges.status)) {
-    changes.status = sourceChanges.status;
+  const normalizedStatus = normalizeTaskStatus(sourceChanges.status);
+  if (normalizedStatus) {
+    changes.status = normalizedStatus;
   }
   const nextStartAt = normalizeDateTime(
-    pickFirstString(sourceChanges, ["startAt", "start", "startsAt", "scheduledAt", "dateTime", "date"]),
+    pickFirstString(sourceChanges, [
+      "startAt",
+      "start_at",
+      "start",
+      "startsAt",
+      "starts_at",
+      "scheduledAt",
+      "scheduled_at",
+      "dateTime",
+      "date_time",
+      "date"
+    ]),
     "09:00"
   );
   if (nextStartAt) {
     changes.startAt = nextStartAt;
   }
-  if (sourceChanges.endAt === null) {
+  if (sourceChanges.endAt === null || sourceChanges.end_at === null) {
     changes.endAt = null;
   } else {
-    const nextEndAt = normalizeDateTime(pickFirstString(sourceChanges, ["endAt", "end", "endsAt", "endTime"]), "10:00");
+    const nextEndAt = normalizeDateTime(
+      pickFirstString(sourceChanges, ["endAt", "end_at", "end", "endsAt", "ends_at", "endTime", "end_time"]),
+      "10:00"
+    );
     if (nextEndAt) {
       changes.endAt = nextEndAt;
     }
   }
-  if (pickFirstBoolean(sourceChanges, ["isMajor", "major", "important"])) {
+  if (pickFirstBoolean(sourceChanges, ["isMajor", "is_major", "major", "important"])) {
     changes.isMajor = true;
-  } else if (sourceChanges.isMajor === false || sourceChanges.major === false || sourceChanges.important === false) {
+  } else if (sourceChanges.isMajor === false || sourceChanges.is_major === false || sourceChanges.major === false || sourceChanges.important === false) {
     changes.isMajor = false;
   }
   if (Object.keys(changes).length === 0) {
@@ -32767,28 +32919,30 @@ function parseUpdateOperation(value, options = {}) {
   };
 }
 function parseDeleteOperation(value) {
-  if (!isRecord(value)) {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  if (!isRecord(normalizedValue)) {
     return null;
   }
-  const action = typeof value.action === "string" ? value.action : "";
-  if (action && action !== "delete_task" && action !== "delete" && action !== "remove_task") {
+  const action = typeof normalizedValue.action === "string" ? normalizedValue.action.trim().toLowerCase() : "";
+  if (action && !["delete_task", "delete", "remove_task", "remove", "drop_task", "archive_task"].includes(action)) {
     return null;
   }
-  const taskId = typeof value.taskId === "string" ? value.taskId : typeof value.id === "string" ? value.id : "";
+  const taskId = pickFirstString(normalizedValue, ["taskId", "task_id", "targetTaskId", "target_task_id", "id"]);
   if (!taskId) {
     return null;
   }
   return {
     action: "delete_task",
     taskId,
-    reason: typeof value.reason === "string" ? value.reason : void 0
+    reason: pickFirstString(normalizedValue, ["reason", "deleteReason", "delete_reason"]) || void 0
   };
 }
 function parseOperationCandidate(value, options = {}) {
   return parseCreateOperation(value, options) ?? parseUpdateOperation(value, options) ?? parseDeleteOperation(value);
 }
 function parseProposal(value, options = {}) {
-  const operationsRaw = getOperationCandidates(value);
+  const normalizedValue = tryParseJsonLikeValue(value);
+  const operationsRaw = getOperationCandidates(normalizedValue);
   const operations = [];
   for (const item of operationsRaw) {
     const operation = parseOperationCandidate(item, options);
@@ -32796,8 +32950,8 @@ function parseProposal(value, options = {}) {
       operations.push(operation);
     }
   }
-  if (operations.length === 0 && isRecord(value)) {
-    const singleOperation = parseOperationCandidate(value, options);
+  if (operations.length === 0 && isRecord(normalizedValue)) {
+    const singleOperation = parseOperationCandidate(normalizedValue, options);
     if (singleOperation) {
       operations.push(singleOperation);
     }
@@ -32806,15 +32960,16 @@ function parseProposal(value, options = {}) {
     return void 0;
   }
   return {
-    summary: isRecord(value) && typeof value.summary === "string" && value.summary.trim() ? value.summary : typeof options.fallbackSummary === "string" && options.fallbackSummary.trim() ? options.fallbackSummary : "변경 제안",
+    summary: isRecord(normalizedValue) && typeof normalizedValue.summary === "string" && normalizedValue.summary.trim() ? normalizedValue.summary : typeof options.fallbackSummary === "string" && options.fallbackSummary.trim() ? options.fallbackSummary : "변경 제안",
     operations
   };
 }
 function buildSummaryOnlyProposal(value, fallbackSummary) {
-  if (!isRecord(value)) {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  if (!isRecord(normalizedValue)) {
     return void 0;
   }
-  const summary = typeof value.summary === "string" && value.summary.trim() ? value.summary : typeof fallbackSummary === "string" && fallbackSummary.trim() ? fallbackSummary : "";
+  const summary = typeof normalizedValue.summary === "string" && normalizedValue.summary.trim() ? normalizedValue.summary : typeof fallbackSummary === "string" && fallbackSummary.trim() ? fallbackSummary : "";
   if (!summary) {
     return void 0;
   }
