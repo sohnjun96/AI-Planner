@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { addDays, addMonths, getDateKey, getMonthGridStart, startOfMonth } from "../utils/date";
 
 export interface CalendarDaySummary {
@@ -79,20 +79,6 @@ export function MonthCalendar({
   const selectedKey = getDateKey(selectedDate);
   const todayKey = getDateKey(new Date());
 
-  useEffect(() => {
-    const selected = new Date(selectedDate);
-    if (!Number.isFinite(selected.getTime())) {
-      return;
-    }
-
-    if (
-      selected.getFullYear() !== visibleMonth.getFullYear() ||
-      selected.getMonth() !== visibleMonth.getMonth()
-    ) {
-      setVisibleMonth(startOfMonth(selected));
-    }
-  }, [selectedDate, visibleMonth]);
-
   const days = useMemo(() => {
     const start = getMonthGridStart(visibleMonth, weekStartsOn);
     return Array.from({ length: 42 }, (_, index) => addDays(start, index));
@@ -128,7 +114,13 @@ export function MonthCalendar({
 
   function moveSelectionByDays(daysToMove: number) {
     const next = addDays(new Date(selectedDate), daysToMove);
+    setVisibleMonth(startOfMonth(next));
     onSelectDate(getDateKey(next));
+  }
+
+  function selectDate(date: Date) {
+    setVisibleMonth(startOfMonth(date));
+    onSelectDate(getDateKey(date));
   }
 
   function handleMonthInputChange(value: string) {
@@ -225,7 +217,7 @@ export function MonthCalendar({
               } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
                 dragOverDateKey === key ? "drag-target" : ""
               }`}
-              onClick={() => onSelectDate(key)}
+              onClick={() => selectDate(date)}
               onDoubleClick={() => {
                 onCreateTaskAtDate?.(key);
               }}
@@ -278,6 +270,7 @@ export function MonthCalendar({
                 }
                 event.preventDefault();
                 setDragOverDateKey(null);
+                setVisibleMonth(startOfMonth(date));
                 void onDropTaskToDate(taskId, key);
               }}
               aria-label={ariaLabel}

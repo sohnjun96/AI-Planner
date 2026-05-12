@@ -98,40 +98,182 @@ interface ParseOptions {
 
 const MAX_TOOL_ROUNDS = 4;
 
-const SYSTEM_PROMPT = `
-너는 "업무 일정관리 전용 에이전트"다.
-반드시 JSON 객체만 출력하고, JSON 외 텍스트는 절대 출력하지 마라.
+const NOT_DONE_STATUS_ALIASES = ["not_done", "notdone", "todo", "pending", "in_progress", "\ubbf8\uc644\ub8cc", "\ub300\uae30"] as const;
+const ON_HOLD_STATUS_ALIASES = ["on_hold", "hold", "paused", "\ubcf4\ub958", "\ud640\ub4dc"] as const;
+const DONE_STATUS_ALIASES = ["done", "complete", "completed", "\uc644\ub8cc", "\ub05d\ub0a8"] as const;
 
-규칙:
-1) 출력 스키마
+const DIRECT_OPERATION_KEYS = [
+  "operations",
+  "tasks",
+  "draftTasks",
+  "draft_tasks",
+  "items",
+  "drafts",
+  "actions",
+  "operationDrafts",
+  "operation_drafts",
+] as const;
+
+const GROUPED_OPERATION_DEFS = [
+  { key: "createTasks", action: "create_task" },
+  { key: "create_tasks", action: "create_task" },
+  { key: "creates", action: "create_task" },
+  { key: "additions", action: "create_task" },
+  { key: "updateTasks", action: "update_task" },
+  { key: "update_tasks", action: "update_task" },
+  { key: "updates", action: "update_task" },
+  { key: "deleteTasks", action: "delete_task" },
+  { key: "delete_tasks", action: "delete_task" },
+  { key: "deletes", action: "delete_task" },
+  { key: "removals", action: "delete_task" },
+] as const satisfies ReadonlyArray<{ key: string; action: AgentOperation["action"] }>;
+
+const CREATE_ACTION_ALIASES = ["create_task", "create", "draft_task", "add_task", "new_task", "insert_task", "upsert_task", "append_task"] as const;
+const UPDATE_ACTION_ALIASES = ["update_task", "update", "edit_task", "modify_task", "patch_task", "upsert_update", "change_task"] as const;
+const DELETE_ACTION_ALIASES = ["delete_task", "delete", "remove_task", "remove", "drop_task", "archive_task"] as const;
+
+const TITLE_KEYS = ["title", "name", "taskTitle", "task_title"] as const;
+const START_AT_KEYS = ["startAt", "start_at", "start", "startsAt", "starts_at", "scheduledAt", "scheduled_at", "dateTime", "date_time", "date"] as const;
+const END_AT_KEYS = ["endAt", "end_at", "end", "endsAt", "ends_at", "endTime", "end_time"] as const;
+const PROJECT_KEYS = ["projectId", "project_id", "project", "projectName", "project_name"] as const;
+const TASK_TYPE_KEYS = [
+  "taskTypeId",
+  "task_type_id",
+  "taskType",
+  "task_type",
+  "taskTypeName",
+  "task_type_name",
+  "type",
+  "typeId",
+  "type_id",
+  "typeName",
+  "type_name",
+] as const;
+const CONTENT_KEYS = ["content", "description", "notes", "memo", "taskContent", "task_content"] as const;
+const MAJOR_KEYS = ["isMajor", "is_major", "major", "important"] as const;
+const TASK_ID_KEYS = ["taskId", "task_id", "targetTaskId", "target_task_id", "id"] as const;
+const CHANGE_CONTAINER_KEYS = ["changes", "changeSet", "change_set", "fields"] as const;
+const DELETE_REASON_KEYS = ["reason", "deleteReason", "delete_reason"] as const;
+
+const SYSTEM_PROMPT = `
+You are the schedule planning agent for a Korean task and calendar manager.
+Return exactly one valid JSON object. Do not use markdown fences. Do not add text before or after the JSON.
+All user-facing text values must be written in Korean.
+
+Required root schema:
 {
-  "assistantMessage": "string",
-  "needsUserInput": true|false,
-  "userQuestion": "string, optional",
-  "toolCalls": [{"tool":"...","args":{...}}],
+  "assistantMessage": "short Korean message",
+  "needsUserInput": false,
+  "userQuestion": "",
+  "toolCalls": [],
   "proposal": {
-    "summary": "string",
-    "operations": [
-      {"action":"create_task", ...},
-      {"action":"update_task", ...},
-      {"action":"delete_task", ...}
-    ]
+    "summary": "short Korean summary",
+    "operations": []
   }
 }
 
-2) toolCalls와 proposal을 같은 응답에서 동시에 내지 마라.
-3) 수정/삭제가 필요하면 먼저 toolCalls로 조회하고 tool_results 확인 후 proposal을 만들어라.
-4) 정보가 모호하면 needsUserInput=true와 userQuestion으로 질문해라.
-5) proposal은 최종 반영 전 초안이다. 실제 반영은 사용자가 결정한다.
-6) status는 반드시 NOT_DONE / ON_HOLD / DONE 중 하나만 사용한다.
-7) 시간은 ISO-8601 문자열로 사용한다. 예: 2026-02-11T09:00:00.000Z
+Hard output rules:
+1. Always include every root key: assistantMessage, needsUserInput, userQuestion, toolCalls, proposal.
+2. proposal must always include summary and operations.
+3. If you need to inspect existing tasks, projects, task types, or the current date, return toolCalls and set proposal.operations to [].
+4. If toolCalls is not empty, do not include final create/update/delete operations in the same response.
+5. If you can satisfy the request, set toolCalls to [] and put every proposed change in proposal.operations.
+6. Never return a summary-only proposal when the user asked to create, update, or delete schedules. The actual draft must be in proposal.operations.
+7. If required information is missing or ambiguous, set needsUserInput to true, put one clear Korean question in userQuestion, set toolCalls to [], and set proposal.operations to [].
+8. Use only projectId values from knownChoices.projectList and taskTypeId values from knownChoices.taskTypeList. If the user gives a name, map it to the matching id. If it is unclear, ask a question.
+9. Use only these status values: NOT_DONE, ON_HOLD, DONE.
+10. Interpret user dates and times in Asia/Seoul using the input now value. For startAt/endAt, prefer local ISO without a timezone, for example 2026-02-11T09:00. The app will normalize it.
+11. For repeated schedules, create one create_task operation per occurrence unless the repeat rule is unclear.
+12. If the user asks for multiple schedules, return multiple operations in the same operations array.
+13. Do not invent taskId values. For update_task or delete_task, use search_tasks or get_task first when the exact taskId is not already known.
+14. Prefer active project and task type ids when the user did not specify them.
 
-사용 가능한 tool:
+Operation schemas:
+create_task requires:
+{
+  "action": "create_task",
+  "title": "task title",
+  "content": "",
+  "taskTypeId": "known task type id",
+  "projectId": "known project id",
+  "status": "NOT_DONE",
+  "startAt": "local ISO timestamp",
+  "isMajor": false
+}
+Only include endAt when the end time is known.
+
+update_task requires:
+{
+  "action": "update_task",
+  "taskId": "existing task id",
+  "changes": {
+    "title": "new title"
+  }
+}
+Put only changed fields in changes.
+
+delete_task requires:
+{
+  "action": "delete_task",
+  "taskId": "existing task id",
+  "reason": "optional Korean reason"
+}
+
+Allowed tools:
 - list_projects: {}
 - list_task_types: {}
 - search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE", "limit"?: number }
 - get_task: { "taskId": string }
 - current_datetime: {}
+
+Example final response:
+{
+  "assistantMessage": "초안을 준비했습니다. 확인 후 반영해 주세요.",
+  "needsUserInput": false,
+  "userQuestion": "",
+  "toolCalls": [],
+  "proposal": {
+    "summary": "회의 일정을 1건 추가합니다.",
+    "operations": [
+      {
+        "action": "create_task",
+        "title": "팀 회의",
+        "content": "",
+        "taskTypeId": "type-etc",
+        "projectId": "project-general",
+        "status": "NOT_DONE",
+        "startAt": "2026-02-11T09:00",
+        "isMajor": false
+      }
+    ]
+  }
+}
+
+Example tool response:
+{
+  "assistantMessage": "기존 일정을 먼저 확인하겠습니다.",
+  "needsUserInput": false,
+  "userQuestion": "",
+  "toolCalls": [
+    { "tool": "search_tasks", "args": { "keyword": "팀 회의", "limit": 10 } }
+  ],
+  "proposal": {
+    "summary": "기존 일정 조회가 필요합니다.",
+    "operations": []
+  }
+}
+
+Example clarification response:
+{
+  "assistantMessage": "일정을 만들기 위해 시간이 필요합니다.",
+  "needsUserInput": true,
+  "userQuestion": "몇 시 일정으로 등록할까요?",
+  "toolCalls": [],
+  "proposal": {
+    "summary": "추가 정보가 필요합니다.",
+    "operations": []
+  }
+}
 `.trim();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,13 +295,13 @@ function normalizeTaskStatus(value: unknown): TaskStatus | undefined {
   if (!normalized) {
     return undefined;
   }
-  if (["not_done", "notdone", "todo", "pending", "in_progress", "미완료", "대기"].includes(normalized)) {
+  if (NOT_DONE_STATUS_ALIASES.includes(normalized as (typeof NOT_DONE_STATUS_ALIASES)[number])) {
     return "NOT_DONE";
   }
-  if (["on_hold", "hold", "paused", "보류", "홀드"].includes(normalized)) {
+  if (ON_HOLD_STATUS_ALIASES.includes(normalized as (typeof ON_HOLD_STATUS_ALIASES)[number])) {
     return "ON_HOLD";
   }
-  if (["done", "complete", "completed", "완료", "끝남"].includes(normalized)) {
+  if (DONE_STATUS_ALIASES.includes(normalized as (typeof DONE_STATUS_ALIASES)[number])) {
     return "DONE";
   }
   return undefined;
@@ -241,7 +383,7 @@ function normalizeLookupValue(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-function pickFirstString(record: Record<string, unknown>, keys: string[]): string {
+function pickFirstString(record: Record<string, unknown>, keys: readonly string[]): string {
   for (const key of keys) {
     const candidate = record[key];
     if (typeof candidate === "string" && candidate.trim()) {
@@ -251,13 +393,23 @@ function pickFirstString(record: Record<string, unknown>, keys: string[]): strin
   return "";
 }
 
-function pickFirstBoolean(record: Record<string, unknown>, keys: string[]): boolean {
+function pickFirstBoolean(record: Record<string, unknown>, keys: readonly string[]): boolean {
   for (const key of keys) {
     if (typeof record[key] === "boolean") {
       return record[key] as boolean;
     }
   }
   return false;
+}
+
+function pickFirstRecord(record: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> | undefined {
+  for (const key of keys) {
+    const candidate = record[key];
+    if (isRecord(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
 }
 
 function normalizeDateTime(value: unknown, fallbackTime: string): string {
@@ -311,39 +463,16 @@ function getOperationCandidates(value: unknown): unknown[] {
     return [];
   }
 
-  const directCandidates = [
-    normalizedValue.operations,
-    normalizedValue.tasks,
-    normalizedValue.draftTasks,
-    normalizedValue.draft_tasks,
-    normalizedValue.items,
-    normalizedValue.drafts,
-    normalizedValue.actions,
-    normalizedValue.operationDrafts,
-    normalizedValue.operation_drafts,
-  ];
-  for (const candidate of directCandidates) {
+  for (const key of DIRECT_OPERATION_KEYS) {
+    const candidate = normalizedValue[key];
     if (Array.isArray(candidate)) {
       return candidate;
     }
   }
 
   const groupedCandidates: unknown[] = [];
-  const groupedDefs: Array<[unknown, AgentOperation["action"]]> = [
-    [normalizedValue.createTasks, "create_task"],
-    [normalizedValue.create_tasks, "create_task"],
-    [normalizedValue.creates, "create_task"],
-    [normalizedValue.additions, "create_task"],
-    [normalizedValue.updateTasks, "update_task"],
-    [normalizedValue.update_tasks, "update_task"],
-    [normalizedValue.updates, "update_task"],
-    [normalizedValue.deleteTasks, "delete_task"],
-    [normalizedValue.delete_tasks, "delete_task"],
-    [normalizedValue.deletes, "delete_task"],
-    [normalizedValue.removals, "delete_task"],
-  ];
-
-  for (const [candidate, action] of groupedDefs) {
+  for (const { key, action } of GROUPED_OPERATION_DEFS) {
+    const candidate = normalizedValue[key];
     if (!Array.isArray(candidate)) {
       continue;
     }
@@ -366,38 +495,12 @@ function parseCreateOperation(value: unknown, options: ParseOptions = {}): Agent
     return null;
   }
   const action = typeof normalizedValue.action === "string" ? normalizedValue.action.trim().toLowerCase() : "";
-  if (
-    action &&
-    ![
-      "create_task",
-      "create",
-      "draft_task",
-      "add_task",
-      "new_task",
-      "insert_task",
-      "upsert_task",
-      "append_task",
-    ].includes(action)
-  ) {
+  if (action && !CREATE_ACTION_ALIASES.includes(action as (typeof CREATE_ACTION_ALIASES)[number])) {
     return null;
   }
-  const title = pickFirstString(normalizedValue, ["title", "name", "taskTitle", "task_title"]);
-  const startAt = normalizeDateTime(
-    pickFirstString(normalizedValue, [
-      "startAt",
-      "start_at",
-      "start",
-      "startsAt",
-      "starts_at",
-      "scheduledAt",
-      "scheduled_at",
-      "dateTime",
-      "date_time",
-      "date",
-    ]),
-    "09:00",
-  );
-  const endAtRaw = pickFirstString(normalizedValue, ["endAt", "end_at", "end", "endsAt", "ends_at", "endTime", "end_time"]);
+  const title = pickFirstString(normalizedValue, TITLE_KEYS);
+  const startAt = normalizeDateTime(pickFirstString(normalizedValue, START_AT_KEYS), "09:00");
+  const endAtRaw = pickFirstString(normalizedValue, END_AT_KEYS);
   let endAt = normalizeDateTime(endAtRaw, "10:00");
   const durationMinutes =
     typeof normalizedValue.durationMinutes === "number"
@@ -409,24 +512,12 @@ function parseCreateOperation(value: unknown, options: ParseOptions = {}): Agent
     endAt = new Date(new Date(startAt).getTime() + durationMinutes * 60000).toISOString();
   }
   const projectId = resolveEntityId(
-    pickFirstString(normalizedValue, ["projectId", "project_id", "project", "projectName", "project_name"]),
+    pickFirstString(normalizedValue, PROJECT_KEYS),
     options.projects ?? [],
     options.fallbackProjectId ?? DEFAULT_PROJECT_ID,
   );
   const taskTypeId = resolveEntityId(
-    pickFirstString(normalizedValue, [
-      "taskTypeId",
-      "task_type_id",
-      "taskType",
-      "task_type",
-      "taskTypeName",
-      "task_type_name",
-      "type",
-      "typeId",
-      "type_id",
-      "typeName",
-      "type_name",
-    ]),
+    pickFirstString(normalizedValue, TASK_TYPE_KEYS),
     options.taskTypes ?? [],
     options.fallbackTaskTypeId ?? DEFAULT_TASK_TYPES[0]?.id ?? "",
   );
@@ -436,13 +527,13 @@ function parseCreateOperation(value: unknown, options: ParseOptions = {}): Agent
   return {
     action: "create_task",
     title,
-    content: pickFirstString(normalizedValue, ["content", "description", "notes", "memo", "taskContent", "task_content"]),
+    content: pickFirstString(normalizedValue, CONTENT_KEYS),
     taskTypeId,
     projectId,
     status: normalizeTaskStatus(normalizedValue.status) ?? "NOT_DONE",
     startAt,
     endAt: endAt || undefined,
-    isMajor: pickFirstBoolean(normalizedValue, ["isMajor", "is_major", "major", "important"]),
+    isMajor: pickFirstBoolean(normalizedValue, MAJOR_KEYS),
   };
 }
 
@@ -452,45 +543,25 @@ function parseUpdateOperation(value: unknown, options: ParseOptions = {}): Agent
     return null;
   }
   const action = typeof normalizedValue.action === "string" ? normalizedValue.action.trim().toLowerCase() : "";
-  if (
-    action &&
-    !["update_task", "update", "edit_task", "modify_task", "patch_task", "upsert_update", "change_task"].includes(action)
-  ) {
+  if (action && !UPDATE_ACTION_ALIASES.includes(action as (typeof UPDATE_ACTION_ALIASES)[number])) {
     return null;
   }
-  const taskId = pickFirstString(normalizedValue, ["taskId", "task_id", "targetTaskId", "target_task_id", "id"]);
+  const taskId = pickFirstString(normalizedValue, TASK_ID_KEYS);
   if (!taskId) {
     return null;
   }
-  const sourceChanges =
-    (isRecord(normalizedValue.changes) && normalizedValue.changes) ||
-    (isRecord(normalizedValue.changeSet) && normalizedValue.changeSet) ||
-    (isRecord(normalizedValue.change_set) && normalizedValue.change_set) ||
-    (isRecord(normalizedValue.fields) && normalizedValue.fields) ||
-    normalizedValue;
+  const sourceChanges = pickFirstRecord(normalizedValue, CHANGE_CONTAINER_KEYS) ?? normalizedValue;
   const changes: AgentUpdateTaskOperation["changes"] = {};
-  const nextTitle = pickFirstString(sourceChanges, ["title", "taskTitle", "task_title", "name"]);
+  const nextTitle = pickFirstString(sourceChanges, TITLE_KEYS);
   if (nextTitle) {
     changes.title = nextTitle;
   }
-  const nextContent = pickFirstString(sourceChanges, ["content", "taskContent", "task_content", "description", "notes", "memo"]);
+  const nextContent = pickFirstString(sourceChanges, CONTENT_KEYS);
   if (nextContent) {
     changes.content = nextContent;
   }
   const nextTaskTypeId = resolveEntityId(
-    pickFirstString(sourceChanges, [
-      "taskTypeId",
-      "task_type_id",
-      "taskType",
-      "task_type",
-      "taskTypeName",
-      "task_type_name",
-      "type",
-      "typeId",
-      "type_id",
-      "typeName",
-      "type_name",
-    ]),
+    pickFirstString(sourceChanges, TASK_TYPE_KEYS),
     options.taskTypes ?? [],
     undefined,
   );
@@ -498,7 +569,7 @@ function parseUpdateOperation(value: unknown, options: ParseOptions = {}): Agent
     changes.taskTypeId = nextTaskTypeId;
   }
   const nextProjectId = resolveEntityId(
-    pickFirstString(sourceChanges, ["projectId", "project_id", "project", "projectName", "project_name"]),
+    pickFirstString(sourceChanges, PROJECT_KEYS),
     options.projects ?? [],
     undefined,
   );
@@ -509,36 +580,19 @@ function parseUpdateOperation(value: unknown, options: ParseOptions = {}): Agent
   if (normalizedStatus) {
     changes.status = normalizedStatus;
   }
-  const nextStartAt = normalizeDateTime(
-    pickFirstString(sourceChanges, [
-      "startAt",
-      "start_at",
-      "start",
-      "startsAt",
-      "starts_at",
-      "scheduledAt",
-      "scheduled_at",
-      "dateTime",
-      "date_time",
-      "date",
-    ]),
-    "09:00",
-  );
+  const nextStartAt = normalizeDateTime(pickFirstString(sourceChanges, START_AT_KEYS), "09:00");
   if (nextStartAt) {
     changes.startAt = nextStartAt;
   }
   if (sourceChanges.endAt === null || sourceChanges.end_at === null) {
     changes.endAt = null;
   } else {
-    const nextEndAt = normalizeDateTime(
-      pickFirstString(sourceChanges, ["endAt", "end_at", "end", "endsAt", "ends_at", "endTime", "end_time"]),
-      "10:00",
-    );
+    const nextEndAt = normalizeDateTime(pickFirstString(sourceChanges, END_AT_KEYS), "10:00");
     if (nextEndAt) {
       changes.endAt = nextEndAt;
     }
   }
-  if (pickFirstBoolean(sourceChanges, ["isMajor", "is_major", "major", "important"])) {
+  if (pickFirstBoolean(sourceChanges, MAJOR_KEYS)) {
     changes.isMajor = true;
   } else if (
     sourceChanges.isMajor === false ||
@@ -564,20 +618,17 @@ function parseDeleteOperation(value: unknown): AgentDeleteTaskOperation | null {
     return null;
   }
   const action = typeof normalizedValue.action === "string" ? normalizedValue.action.trim().toLowerCase() : "";
-  if (
-    action &&
-    !["delete_task", "delete", "remove_task", "remove", "drop_task", "archive_task"].includes(action)
-  ) {
+  if (action && !DELETE_ACTION_ALIASES.includes(action as (typeof DELETE_ACTION_ALIASES)[number])) {
     return null;
   }
-  const taskId = pickFirstString(normalizedValue, ["taskId", "task_id", "targetTaskId", "target_task_id", "id"]);
+  const taskId = pickFirstString(normalizedValue, TASK_ID_KEYS);
   if (!taskId) {
     return null;
   }
   return {
     action: "delete_task",
     taskId,
-    reason: pickFirstString(normalizedValue, ["reason", "deleteReason", "delete_reason"]) || undefined,
+    reason: pickFirstString(normalizedValue, DELETE_REASON_KEYS) || undefined,
   };
 }
 
@@ -699,7 +750,7 @@ function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[]
 
   const keyword = typeof call.args.keyword === "string" ? call.args.keyword.trim().toLowerCase() : "";
   const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
-  const status = isTaskStatus(call.args.status) ? call.args.status : undefined;
+  const status = normalizeTaskStatus(call.args.status);
   const limitRaw = typeof call.args.limit === "number" ? call.args.limit : 20;
   const limit = Math.max(1, Math.min(50, Math.floor(limitRaw)));
   const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));

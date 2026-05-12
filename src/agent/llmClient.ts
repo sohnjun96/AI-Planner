@@ -72,7 +72,7 @@ export async function requestLlmResponse(params: {
       model: params.model?.trim() || LLM_DEFAULT_MODEL,
       messages: params.messages,
       stream: false,
-      temperature: 0.1,
+      temperature: 0,
     }),
   });
 
