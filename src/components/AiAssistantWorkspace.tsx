@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { runScheduleAgent } from "../agent/scheduleAgent";
 import type {
   AgentConversationMessage,
@@ -16,9 +16,26 @@ import { formatDateTime } from "../utils/date";
 interface AiAssistantWorkspaceProps {
   compact?: boolean;
   showEndpointInfo?: boolean;
+  directApply?: boolean;
+  title?: string;
+  subtitle?: string;
+  placeholder?: string;
+  className?: string;
+  onApplied?: () => void;
 }
 
 type EndpointStatus = "checking" | "ok" | "error";
+
+const FIELD_LABELS: Record<string, string> = {
+  title: "제목",
+  content: "내용",
+  taskTypeId: "종류",
+  projectId: "프로젝트",
+  status: "상태",
+  startAt: "시작",
+  endAt: "종료",
+  isMajor: "중요",
+};
 
 function isTaskStatus(value: unknown): value is TaskStatus {
   return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
@@ -99,17 +116,36 @@ async function probeEndpoint(apiKey: string, model: string): Promise<void> {
   }
 }
 
-export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }: AiAssistantWorkspaceProps) {
+function describeChangeValue(key: string, value: unknown, timeFormat: "24h" | "12h"): string {
+  if (value === null || value === undefined || value === "") {
+    return "비움";
+  }
+  if ((key === "startAt" || key === "endAt") && typeof value === "string" && isValidIsoDate(value)) {
+    return formatDateTime(value, timeFormat);
+  }
+  if (typeof value === "boolean") {
+    return value ? "예" : "아니오";
+  }
+  return String(value);
+}
+
+export function AiAssistantWorkspace({
+  compact = false,
+  showEndpointInfo = true,
+  directApply = false,
+  title = "AI 일정 입력",
+  subtitle = "요청, AI 질문, 초안 검토를 한 공간에서 처리합니다.",
+  placeholder = "예: 내일 오전 10시에 보고서 제출 일정 추가해줘. 프로젝트는 일반, 종류는 제출.",
+  className = "",
+  onApplied,
+}: AiAssistantWorkspaceProps) {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
-  const [conversation, setConversation] = useState<AgentConversationMessage[]>([
-    {
-      role: "assistant",
-      content:
-        "일정 관련 요청을 자연어로 입력해 주세요. 필요한 조회를 수행한 뒤 반영 전에 최종 확인용 변경안을 먼저 보여드립니다.",
-    },
-  ]);
   const [draft, setDraft] = useState("");
   const [lastUserMessage, setLastUserMessage] = useState("");
+  const [lastAssistantMessage, setLastAssistantMessage] = useState(
+    "일정 요청을 입력하면 AI가 필요한 질문과 초안/변경안을 압축해서 보여드립니다.",
+  );
+  const [lastQuestion, setLastQuestion] = useState("");
   const [pendingProposal, setPendingProposal] = useState<AgentProposal | undefined>(undefined);
   const [selectedOperationIndexes, setSelectedOperationIndexes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -122,8 +158,18 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
   const taskMap = useMemo(() => Object.fromEntries(tasks.map((task) => [task.id, task])), [tasks]);
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const taskTypeMap = useMemo(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
-
   const selectedOperationSet = useMemo(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
+  const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
+
+  const conversationContext = useMemo<AgentConversationMessage[]>(() => {
+    if (!lastUserMessage || !lastAssistantMessage) {
+      return [];
+    }
+    return [
+      { role: "user", content: lastUserMessage },
+      { role: "assistant", content: lastAssistantMessage },
+    ];
+  }, [lastAssistantMessage, lastUserMessage]);
 
   useEffect(() => {
     if (!pendingProposal) {
@@ -166,21 +212,19 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
       return;
     }
 
-    const history = conversation.slice(-10);
-
     setError("");
     setApplyResult("");
+    setLastQuestion("");
+    setPendingProposal(undefined);
     if (!messageOverride) {
       setDraft("");
     }
-    setLastUserMessage(userMessage);
-    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
 
     try {
       const result = await runScheduleAgent({
         userMessage,
-        conversation: history,
+        conversation: conversationContext,
         tasks,
         projects,
         taskTypes,
@@ -188,25 +232,17 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
         model: setting.llmModel,
       });
 
-      const assistantText =
-        result.needsUserInput && result.question
-          ? `${result.assistantMessage}\n\n질문: ${result.question}`
-          : result.assistantMessage;
-
-      setConversation((prev) => [...prev, { role: "assistant", content: assistantText }]);
+      setLastUserMessage(userMessage);
+      setLastAssistantMessage(result.assistantMessage);
+      setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
       const message = toFriendlyError(runError);
       setError(message);
-      setConversation((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `요청 처리에 실패했습니다: ${message}`,
-        },
-      ]);
+      setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
+      setLastQuestion("");
       setEndpointStatus("error");
       setEndpointStatusMessage(message);
     } finally {
@@ -222,10 +258,10 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
       throw new Error(`종류를 찾을 수 없습니다: ${operation.taskTypeId}`);
     }
     if (!isValidIsoDate(operation.startAt)) {
-      throw new Error("시작 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+      throw new Error("시작 시간이 올바른 날짜 형식이 아닙니다.");
     }
     if (operation.endAt && !isValidIsoDate(operation.endAt)) {
-      throw new Error("종료 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+      throw new Error("종료 시간이 올바른 날짜 형식이 아닙니다.");
     }
     if (operation.endAt && new Date(operation.endAt).getTime() < new Date(operation.startAt).getTime()) {
       throw new Error("종료 시간이 시작 시간보다 빠릅니다.");
@@ -275,7 +311,7 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
     }
     if (typeof changes.startAt === "string") {
       if (!isValidIsoDate(changes.startAt)) {
-        throw new Error("시작 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+        throw new Error("시작 시간이 올바른 날짜 형식이 아닙니다.");
       }
       nextInput.startAt = changes.startAt;
     }
@@ -284,7 +320,7 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
         throw new Error("종료 시간 형식이 올바르지 않습니다.");
       }
       if (typeof changes.endAt === "string" && !isValidIsoDate(changes.endAt)) {
-        throw new Error("종료 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+        throw new Error("종료 시간이 올바른 날짜 형식이 아닙니다.");
       }
       nextInput.endAt = changes.endAt ?? undefined;
     }
@@ -304,6 +340,18 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
       throw new Error(`삭제할 일정을 찾을 수 없습니다: ${operation.taskId}`);
     }
     await removeTask(operation.taskId);
+  }
+
+  async function applyOperation(operation: AgentOperation): Promise<void> {
+    if (operation.action === "create_task") {
+      await applyCreateOperation(operation);
+      return;
+    }
+    if (operation.action === "update_task") {
+      await applyUpdateOperation(operation);
+      return;
+    }
+    await applyDeleteOperation(operation);
   }
 
   async function handleApplyProposal() {
@@ -334,13 +382,7 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
       }
 
       try {
-        if (operation.action === "create_task") {
-          await applyCreateOperation(operation);
-        } else if (operation.action === "update_task") {
-          await applyUpdateOperation(operation);
-        } else {
-          await applyDeleteOperation(operation);
-        }
+        await applyOperation(operation);
         successLogs.push(formatOperationLabel(operation));
       } catch (applyError) {
         const message = applyError instanceof Error ? applyError.message : "반영 실패";
@@ -356,16 +398,15 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
 
     const resultText = resultTextParts.length > 0 ? resultTextParts.join(", ") : "반영 결과가 없습니다.";
     setApplyResult(resultText);
-
-    const assistantLog = [
-      `변경안 반영 결과: ${resultText}`,
-      successLogs.length > 0 ? `성공 목록: ${successLogs.join(", ")}` : "",
-      failedLogs.length > 0 ? `실패 목록: ${failedLogs.join(", ")}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    setConversation((prev) => [...prev, { role: "assistant", content: assistantLog }]);
+    setLastAssistantMessage(
+      [
+        `변경안 반영 결과: ${resultText}`,
+        successLogs.length > 0 ? `성공 목록: ${successLogs.join(", ")}` : "",
+        failedLogs.length > 0 ? `실패 목록: ${failedLogs.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
 
     const remainingOperations = pendingProposal.operations.filter((_, index) => {
       if (!selectedOperationSet.has(index)) {
@@ -388,230 +429,198 @@ export function AiAssistantWorkspace({ compact = false, showEndpointInfo = true 
     }
 
     setIsApplying(false);
+    onApplied?.();
+  }
+
+  function renderOperation(operation: AgentOperation, index: number) {
+    const isSelected = selectedOperationSet.has(index);
+    const toggleSelection = (checked: boolean) => {
+      setSelectedOperationIndexes((prev) => {
+        if (checked) {
+          return [...prev, index].sort((a, b) => a - b);
+        }
+        return prev.filter((item) => item !== index);
+      });
+    };
+
+    if (operation.action === "create_task") {
+      const projectName = projectMap[operation.projectId]?.name ?? operation.projectId;
+      const taskTypeName = taskTypeMap[operation.taskTypeId]?.name ?? operation.taskTypeId;
+      return (
+        <li key={`proposal-${index}`} className="proposal-card">
+          <label className="proposal-item-toggle">
+            <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
+            <span>
+              <strong>[추가] {operation.title}</strong>
+              <small>
+                {formatDateTime(operation.startAt, setting.timeFormat)}
+                {operation.endAt ? ` ~ ${formatDateTime(operation.endAt, setting.timeFormat)}` : ""}
+                {` / ${projectName} / ${taskTypeName}`}
+              </small>
+            </span>
+          </label>
+        </li>
+      );
+    }
+
+    if (operation.action === "update_task") {
+      const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
+      const changeText = Object.entries(operation.changes)
+        .map(([key, value]) => `${FIELD_LABELS[key] ?? key}: ${describeChangeValue(key, value, setting.timeFormat)}`)
+        .join(" · ");
+      return (
+        <li key={`proposal-${index}`} className="proposal-card">
+          <label className="proposal-item-toggle">
+            <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
+            <span>
+              <strong>[수정] {taskTitle}</strong>
+              <small>{changeText || "변경 필드 없음"}</small>
+            </span>
+          </label>
+        </li>
+      );
+    }
+
+    const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
+    return (
+      <li key={`proposal-${index}`} className="proposal-card">
+        <label className="proposal-item-toggle">
+          <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
+          <span>
+            <strong>[삭제] {taskTitle}</strong>
+            {operation.reason ? <small>{operation.reason}</small> : null}
+          </span>
+        </label>
+      </li>
+    );
   }
 
   return (
-    <div className={`ai-layout ${compact ? "compact" : ""}`}>
-      <section className="panel ai-chat-panel">
-        <header className="panel-header">
-          <h2>AI 일정 도우미</h2>
-          <small>대화형 일정 추가/수정/삭제</small>
-        </header>
-
-        <p className={`endpoint-status ${endpointStatus}`}>
-          연결 상태: {endpointStatus === "ok" ? "정상" : endpointStatus === "checking" ? "확인 중" : "오류"}
+    <section className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`}>
+      <header className="panel-header ai-command-header">
+        <div>
+          <p className="eyebrow">AI COMMAND</p>
+          <h2>{title}</h2>
+          <small>{subtitle}</small>
+        </div>
+        <p className={`endpoint-status ${endpointStatus}`} title={endpointStatusMessage}>
+          {endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류"}
         </p>
+      </header>
 
-        {showEndpointInfo ? (
-          <>
-            <p className="description-text">고정 Endpoint: {LLM_CHAT_COMPLETIONS_URL}</p>
-            <p className="description-text">
-              사용 모델: {setting.llmModel ?? "(미설정)"} / API Key: {setting.llmApiKey ? "설정됨" : "미설정"}
-            </p>
-          </>
-        ) : null}
-
-        {endpointStatus === "error" ? (
-          <p className="error-text" role="alert">
-            {endpointStatusMessage}
+      {showEndpointInfo ? (
+        <div className="ai-endpoint-block">
+          <p className="description-text">Endpoint: {LLM_CHAT_COMPLETIONS_URL}</p>
+          <p className="description-text">
+            모델: {setting.llmModel ?? "(미설정)"} / API Key: {setting.llmApiKey ? "설정됨" : "미설정"}
           </p>
-        ) : null}
+        </div>
+      ) : null}
 
-        <div className="ai-chat-log" aria-live="polite">
-          {conversation.map((message, index) => (
-            <article key={`${message.role}-${index}`} className={`ai-chat-item ${message.role}`}>
-              <header>
-                <strong>{message.role === "user" ? "나" : "AI"}</strong>
-              </header>
-              <p>{message.content}</p>
-            </article>
-          ))}
+      {endpointStatus === "error" ? (
+        <p className="error-text" role="alert">
+          {endpointStatusMessage}
+        </p>
+      ) : null}
+
+      <div className="ai-request-grid">
+        <label className="ai-input-label">
+          요청 입력
+          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={compact ? 4 : 5} placeholder={placeholder} />
+        </label>
+        <div className="ai-action-stack">
+          <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>
+            {isLoading ? "분석 중" : "초안 만들기"}
+          </button>
+          <button
+            className="btn btn-outline"
+            type="button"
+            disabled={isLoading || !lastUserMessage}
+            onClick={() => {
+              void handleSend(lastUserMessage);
+            }}
+          >
+            마지막 요청 재시도
+          </button>
+        </div>
+      </div>
+
+      <div className="ai-result-card" aria-live="polite">
+        <div className="ai-response-block">
+          <span className="badge-pill">AI 답변</span>
+          <p>{lastAssistantMessage}</p>
         </div>
 
-        <div className="ai-composer">
-          <label>
-            요청 입력
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              rows={4}
-              placeholder="예: 내일 오전 10시에 보고서 제출 일정 추가해줘. 프로젝트는 마케팅, 종류는 제출."
-            />
-          </label>
-          <div className="button-row">
-            <button className="btn btn-primary" type="button" disabled={isLoading} onClick={() => void handleSend()}>
-              {isLoading ? "분석 중..." : "AI에게 요청"}
-            </button>
-            <button
-              className="btn btn-soft"
-              type="button"
-              disabled={isLoading || !lastUserMessage}
-              onClick={() => {
-                void handleSend(lastUserMessage);
-              }}
-            >
-              마지막 요청 재시도
-            </button>
+        {lastQuestion ? (
+          <div className="ai-question-block">
+            <span className="badge-pill danger">질문</span>
+            <p>{lastQuestion}</p>
           </div>
-        </div>
-
-        {error ? <p className="error-text">{error}</p> : null}
-      </section>
-
-      <section className="panel ai-proposal-panel">
-        <header className="panel-header">
-          <h2>최종 확인</h2>
-        </header>
-
-        {!pendingProposal ? <p className="empty-text">아직 반영 대기 중인 변경안이 없습니다.</p> : null}
+        ) : null}
 
         {pendingProposal ? (
-          <div className="proposal-block">
-            <p className="description-text">{pendingProposal.summary}</p>
-
-            {pendingProposal.operations.length === 0 ? (
-              <p className="empty-text">
-                AI가 초안 요약만 반환했고 실제 일정 항목은 포함하지 않았습니다. 응답 형식을 확인해 주세요.
-              </p>
-            ) : (
-              <>
-                <div className="button-row">
+          <div className="proposal-block compact-review">
+            <div className="proposal-summary-row">
+              <div>
+                <span className="badge-pill">변경안</span>
+                <p className="description-text">{pendingProposal.summary}</p>
+              </div>
+              {hasOperations ? (
+                <div className="button-row compact">
                   <button
                     className="btn btn-soft"
                     type="button"
-                    onClick={() => {
-                      setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index));
-                    }}
+                    onClick={() => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index))}
                   >
                     전체 선택
                   </button>
-                  <button
-                    className="btn btn-soft"
-                    type="button"
-                    onClick={() => {
-                      setSelectedOperationIndexes([]);
-                    }}
-                  >
-                    선택 해제
+                  <button className="btn btn-soft" type="button" onClick={() => setSelectedOperationIndexes([])}>
+                    해제
                   </button>
                 </div>
+              ) : null}
+            </div>
 
-                <ul className="proposal-list">
-                  {pendingProposal.operations.map((operation, index) => {
-                    const isSelected = selectedOperationSet.has(index);
-
-                    if (operation.action === "create_task") {
-                      const projectName = projectMap[operation.projectId]?.name ?? operation.projectId;
-                      const taskTypeName = taskTypeMap[operation.taskTypeId]?.name ?? operation.taskTypeId;
-
-                      return (
-                        <li key={`proposal-${index}`}>
-                          <label className="proposal-item-toggle">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(event) => {
-                                setSelectedOperationIndexes((prev) => {
-                                  if (event.target.checked) {
-                                    return [...prev, index].sort((a, b) => a - b);
-                                  }
-                                  return prev.filter((item) => item !== index);
-                                });
-                              }}
-                            />
-                            <span>
-                              <strong>[추가]</strong> {operation.title}
-                              <br />
-                              <small>
-                                {formatDateTime(operation.startAt, setting.timeFormat)}
-                                {operation.endAt ? ` ~ ${formatDateTime(operation.endAt, setting.timeFormat)}` : ""}
-                                {` / 프로젝트: ${projectName} / 종류: ${taskTypeName}`}
-                              </small>
-                            </span>
-                          </label>
-                        </li>
-                      );
-                    }
-
-                    if (operation.action === "update_task") {
-                      const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
-                      return (
-                        <li key={`proposal-${index}`}>
-                          <label className="proposal-item-toggle">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(event) => {
-                                setSelectedOperationIndexes((prev) => {
-                                  if (event.target.checked) {
-                                    return [...prev, index].sort((a, b) => a - b);
-                                  }
-                                  return prev.filter((item) => item !== index);
-                                });
-                              }}
-                            />
-                            <span>
-                              <strong>[수정]</strong> {taskTitle}
-                              <br />
-                              <small>변경 필드: {Object.keys(operation.changes).join(", ")}</small>
-                            </span>
-                          </label>
-                        </li>
-                      );
-                    }
-
-                    const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
-                    return (
-                      <li key={`proposal-${index}`}>
-                        <label className="proposal-item-toggle">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(event) => {
-                              setSelectedOperationIndexes((prev) => {
-                                if (event.target.checked) {
-                                  return [...prev, index].sort((a, b) => a - b);
-                                }
-                                return prev.filter((item) => item !== index);
-                              });
-                            }}
-                          />
-                          <span>
-                            <strong>[삭제]</strong> {taskTitle}
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                <div className="button-row">
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    disabled={isApplying || selectedOperationIndexes.length === 0}
-                    onClick={() => void handleApplyProposal()}
-                  >
-                    {isApplying ? "반영 중..." : `선택 항목 반영 (${selectedOperationIndexes.length})`}
-                  </button>
-                  <button
-                    className="btn btn-soft"
-                    type="button"
-                    onClick={() => {
-                      setPendingProposal(undefined);
-                      setSelectedOperationIndexes([]);
-                    }}
-                  >
-                    변경안 취소
-                  </button>
-                </div>
-              </>
+            {hasOperations ? (
+              <ul className="proposal-list compact-list">{pendingProposal.operations.map(renderOperation)}</ul>
+            ) : (
+              <p className="empty-text">AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요.</p>
             )}
+
+            {hasOperations ? (
+              <div className="button-row proposal-actions">
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={isApplying || selectedOperationIndexes.length === 0}
+                  onClick={() => void handleApplyProposal()}
+                >
+                  {isApplying
+                    ? "등록 중"
+                    : directApply
+                      ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})`
+                      : `선택 항목 반영 (${selectedOperationIndexes.length})`}
+                </button>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={() => {
+                    setPendingProposal(undefined);
+                    setSelectedOperationIndexes([]);
+                  }}
+                >
+                  변경안 취소
+                </button>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        ) : (
+          <p className="empty-text">대기 중인 초안/변경안이 없습니다.</p>
+        )}
 
         {applyResult ? <p className="success-text">{applyResult}</p> : null}
-      </section>
-    </div>
+        {error ? <p className="error-text">{error}</p> : null}
+      </div>
+    </section>
   );
 }

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AiAssistantWorkspace } from "../components/AiAssistantWorkspace";
+import { MarkdownMemo } from "../components/MarkdownMemo";
 import { type CalendarDaySummary, MonthCalendar } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
 import { TaskItem } from "../components/TaskItem";
@@ -9,7 +10,6 @@ import { addDays, compareByStartAtAsc, formatDateTime, getDateKey, isPastComplet
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 
 const GLOBAL_MEMO_KEY = "global";
-const GLOBAL_MEMO_AUTOSAVE_DELAY_MS = 900;
 
 type TaskModalState =
   | {
@@ -67,16 +67,15 @@ function matchesDayFilter(task: Task, filter: DayFilter, conflictCount: number):
 export function DashboardPage() {
   const { tasks, projects, taskTypes, memos, setting, createTask, updateTask, removeTask, saveMemo } = useAppData();
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
-  const [globalMemoDraft, setGlobalMemoDraft] = useState<string | null>(null);
   const [memoSaved, setMemoSaved] = useState("");
   const [memoError, setMemoError] = useState("");
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
+  const [isAiOpen, setIsAiOpen] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropMessage, setDropMessage] = useState("");
   const [dropError, setDropError] = useState("");
   const [dayFilter, setDayFilter] = useState<DayFilter>("ALL");
-  const memoSnapshotRef = useRef("");
 
   const visibleTasks = useMemo(
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
@@ -228,11 +227,6 @@ export function DashboardPage() {
   const activeTaskModalState: TaskModalState = taskModalState?.mode === "edit" && !editingTask ? null : taskModalState;
 
   const globalMemoSource = memoMap[GLOBAL_MEMO_KEY]?.content ?? "";
-  const globalMemoContent = globalMemoDraft ?? globalMemoSource;
-
-  useEffect(() => {
-    memoSnapshotRef.current = globalMemoSource.trim();
-  }, [globalMemoSource]);
 
   useEffect(() => {
     if (!activeTaskModalState) {
@@ -248,29 +242,6 @@ export function DashboardPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [activeTaskModalState]);
-
-  useEffect(() => {
-    if (globalMemoDraft === null) {
-      return;
-    }
-    const normalized = globalMemoDraft.trim();
-    if (normalized === memoSnapshotRef.current) {
-      return;
-    }
-    const timerId = window.setTimeout(() => {
-      void saveMemo(GLOBAL_MEMO_KEY, globalMemoDraft)
-        .then(() => {
-          memoSnapshotRef.current = normalized;
-          setMemoSaved("자동 저장됨");
-        })
-        .catch((saveError) => {
-          setMemoError(saveError instanceof Error ? saveError.message : "메모 저장에 실패했습니다.");
-        });
-    }, GLOBAL_MEMO_AUTOSAVE_DELAY_MS);
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [globalMemoDraft, saveMemo]);
 
   async function handleCreateTask(input: TaskFormInput) {
     await createTask(input);
@@ -324,14 +295,14 @@ export function DashboardPage() {
     }
   }
 
-  async function handleSaveGlobalMemo() {
+  async function handleSaveGlobalMemo(content: string) {
     setMemoError("");
     try {
-      await saveMemo(GLOBAL_MEMO_KEY, globalMemoContent);
-      memoSnapshotRef.current = globalMemoContent.trim();
+      await saveMemo(GLOBAL_MEMO_KEY, content);
       setMemoSaved("저장 완료");
     } catch (saveError) {
       setMemoError(saveError instanceof Error ? saveError.message : "메모 저장에 실패했습니다.");
+      throw saveError;
     }
   }
 
@@ -343,11 +314,43 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-page">
-      <AiAssistantWorkspace compact showEndpointInfo={false} />
+      <MonthCalendar
+        selectedDate={selectedDate}
+        weekStartsOn={setting.weekStartsOn}
+        daySummaryByDate={daySummaryByDate}
+        onSelectDate={setSelectedDate}
+        onDropTaskToDate={handleDropTaskToDate}
+        onCreateTaskAtDate={openCreateTaskForDate}
+      />
+
+      <MarkdownMemo
+        content={globalMemoSource}
+        savedMessage={memoSaved}
+        errorMessage={memoError}
+        onEditStart={() => {
+          setMemoSaved("");
+          setMemoError("");
+        }}
+        onSave={handleSaveGlobalMemo}
+      />
+
+      <section className="panel ai-launch-panel">
+        <div>
+          <p className="eyebrow">AI COMMAND</p>
+          <h2>말로 일정 만들기</h2>
+          <p className="description-text">자연어로 요청하면 AI가 질문, 초안, 변경안 검토를 한 화면에서 정리합니다.</p>
+        </div>
+        <button type="button" className="btn btn-primary btn-hero" onClick={() => setIsAiOpen(true)}>
+          AI 일정 입력 열기
+        </button>
+      </section>
 
       <section className="panel briefing-panel">
         <header className="panel-header">
-          <h2>오늘/주간 브리핑</h2>
+          <div>
+            <p className="eyebrow">BRIEFING</p>
+            <h2>오늘/주간 브리핑</h2>
+          </div>
           <small>
             오늘 {briefing.todayCount}건 | 이번 주 {briefing.weekCount}건
           </small>
@@ -414,43 +417,7 @@ export function DashboardPage() {
         {dropError ? <p className="error-text">{dropError}</p> : null}
       </section>
 
-      <section className="panel global-memo-panel">
-        <header className="panel-header">
-          <h2>전체 메모</h2>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              void handleSaveGlobalMemo();
-            }}
-          >
-            메모 저장
-          </button>
-        </header>
-        <textarea
-          value={globalMemoContent}
-          onChange={(event) => {
-            setMemoSaved("");
-            setMemoError("");
-            setGlobalMemoDraft(event.target.value);
-          }}
-          rows={4}
-          placeholder="전체 일정 공유 메모를 작성하세요."
-        />
-        {memoSaved ? <p className="success-text">{memoSaved}</p> : null}
-        {memoError ? <p className="error-text">{memoError}</p> : null}
-      </section>
-
       <div className="dashboard-grid">
-        <MonthCalendar
-          selectedDate={selectedDate}
-          weekStartsOn={setting.weekStartsOn}
-          daySummaryByDate={daySummaryByDate}
-          onSelectDate={setSelectedDate}
-          onDropTaskToDate={handleDropTaskToDate}
-          onCreateTaskAtDate={openCreateTaskForDate}
-        />
-
         <section className="panel">
           <header className="panel-header">
             <h2>날짜별 일정</h2>
@@ -543,6 +510,42 @@ export function DashboardPage() {
           </div>
         </section>
       </div>
+
+      {isAiOpen ? (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setIsAiOpen(false);
+          }}
+        >
+          <section
+            className="modal-card panel ai-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI 일정 입력"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <header className="panel-header">
+              <div>
+                <p className="eyebrow">AI COMMAND</p>
+                <h2>AI 일정 입력</h2>
+              </div>
+              <button
+                type="button"
+                className="btn btn-soft"
+                onClick={() => {
+                  setIsAiOpen(false);
+                }}
+              >
+                닫기
+              </button>
+            </header>
+            <AiAssistantWorkspace compact showEndpointInfo={false} className="embedded" />
+          </section>
+        </div>
+      ) : null}
 
       {activeTaskModalState ? (
         <div

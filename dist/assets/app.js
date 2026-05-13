@@ -27744,7 +27744,7 @@ var require_jsx_runtime = __commonJS({
 });
 
 // src/main.tsx
-var import_react12 = __toESM(require_react(), 1);
+var import_react13 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // node_modules/react-router/dist/development/chunk-JZWAC4HX.mjs
@@ -31847,9 +31847,9 @@ function TaskForm({
 var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
 var NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
-  { to: "/tasks", label: "일정 관리" },
-  { to: "/projects", label: "프로젝트 관리" },
-  { to: "/archive", label: "지난 업무" },
+  { to: "/tasks", label: "일정" },
+  { to: "/projects", label: "프로젝트" },
+  { to: "/archive", label: "보관함" },
   { to: "/settings", label: "설정" }
 ];
 function AppShell() {
@@ -31861,9 +31861,9 @@ function AppShell() {
   const commandItems = (0, import_react4.useMemo)(
     () => [
       { id: "go-dashboard", label: "이동: 대시보드", keywords: "대시보드 홈 dashboard", run: () => navigate("/dashboard") },
-      { id: "go-tasks", label: "이동: 일정 관리", keywords: "일정 목록 tasks", run: () => navigate("/tasks") },
+      { id: "go-tasks", label: "이동: 일정", keywords: "일정 목록 tasks", run: () => navigate("/tasks") },
       { id: "go-projects", label: "이동: 프로젝트", keywords: "프로젝트 projects", run: () => navigate("/projects") },
-      { id: "go-archive", label: "이동: 지난 업무", keywords: "아카이브 archive", run: () => navigate("/archive") },
+      { id: "go-archive", label: "이동: 보관함", keywords: "보관함 archive", run: () => navigate("/archive") },
       { id: "go-settings", label: "이동: 설정", keywords: "설정 settings", run: () => navigate("/settings") },
       {
         id: "quick-add",
@@ -31932,13 +31932,17 @@ function AppShell() {
   }
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "app-shell", children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("a", { className: "skip-link", href: "#main-content", children: "본문으로 건너뛰기" }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("aside", { className: "sidebar", "aria-label": "기본 메뉴", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h1", { className: "brand", children: "업무 일정관리" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("nav", { className: "sidebar-nav", "aria-label": "페이지 이동", children: NAV_ITEMS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(NavLink, { to: item.to, className: ({ isActive }) => `nav-link ${isActive ? "active" : ""}`, children: item.label }, item.to)) })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "main-area", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("header", { className: "topbar", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "topbar-actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: "checkbox-inline", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: "app-top-nav", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "top-nav-brand", "aria-label": "AI Planner", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "brand-mark", children: "AP" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "eyebrow", children: "AI PLANNER" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h1", { children: "업무 일정관리" })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("nav", { className: "top-nav-list", "aria-label": "페이지 이동", children: NAV_ITEMS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(NavLink, { to: item.to, className: ({ isActive }) => `nav-link ${isActive ? "active" : ""}`, children: item.label }, item.to)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "top-nav-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: "checkbox-inline compact", children: [
           /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
             "input",
             {
@@ -31949,13 +31953,13 @@ function AppShell() {
               }
             }
           ),
-          "지난 완료 일정 보기"
+          "지난 완료 보기"
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
           "button",
           {
             type: "button",
-            className: "btn btn-soft",
+            className: "btn btn-outline",
             onClick: () => {
               void undoLastChange().catch(() => {
               });
@@ -31969,7 +31973,7 @@ function AppShell() {
           "button",
           {
             type: "button",
-            className: "btn btn-soft",
+            className: "btn btn-outline",
             onClick: () => {
               setIsCommandOpen(true);
             },
@@ -31986,12 +31990,12 @@ function AppShell() {
               setIsQuickAddOpen(true);
             },
             "aria-label": "빠른 일정 추가, 단축키 Ctrl+Shift+N",
-            children: "빠른 일정 추가"
+            children: "빠른 추가"
           }
         )
-      ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("main", { className: "page-content", id: "main-content", tabIndex: -1, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Outlet, {}) })
+      ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("main", { className: "page-content", id: "main-content", tabIndex: -1, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Outlet, {}) }),
     isCommandOpen ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
       "div",
       {
@@ -32011,7 +32015,10 @@ function AppShell() {
             },
             children: [
               /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: "panel-header", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "명령 팔레트" }),
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "eyebrow", children: "COMMAND" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "명령 팔레트" })
+                ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
                   "button",
                   {
@@ -32060,7 +32067,10 @@ function AppShell() {
             },
             children: [
               /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: "panel-header", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "빠른 일정 추가" }),
+                /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "eyebrow", children: "QUICK ADD" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "빠른 일정 추가" })
+                ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
                   "button",
                   {
@@ -32093,162 +32103,7 @@ function AppShell() {
 
 // src/pages/ArchivePage.tsx
 var import_react5 = __toESM(require_react(), 1);
-
-// src/components/TaskItem.tsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
-function TaskItem({
-  task,
-  project,
-  taskType,
-  timeFormat,
-  selected,
-  hasConflict,
-  onClick,
-  onStatusChange,
-  draggableTask = false,
-  onDragTaskStateChange,
-  selectable = false,
-  selectedForBulk = false,
-  onToggleSelect
-}) {
-  const navigate = useNavigate();
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
-    "article",
-    {
-      className: `task-item ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${hasConflict ? "conflict" : ""} ${draggableTask ? "draggable" : ""}`,
-      style: { borderLeftColor: project?.color ?? "#94a3b8" },
-      onClick,
-      draggable: draggableTask,
-      onDragStart: (event) => {
-        if (!draggableTask) {
-          return;
-        }
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("application/x-task-id", task.id);
-        event.dataTransfer.setData("text/plain", task.id);
-        onDragTaskStateChange?.(task.id);
-      },
-      onDragEnd: () => {
-        if (!draggableTask) {
-          return;
-        }
-        onDragTaskStateChange?.(null);
-      },
-      role: onClick ? "button" : void 0,
-      tabIndex: onClick ? 0 : void 0,
-      "aria-label": `${task.title} 일정 카드`,
-      onKeyDown: (event) => {
-        if (onClick && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          onClick();
-        }
-      },
-      children: [
-        selectable ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "task-select-row", onClick: (event) => event.stopPropagation(), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-            "input",
-            {
-              type: "checkbox",
-              checked: selectedForBulk,
-              onChange: (event) => {
-                onToggleSelect?.(event.target.checked);
-              },
-              "aria-label": `${task.title} 선택`
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "일괄 작업에 포함" })
-        ] }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("header", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { children: task.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "badge-row", children: [
-            hasConflict ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "conflict-badge", children: "시간 충돌" }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: `status-badge ${task.status.toLowerCase()}`, children: STATUS_LABELS[task.status] })
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { className: "task-time", children: [
-          formatDateTime(task.startAt, timeFormat),
-          task.endAt ? ` - ${formatDateTime(task.endAt, timeFormat)}` : ""
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "tag-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-            "button",
-            {
-              type: "button",
-              className: "tag project-tag project-tag-button",
-              style: { backgroundColor: `${project?.color ?? "#334155"}22`, color: project?.color ?? "#334155" },
-              onClick: (event) => {
-                event.stopPropagation();
-                if (project?.id) {
-                  navigate(`/projects?projectId=${encodeURIComponent(project.id)}`);
-                } else {
-                  navigate("/projects");
-                }
-              },
-              children: project?.name ?? "프로젝트 없음"
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-            "span",
-            {
-              className: "tag type-tag",
-              style: { backgroundColor: `${taskType?.color ?? "#64748b"}22`, color: taskType?.color ?? "#64748b" },
-              children: taskType?.name ?? "종류 없음"
-            }
-          ),
-          task.isMajor ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "tag major-tag", children: "중요" }) : null
-        ] }),
-        task.content ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "task-content", children: task.content }) : null,
-        onStatusChange ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "button-row compact", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-            "button",
-            {
-              type: "button",
-              className: `btn btn-soft ${task.status === "NOT_DONE" ? "is-active" : ""}`,
-              onClick: (event) => {
-                event.stopPropagation();
-                onStatusChange("NOT_DONE");
-              },
-              "aria-pressed": task.status === "NOT_DONE",
-              "aria-label": "상태를 미완료로 변경",
-              children: STATUS_LABELS.NOT_DONE
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-            "button",
-            {
-              type: "button",
-              className: `btn btn-soft ${task.status === "ON_HOLD" ? "is-active" : ""}`,
-              onClick: (event) => {
-                event.stopPropagation();
-                onStatusChange("ON_HOLD");
-              },
-              "aria-pressed": task.status === "ON_HOLD",
-              "aria-label": "상태를 보류로 변경",
-              children: STATUS_LABELS.ON_HOLD
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-            "button",
-            {
-              type: "button",
-              className: `btn btn-soft ${task.status === "DONE" ? "is-active" : ""}`,
-              onClick: (event) => {
-                event.stopPropagation();
-                onStatusChange("DONE");
-              },
-              "aria-pressed": task.status === "DONE",
-              "aria-label": "상태를 완료로 변경",
-              children: STATUS_LABELS.DONE
-            }
-          )
-        ] }) : null
-      ]
-    }
-  );
-}
-
-// src/pages/ArchivePage.tsx
-var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
 function toTaskInput(task) {
   return {
     title: task.title,
@@ -32261,9 +32116,30 @@ function toTaskInput(task) {
     isMajor: task.isMajor
   };
 }
+function formatMonthLabel(value) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long"
+  }).format(/* @__PURE__ */ new Date(`${value}-01T00:00:00`));
+}
+function groupByMonth(tasks) {
+  const map = /* @__PURE__ */ new Map();
+  for (const task of tasks) {
+    const key = getDateKey(task.startAt).slice(0, 7);
+    map.set(key, [...map.get(key) ?? [], task]);
+  }
+  return [...map.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([monthKey, items]) => ({
+    monthKey,
+    title: formatMonthLabel(monthKey),
+    tasks: items.sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime())
+  }));
+}
 function ArchivePage() {
   const { tasks, projects, taskTypes, setting, updateTask } = useAppData();
   const [currentTime, setCurrentTime] = (0, import_react5.useState)(() => Date.now());
+  const [showFilters, setShowFilters] = (0, import_react5.useState)(false);
+  const [selectedTaskIds, setSelectedTaskIds] = (0, import_react5.useState)([]);
+  const [message, setMessage] = (0, import_react5.useState)("");
   const [filters, setFilters] = (0, import_react5.useState)({
     keyword: "",
     projectId: "",
@@ -32286,7 +32162,9 @@ function ArchivePage() {
     return tasks.filter((task) => task.status === "DONE" && new Date(task.startAt).getTime() < currentTime).filter((task) => {
       if (filters.keyword.trim()) {
         const term = filters.keyword.trim().toLowerCase();
-        if (!`${task.title} ${task.content}`.toLowerCase().includes(term)) {
+        const projectName = projectMap[task.projectId]?.name ?? "";
+        const typeName = typeMap[task.taskTypeId]?.name ?? "";
+        if (!`${task.title} ${task.content} ${projectName} ${typeName}`.toLowerCase().includes(term)) {
           return false;
         }
       }
@@ -32315,72 +32193,102 @@ function ArchivePage() {
       }
       return new Date(b.startAt).getTime() - new Date(a.startAt).getTime();
     });
-  }, [tasks, filters, currentTime]);
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "panel", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("header", { className: "panel-header", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "지난 업무" }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("small", { children: [
-        archivedTasks.length,
-        "개"
+  }, [currentTime, filters, projectMap, tasks, typeMap]);
+  const selectedTaskSet = (0, import_react5.useMemo)(() => new Set(selectedTaskIds), [selectedTaskIds]);
+  const selectedTasks = (0, import_react5.useMemo)(() => archivedTasks.filter((task) => selectedTaskSet.has(task.id)), [archivedTasks, selectedTaskSet]);
+  const groupedTasks = (0, import_react5.useMemo)(() => groupByMonth(archivedTasks), [archivedTasks]);
+  function resetFilters() {
+    setFilters({
+      keyword: "",
+      projectId: "",
+      taskTypeId: "",
+      fromDate: "",
+      toDate: "",
+      majorOnly: false
+    });
+    setSelectedTaskIds([]);
+  }
+  function toggleTaskSelection(taskId, checked) {
+    setSelectedTaskIds((prev) => {
+      if (checked) {
+        return prev.includes(taskId) ? prev : [...prev, taskId];
+      }
+      return prev.filter((id) => id !== taskId);
+    });
+  }
+  async function restoreTask(task) {
+    await updateTask(task.id, {
+      ...toTaskInput(task),
+      status: "NOT_DONE"
+    });
+    setSelectedTaskIds((prev) => prev.filter((id) => id !== task.id));
+    setMessage(`"${task.title}" 일정을 복원했습니다.`);
+  }
+  async function restoreSelectedTasks() {
+    if (selectedTasks.length === 0) {
+      return;
+    }
+    for (const task of selectedTasks) {
+      await updateTask(task.id, {
+        ...toTaskInput(task),
+        status: "NOT_DONE"
+      });
+    }
+    setMessage(`선택한 일정 ${selectedTasks.length}개를 복원했습니다.`);
+    setSelectedTaskIds([]);
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "archive-workspace", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("header", { className: "archive-hero", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "eyebrow", children: "ARCHIVE" }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "보관함" }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "description-text", children: "완료되었고 예정 시간이 지난 일정을 검색하고 복원할 수 있습니다." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "overview-stat-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { children: [
+          "보관 ",
+          archivedTasks.length
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { children: [
+          "선택 ",
+          selectedTasks.length
+        ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "archive-filter-grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "archive-search-bar", "aria-label": "보관함 검색", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "search-field", children: [
         "검색",
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
           "input",
           {
             type: "text",
             value: filters.keyword,
             onChange: (event) => setFilters((prev) => ({ ...prev, keyword: event.target.value })),
-            placeholder: "제목 또는 내용으로 검색"
+            placeholder: "제목, 내용, 프로젝트, 종류 검색"
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { children: [
-        "프로젝트",
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
-          "select",
-          {
-            value: filters.projectId,
-            onChange: (event) => setFilters((prev) => ({ ...prev, projectId: event.target.value })),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "", children: "전체" }),
-              projects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: project.id, children: project.name }, project.id))
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { children: [
-        "종류",
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
-          "select",
-          {
-            value: filters.taskTypeId,
-            onChange: (event) => setFilters((prev) => ({ ...prev, taskTypeId: event.target.value })),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: "", children: "전체" }),
-              taskTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("option", { value: type.id, children: type.name }, type.id))
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: "checkbox-inline", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-          "input",
-          {
-            type: "checkbox",
-            checked: filters.majorOnly,
-            onChange: (event) => setFilters((prev) => ({ ...prev, majorOnly: event.target.checked }))
-          }
-        ),
-        "주요 일정만"
-      ] })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setShowFilters((prev) => !prev), children: "필터" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => void restoreSelectedTasks(), disabled: selectedTasks.length === 0, children: "선택 복원" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "form-grid two-col", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { children: [
+    showFilters ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "archive-filter-panel", "aria-label": "상세 필터", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { children: [
+        "프로젝트",
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("select", { value: filters.projectId, onChange: (event) => setFilters((prev) => ({ ...prev, projectId: event.target.value })), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: "", children: "전체" }),
+          projects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: project.id, children: project.name }, project.id))
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { children: [
+        "종류",
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("select", { value: filters.taskTypeId, onChange: (event) => setFilters((prev) => ({ ...prev, taskTypeId: event.target.value })), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: "", children: "전체" }),
+          taskTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: type.id, children: type.name }, type.id))
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { children: [
         "시작일",
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
           "input",
           {
             type: "date",
@@ -32389,9 +32297,9 @@ function ArchivePage() {
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { children: [
         "종료일",
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
           "input",
           {
             type: "date",
@@ -32399,49 +32307,68 @@ function ArchivePage() {
             onChange: (event) => setFilters((prev) => ({ ...prev, toDate: event.target.value }))
           }
         )
-      ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "button-row", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-      "button",
-      {
-        type: "button",
-        className: "btn btn-soft",
-        onClick: () => setFilters({
-          keyword: "",
-          projectId: "",
-          taskTypeId: "",
-          fromDate: "",
-          toDate: "",
-          majorOnly: false
-        }),
-        children: "필터 초기화"
-      }
-    ) }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "description-text", children: "이 페이지는 완료 상태이면서 예정 시간이 지난 일정을 보여줍니다. 상태를 변경하면 다시 복원할 수 있습니다." }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "task-stack", children: [
-      archivedTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "empty-text", children: "지난 업무가 없습니다." }) : null,
-      archivedTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-        TaskItem,
-        {
-          task,
-          project: projectMap[task.projectId],
-          taskType: typeMap[task.taskTypeId],
-          timeFormat: setting.timeFormat,
-          onStatusChange: (status) => {
-            void updateTask(task.id, {
-              ...toTaskInput(task),
-              status
-            });
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "checkbox-inline", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: filters.majorOnly,
+            onChange: (event) => setFilters((prev) => ({ ...prev, majorOnly: event.target.checked }))
           }
-        },
-        task.id
-      ))
+        ),
+        "주요 일정만"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", className: "btn btn-soft", onClick: resetFilters, children: "필터 초기화" })
+    ] }) : null,
+    message ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "success-text", children: message }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "archive-list", "aria-label": "보관된 일정", children: [
+      groupedTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "empty-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: "보관된 일정이 없습니다." }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: "완료 상태이면서 예정 시간이 지난 일정이 이곳에 표시됩니다." })
+      ] }) : null,
+      groupedTasks.map((group) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "archive-month-group", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("header", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: group.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { children: [
+            group.tasks.length,
+            "개"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "archive-card-list", children: group.tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("article", { className: "archive-task-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("label", { className: "archive-select", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: selectedTaskSet.has(task.id),
+              onChange: (event) => toggleTaskSelection(task.id, event.target.checked),
+              "aria-label": `${task.title} 선택`
+            }
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "archive-task-main", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: task.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { children: [
+              formatDateTime(task.startAt, setting.timeFormat),
+              " / ",
+              projectMap[task.projectId]?.name ?? "프로젝트 없음",
+              " /",
+              " ",
+              typeMap[task.taskTypeId]?.name ?? "종류 없음"
+            ] }),
+            task.content ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: task.content }) : null
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "archive-task-actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "status-badge done", children: STATUS_LABELS.DONE }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => void restoreTask(task), children: "복원" })
+          ] })
+        ] }, task.id)) })
+      ] }, group.monthKey))
     ] })
   ] });
 }
 
 // src/pages/DashboardPage.tsx
-var import_react8 = __toESM(require_react(), 1);
+var import_react9 = __toESM(require_react(), 1);
 
 // src/components/AiAssistantWorkspace.tsx
 var import_react6 = __toESM(require_react(), 1);
@@ -33200,7 +33127,17 @@ async function runScheduleAgent(input) {
 }
 
 // src/components/AiAssistantWorkspace.tsx
-var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
+var FIELD_LABELS = {
+  title: "제목",
+  content: "내용",
+  taskTypeId: "종류",
+  projectId: "프로젝트",
+  status: "상태",
+  startAt: "시작",
+  endAt: "종료",
+  isMajor: "중요"
+};
 function isTaskStatus2(value) {
   return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
 }
@@ -33269,16 +33206,35 @@ async function probeEndpoint(apiKey, model) {
     window.clearTimeout(timeout);
   }
 }
-function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
+function describeChangeValue(key, value, timeFormat) {
+  if (value === null || value === void 0 || value === "") {
+    return "비움";
+  }
+  if ((key === "startAt" || key === "endAt") && typeof value === "string" && isValidIsoDate(value)) {
+    return formatDateTime(value, timeFormat);
+  }
+  if (typeof value === "boolean") {
+    return value ? "예" : "아니오";
+  }
+  return String(value);
+}
+function AiAssistantWorkspace({
+  compact = false,
+  showEndpointInfo = true,
+  directApply = false,
+  title = "AI 일정 입력",
+  subtitle = "요청, AI 질문, 초안 검토를 한 공간에서 처리합니다.",
+  placeholder = "예: 내일 오전 10시에 보고서 제출 일정 추가해줘. 프로젝트는 일반, 종류는 제출.",
+  className = "",
+  onApplied
+}) {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
-  const [conversation, setConversation] = (0, import_react6.useState)([
-    {
-      role: "assistant",
-      content: "일정 관련 요청을 자연어로 입력해 주세요. 필요한 조회를 수행한 뒤 반영 전에 최종 확인용 변경안을 먼저 보여드립니다."
-    }
-  ]);
   const [draft, setDraft] = (0, import_react6.useState)("");
   const [lastUserMessage, setLastUserMessage] = (0, import_react6.useState)("");
+  const [lastAssistantMessage, setLastAssistantMessage] = (0, import_react6.useState)(
+    "일정 요청을 입력하면 AI가 필요한 질문과 초안/변경안을 압축해서 보여드립니다."
+  );
+  const [lastQuestion, setLastQuestion] = (0, import_react6.useState)("");
   const [pendingProposal, setPendingProposal] = (0, import_react6.useState)(void 0);
   const [selectedOperationIndexes, setSelectedOperationIndexes] = (0, import_react6.useState)([]);
   const [isLoading, setIsLoading] = (0, import_react6.useState)(false);
@@ -33291,6 +33247,16 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
   const projectMap = (0, import_react6.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const taskTypeMap = (0, import_react6.useMemo)(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = (0, import_react6.useMemo)(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
+  const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
+  const conversationContext = (0, import_react6.useMemo)(() => {
+    if (!lastUserMessage || !lastAssistantMessage) {
+      return [];
+    }
+    return [
+      { role: "user", content: lastUserMessage },
+      { role: "assistant", content: lastAssistantMessage }
+    ];
+  }, [lastAssistantMessage, lastUserMessage]);
   (0, import_react6.useEffect)(() => {
     if (!pendingProposal) {
       setSelectedOperationIndexes([]);
@@ -33324,42 +33290,35 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
     if (!userMessage || isLoading) {
       return;
     }
-    const history = conversation.slice(-10);
     setError("");
     setApplyResult("");
+    setLastQuestion("");
+    setPendingProposal(void 0);
     if (!messageOverride) {
       setDraft("");
     }
-    setLastUserMessage(userMessage);
-    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
     try {
       const result = await runScheduleAgent({
         userMessage,
-        conversation: history,
+        conversation: conversationContext,
         tasks,
         projects,
         taskTypes,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel
       });
-      const assistantText = result.needsUserInput && result.question ? `${result.assistantMessage}
-
-질문: ${result.question}` : result.assistantMessage;
-      setConversation((prev) => [...prev, { role: "assistant", content: assistantText }]);
+      setLastUserMessage(userMessage);
+      setLastAssistantMessage(result.assistantMessage);
+      setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
       const message = toFriendlyError(runError);
       setError(message);
-      setConversation((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `요청 처리에 실패했습니다: ${message}`
-        }
-      ]);
+      setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
+      setLastQuestion("");
       setEndpointStatus("error");
       setEndpointStatusMessage(message);
     } finally {
@@ -33374,10 +33333,10 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
       throw new Error(`종류를 찾을 수 없습니다: ${operation.taskTypeId}`);
     }
     if (!isValidIsoDate(operation.startAt)) {
-      throw new Error("시작 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+      throw new Error("시작 시간이 올바른 날짜 형식이 아닙니다.");
     }
     if (operation.endAt && !isValidIsoDate(operation.endAt)) {
-      throw new Error("종료 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+      throw new Error("종료 시간이 올바른 날짜 형식이 아닙니다.");
     }
     if (operation.endAt && new Date(operation.endAt).getTime() < new Date(operation.startAt).getTime()) {
       throw new Error("종료 시간이 시작 시간보다 빠릅니다.");
@@ -33423,7 +33382,7 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
     }
     if (typeof changes.startAt === "string") {
       if (!isValidIsoDate(changes.startAt)) {
-        throw new Error("시작 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+        throw new Error("시작 시간이 올바른 날짜 형식이 아닙니다.");
       }
       nextInput.startAt = changes.startAt;
     }
@@ -33432,7 +33391,7 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
         throw new Error("종료 시간 형식이 올바르지 않습니다.");
       }
       if (typeof changes.endAt === "string" && !isValidIsoDate(changes.endAt)) {
-        throw new Error("종료 시간이 올바른 ISO 날짜 형식이 아닙니다.");
+        throw new Error("종료 시간이 올바른 날짜 형식이 아닙니다.");
       }
       nextInput.endAt = changes.endAt ?? void 0;
     }
@@ -33449,6 +33408,17 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
       throw new Error(`삭제할 일정을 찾을 수 없습니다: ${operation.taskId}`);
     }
     await removeTask(operation.taskId);
+  }
+  async function applyOperation(operation) {
+    if (operation.action === "create_task") {
+      await applyCreateOperation(operation);
+      return;
+    }
+    if (operation.action === "update_task") {
+      await applyUpdateOperation(operation);
+      return;
+    }
+    await applyDeleteOperation(operation);
   }
   async function handleApplyProposal() {
     if (!pendingProposal || isApplying) {
@@ -33470,13 +33440,7 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
         continue;
       }
       try {
-        if (operation.action === "create_task") {
-          await applyCreateOperation(operation);
-        } else if (operation.action === "update_task") {
-          await applyUpdateOperation(operation);
-        } else {
-          await applyDeleteOperation(operation);
-        }
+        await applyOperation(operation);
         successLogs.push(formatOperationLabel(operation));
       } catch (applyError) {
         const message = applyError instanceof Error ? applyError.message : "반영 실패";
@@ -33490,12 +33454,13 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
     ].filter(Boolean);
     const resultText = resultTextParts.length > 0 ? resultTextParts.join(", ") : "반영 결과가 없습니다.";
     setApplyResult(resultText);
-    const assistantLog = [
-      `변경안 반영 결과: ${resultText}`,
-      successLogs.length > 0 ? `성공 목록: ${successLogs.join(", ")}` : "",
-      failedLogs.length > 0 ? `실패 목록: ${failedLogs.join(", ")}` : ""
-    ].filter(Boolean).join("\n");
-    setConversation((prev) => [...prev, { role: "assistant", content: assistantLog }]);
+    setLastAssistantMessage(
+      [
+        `변경안 반영 결과: ${resultText}`,
+        successLogs.length > 0 ? `성공 목록: ${successLogs.join(", ")}` : "",
+        failedLogs.length > 0 ? `실패 목록: ${failedLogs.join(", ")}` : ""
+      ].filter(Boolean).join("\n")
+    );
     const remainingOperations = pendingProposal.operations.filter((_, index) => {
       if (!selectedOperationSet.has(index)) {
         return true;
@@ -33515,217 +33480,378 @@ function AiAssistantWorkspace({ compact = false, showEndpointInfo = true }) {
       setSelectedOperationIndexes(nextProposal.operations.map((_, index) => index));
     }
     setIsApplying(false);
+    onApplied?.();
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: `ai-layout ${compact ? "compact" : ""}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "panel ai-chat-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("header", { className: "panel-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "AI 일정 도우미" }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { children: "대화형 일정 추가/수정/삭제" })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("p", { className: `endpoint-status ${endpointStatus}`, children: [
-        "연결 상태: ",
-        endpointStatus === "ok" ? "정상" : endpointStatus === "checking" ? "확인 중" : "오류"
-      ] }),
-      showEndpointInfo ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("p", { className: "description-text", children: [
-          "고정 Endpoint: ",
-          LLM_CHAT_COMPLETIONS_URL
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("p", { className: "description-text", children: [
-          "사용 모델: ",
-          setting.llmModel ?? "(미설정)",
-          " / API Key: ",
-          setting.llmApiKey ? "설정됨" : "미설정"
+  function renderOperation(operation, index) {
+    const isSelected = selectedOperationSet.has(index);
+    const toggleSelection = (checked) => {
+      setSelectedOperationIndexes((prev) => {
+        if (checked) {
+          return [...prev, index].sort((a, b) => a - b);
+        }
+        return prev.filter((item) => item !== index);
+      });
+    };
+    if (operation.action === "create_task") {
+      const projectName = projectMap[operation.projectId]?.name ?? operation.projectId;
+      const taskTypeName = taskTypeMap[operation.taskTypeId]?.name ?? operation.taskTypeId;
+      return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("li", { className: "proposal-card", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: "proposal-item-toggle", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { type: "checkbox", checked: isSelected, onChange: (event) => toggleSelection(event.target.checked) }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("strong", { children: [
+            "[추가] ",
+            operation.title
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("small", { children: [
+            formatDateTime(operation.startAt, setting.timeFormat),
+            operation.endAt ? ` ~ ${formatDateTime(operation.endAt, setting.timeFormat)}` : "",
+            ` / ${projectName} / ${taskTypeName}`
+          ] })
         ] })
-      ] }) : null,
-      endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "ai-chat-log", "aria-live": "polite", children: conversation.map((message, index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("article", { className: `ai-chat-item ${message.role}`, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: message.role === "user" ? "나" : "AI" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: message.content })
-      ] }, `${message.role}-${index}`)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "ai-composer", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("label", { children: [
-          "요청 입력",
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-            "textarea",
-            {
-              value: draft,
-              onChange: (event) => setDraft(event.target.value),
-              rows: 4,
-              placeholder: "예: 내일 오전 10시에 보고서 제출 일정 추가해줘. 프로젝트는 마케팅, 종류는 제출."
-            }
-          )
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "button-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "btn btn-primary", type: "button", disabled: isLoading, onClick: () => void handleSend(), children: isLoading ? "분석 중..." : "AI에게 요청" }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-            "button",
-            {
-              className: "btn btn-soft",
-              type: "button",
-              disabled: isLoading || !lastUserMessage,
-              onClick: () => {
-                void handleSend(lastUserMessage);
-              },
-              children: "마지막 요청 재시도"
-            }
-          )
+      ] }) }, `proposal-${index}`);
+    }
+    if (operation.action === "update_task") {
+      const taskTitle2 = taskMap[operation.taskId]?.title ?? operation.taskId;
+      const changeText = Object.entries(operation.changes).map(([key, value]) => `${FIELD_LABELS[key] ?? key}: ${describeChangeValue(key, value, setting.timeFormat)}`).join(" · ");
+      return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("li", { className: "proposal-card", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: "proposal-item-toggle", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { type: "checkbox", checked: isSelected, onChange: (event) => toggleSelection(event.target.checked) }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("strong", { children: [
+            "[수정] ",
+            taskTitle2
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("small", { children: changeText || "변경 필드 없음" })
         ] })
+      ] }) }, `proposal-${index}`);
+    }
+    const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
+    return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("li", { className: "proposal-card", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: "proposal-item-toggle", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { type: "checkbox", checked: isSelected, onChange: (event) => toggleSelection(event.target.checked) }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("strong", { children: [
+          "[삭제] ",
+          taskTitle
+        ] }),
+        operation.reason ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("small", { children: operation.reason }) : null
+      ] })
+    ] }) }, `proposal-${index}`);
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("header", { className: "panel-header ai-command-header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "eyebrow", children: "AI COMMAND" }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: title }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("small", { children: subtitle })
       ] }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "error-text", children: error }) : null
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: `endpoint-status ${endpointStatus}`, title: endpointStatusMessage, children: endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "panel ai-proposal-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "최종 확인" }) }),
-      !pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "empty-text", children: "아직 반영 대기 중인 변경안이 없습니다." }) : null,
-      pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "proposal-block", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "description-text", children: pendingProposal.summary }),
-        pendingProposal.operations.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "empty-text", children: "AI가 초안 요약만 반환했고 실제 일정 항목은 포함하지 않았습니다. 응답 형식을 확인해 주세요." }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "button-row", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+    showEndpointInfo ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "ai-endpoint-block", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "description-text", children: [
+        "Endpoint: ",
+        LLM_CHAT_COMPLETIONS_URL
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "description-text", children: [
+        "모델: ",
+        setting.llmModel ?? "(미설정)",
+        " / API Key: ",
+        setting.llmApiKey ? "설정됨" : "미설정"
+      ] })
+    ] }) : null,
+    endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "ai-request-grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: "ai-input-label", children: [
+        "요청 입력",
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("textarea", { value: draft, onChange: (event) => setDraft(event.target.value), rows: compact ? 4 : 5, placeholder })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "ai-action-stack", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { className: "btn btn-primary btn-large", type: "button", disabled: isLoading || !draft.trim(), onClick: () => void handleSend(), children: isLoading ? "분석 중" : "초안 만들기" }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          "button",
+          {
+            className: "btn btn-outline",
+            type: "button",
+            disabled: isLoading || !lastUserMessage,
+            onClick: () => {
+              void handleSend(lastUserMessage);
+            },
+            children: "마지막 요청 재시도"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "ai-result-card", "aria-live": "polite", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "ai-response-block", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "badge-pill", children: "AI 답변" }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { children: lastAssistantMessage })
+      ] }),
+      lastQuestion ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "ai-question-block", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "badge-pill danger", children: "질문" }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { children: lastQuestion })
+      ] }) : null,
+      pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "proposal-block compact-review", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "proposal-summary-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "badge-pill", children: "변경안" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "description-text", children: pendingProposal.summary })
+          ] }),
+          hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "button-row compact", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
               "button",
               {
                 className: "btn btn-soft",
                 type: "button",
-                onClick: () => {
-                  setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index));
-                },
+                onClick: () => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index)),
                 children: "전체 선택"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-              "button",
-              {
-                className: "btn btn-soft",
-                type: "button",
-                onClick: () => {
-                  setSelectedOperationIndexes([]);
-                },
-                children: "선택 해제"
-              }
-            )
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { className: "proposal-list", children: pendingProposal.operations.map((operation, index) => {
-            const isSelected = selectedOperationSet.has(index);
-            if (operation.action === "create_task") {
-              const projectName = projectMap[operation.projectId]?.name ?? operation.projectId;
-              const taskTypeName = taskTypeMap[operation.taskTypeId]?.name ?? operation.taskTypeId;
-              return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("label", { className: "proposal-item-toggle", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-                  "input",
-                  {
-                    type: "checkbox",
-                    checked: isSelected,
-                    onChange: (event) => {
-                      setSelectedOperationIndexes((prev) => {
-                        if (event.target.checked) {
-                          return [...prev, index].sort((a, b) => a - b);
-                        }
-                        return prev.filter((item) => item !== index);
-                      });
-                    }
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "[추가]" }),
-                  " ",
-                  operation.title,
-                  /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("br", {}),
-                  /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("small", { children: [
-                    formatDateTime(operation.startAt, setting.timeFormat),
-                    operation.endAt ? ` ~ ${formatDateTime(operation.endAt, setting.timeFormat)}` : "",
-                    ` / 프로젝트: ${projectName} / 종류: ${taskTypeName}`
-                  ] })
-                ] })
-              ] }) }, `proposal-${index}`);
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { className: "btn btn-soft", type: "button", onClick: () => setSelectedOperationIndexes([]), children: "해제" })
+          ] }) : null
+        ] }),
+        hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("ul", { className: "proposal-list compact-list", children: pendingProposal.operations.map(renderOperation) }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "empty-text", children: "AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요." }),
+        hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "button-row proposal-actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            "button",
+            {
+              className: "btn btn-primary",
+              type: "button",
+              disabled: isApplying || selectedOperationIndexes.length === 0,
+              onClick: () => void handleApplyProposal(),
+              children: isApplying ? "등록 중" : directApply ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})` : `선택 항목 반영 (${selectedOperationIndexes.length})`
             }
-            if (operation.action === "update_task") {
-              const taskTitle2 = taskMap[operation.taskId]?.title ?? operation.taskId;
-              return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("label", { className: "proposal-item-toggle", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-                  "input",
-                  {
-                    type: "checkbox",
-                    checked: isSelected,
-                    onChange: (event) => {
-                      setSelectedOperationIndexes((prev) => {
-                        if (event.target.checked) {
-                          return [...prev, index].sort((a, b) => a - b);
-                        }
-                        return prev.filter((item) => item !== index);
-                      });
-                    }
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "[수정]" }),
-                  " ",
-                  taskTitle2,
-                  /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("br", {}),
-                  /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("small", { children: [
-                    "변경 필드: ",
-                    Object.keys(operation.changes).join(", ")
-                  ] })
-                ] })
-              ] }) }, `proposal-${index}`);
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            "button",
+            {
+              className: "btn btn-outline",
+              type: "button",
+              onClick: () => {
+                setPendingProposal(void 0);
+                setSelectedOperationIndexes([]);
+              },
+              children: "변경안 취소"
             }
-            const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
-            return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("label", { className: "proposal-item-toggle", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-                "input",
-                {
-                  type: "checkbox",
-                  checked: isSelected,
-                  onChange: (event) => {
-                    setSelectedOperationIndexes((prev) => {
-                      if (event.target.checked) {
-                        return [...prev, index].sort((a, b) => a - b);
-                      }
-                      return prev.filter((item) => item !== index);
-                    });
-                  }
-                }
-              ),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "[삭제]" }),
-                " ",
-                taskTitle
-              ] })
-            ] }) }, `proposal-${index}`);
-          }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "button-row", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-              "button",
-              {
-                className: "btn btn-primary",
-                type: "button",
-                disabled: isApplying || selectedOperationIndexes.length === 0,
-                onClick: () => void handleApplyProposal(),
-                children: isApplying ? "반영 중..." : `선택 항목 반영 (${selectedOperationIndexes.length})`
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-              "button",
-              {
-                className: "btn btn-soft",
-                type: "button",
-                onClick: () => {
-                  setPendingProposal(void 0);
-                  setSelectedOperationIndexes([]);
-                },
-                children: "변경안 취소"
-              }
-            )
-          ] })
-        ] })
-      ] }) : null,
-      applyResult ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "success-text", children: applyResult }) : null
+          )
+        ] }) : null
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "empty-text", children: "대기 중인 초안/변경안이 없습니다." }),
+      applyResult ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "success-text", children: applyResult }) : null,
+      error ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "error-text", children: error }) : null
     ] })
   ] });
 }
 
-// src/components/MonthCalendar.tsx
+// src/components/MarkdownMemo.tsx
 var import_react7 = __toESM(require_react(), 1);
+
+// src/components/MarkdownRenderer.tsx
+var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
+function isSafeUrl(url) {
+  return /^(https?:|mailto:)/i.test(url);
+}
+function renderInline(text, keyPrefix) {
+  const nodes = [];
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      nodes.push(text.slice(cursor, match.index));
+    }
+    const token = match[0];
+    const key = `${keyPrefix}-${match.index}`;
+    if (token.startsWith("`")) {
+      nodes.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("code", { children: token.slice(1, -1) }, key));
+    } else if (token.startsWith("**")) {
+      nodes.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: token.slice(2, -2) }, key));
+    } else if (token.startsWith("*")) {
+      nodes.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("em", { children: token.slice(1, -1) }, key));
+    } else {
+      const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      const label = linkMatch?.[1] ?? token;
+      const href = linkMatch?.[2] ?? "";
+      nodes.push(
+        isSafeUrl(href) ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("a", { href, target: "_blank", rel: "noreferrer", children: label }, key) : label
+      );
+    }
+    cursor = match.index + token.length;
+  }
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor));
+  }
+  return nodes;
+}
+function MarkdownRenderer({ content, emptyText = "작성된 메모가 없습니다." }) {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const elements = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+    if (trimmed.startsWith("```")) {
+      const codeLines = [];
+      index += 1;
+      while (index < lines.length && !(lines[index] ?? "").trim().startsWith("```")) {
+        codeLines.push(lines[index] ?? "");
+        index += 1;
+      }
+      index += 1;
+      elements.push(
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("code", { children: codeLines.join("\n") }) }, `code-${index}`)
+      );
+      continue;
+    }
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const body = renderInline(headingMatch[2], `heading-${index}`);
+      if (level === 1) {
+        elements.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h1", { children: body }, `heading-${index}`));
+      } else if (level === 2) {
+        elements.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: body }, `heading-${index}`));
+      } else {
+        elements.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h3", { children: body }, `heading-${index}`));
+      }
+      index += 1;
+      continue;
+    }
+    if (/^-\s+\[[ xX]\]\s+/.test(trimmed)) {
+      const items = [];
+      while (index < lines.length) {
+        const candidate = (lines[index] ?? "").trim();
+        const match = candidate.match(/^-\s+\[([ xX])\]\s+(.+)$/);
+        if (!match) {
+          break;
+        }
+        const checked = match[1].toLowerCase() === "x";
+        items.push(
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("li", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("input", { type: "checkbox", checked, readOnly: true }),
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: renderInline(match[2], `check-${index}`) })
+          ] }, `check-${index}`)
+        );
+        index += 1;
+      }
+      elements.push(
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { className: "markdown-checklist", children: items }, `check-list-${index}`)
+      );
+      continue;
+    }
+    if (trimmed.startsWith("- ")) {
+      const items = [];
+      while (index < lines.length) {
+        const candidate = (lines[index] ?? "").trim();
+        if (!candidate.startsWith("- ")) {
+          break;
+        }
+        items.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: renderInline(candidate.slice(2), `list-${index}`) }, `list-${index}`));
+        index += 1;
+      }
+      elements.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { children: items }, `list-${index}`));
+      continue;
+    }
+    elements.push(/* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: renderInline(trimmed, `paragraph-${index}`) }, `paragraph-${index}`));
+    index += 1;
+  }
+  if (elements.length === 0) {
+    return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "empty-text", children: emptyText });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "markdown-renderer", children: elements });
+}
+
+// src/components/MarkdownMemo.tsx
 var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
+function MarkdownMemo({ content, savedMessage, errorMessage, onSave, onEditStart }) {
+  const [isEditing, setIsEditing] = (0, import_react7.useState)(false);
+  const [isPreviewing, setIsPreviewing] = (0, import_react7.useState)(false);
+  const [isSaving, setIsSaving] = (0, import_react7.useState)(false);
+  const [draft, setDraft] = (0, import_react7.useState)(content);
+  (0, import_react7.useEffect)(() => {
+    if (!isEditing) {
+      setDraft(content);
+    }
+  }, [content, isEditing]);
+  async function handleSave() {
+    setIsSaving(true);
+    try {
+      await onSave(draft);
+      setIsEditing(false);
+      setIsPreviewing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+  if (!isEditing) {
+    return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "panel global-memo-panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("header", { className: "panel-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "eyebrow", children: "GLOBAL MEMO" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "전체 메모" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { children: "마크다운으로 작성한 내용을 읽기 좋은 형태로 보여줍니다." })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-primary",
+            onClick: () => {
+              onEditStart?.();
+              setDraft(content);
+              setIsEditing(true);
+            },
+            children: "메모 수정"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MarkdownRenderer, { content, emptyText: "아직 전체 메모가 없습니다. 수정 버튼을 눌러 작성하세요." }),
+      savedMessage ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "success-text", children: savedMessage }) : null,
+      errorMessage ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "error-text", children: errorMessage }) : null
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "panel global-memo-panel editing", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("header", { className: "panel-header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "eyebrow", children: "GLOBAL MEMO" }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "전체 메모 수정" }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { children: "저장 전 미리보기로 마크다운 결과를 확인할 수 있습니다." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "button-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setIsPreviewing((prev) => !prev), children: isPreviewing ? "원문 보기" : "미리보기" }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-outline",
+            onClick: () => {
+              setDraft(content);
+              setIsEditing(false);
+              setIsPreviewing(false);
+            },
+            children: "취소"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "btn btn-primary", disabled: isSaving, onClick: () => void handleSave(), children: isSaving ? "저장 중" : "저장" })
+      ] })
+    ] }),
+    isPreviewing ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MarkdownRenderer, { content: draft, emptyText: "미리볼 내용이 없습니다." }) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+      "textarea",
+      {
+        value: draft,
+        onChange: (event) => setDraft(event.target.value),
+        rows: 8,
+        placeholder: "# 전체 메모\n- [ ] 확인할 일\n- 중요한 링크나 운영 메모를 적어두세요."
+      }
+    ),
+    savedMessage ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "success-text", children: savedMessage }) : null,
+    errorMessage ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "error-text", children: errorMessage }) : null
+  ] });
+}
+
+// src/components/MonthCalendar.tsx
+var import_react8 = __toESM(require_react(), 1);
+var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
 var EMPTY_SUMMARY = {
   total: 0,
   done: 0,
@@ -33774,22 +33900,22 @@ function MonthCalendar({
   onDropTaskToDate,
   onCreateTaskAtDate
 }) {
-  const [visibleMonth, setVisibleMonth] = (0, import_react7.useState)(() => startOfMonth(new Date(selectedDate)));
-  const [dragOverDateKey, setDragOverDateKey] = (0, import_react7.useState)(null);
+  const [visibleMonth, setVisibleMonth] = (0, import_react8.useState)(() => startOfMonth(new Date(selectedDate)));
+  const [dragOverDateKey, setDragOverDateKey] = (0, import_react8.useState)(null);
   const selectedKey = getDateKey(selectedDate);
   const todayKey = getDateKey(/* @__PURE__ */ new Date());
-  const days = (0, import_react7.useMemo)(() => {
+  const days = (0, import_react8.useMemo)(() => {
     const start = getMonthGridStart(visibleMonth, weekStartsOn);
     return Array.from({ length: 42 }, (_, index) => addDays(start, index));
   }, [visibleMonth, weekStartsOn]);
-  const monthLabel = (0, import_react7.useMemo)(
+  const monthLabel = (0, import_react8.useMemo)(
     () => new Intl.DateTimeFormat("ko-KR", {
       year: "numeric",
       month: "long"
     }).format(visibleMonth),
     [visibleMonth]
   );
-  const monthStats = (0, import_react7.useMemo)(() => {
+  const monthStats = (0, import_react8.useMemo)(() => {
     let total = 0;
     let pending = 0;
     let done = 0;
@@ -33827,10 +33953,10 @@ function MonthCalendar({
     setVisibleMonth(startOfMonth(today));
     onSelectDate(getDateKey(today));
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "panel calendar-panel", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "calendar-header calendar-toolbar", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "calendar-nav-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel calendar-panel", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-header calendar-toolbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-nav-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -33840,8 +33966,8 @@ function MonthCalendar({
             children: "이전 달"
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: monthLabel }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: monthLabel }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -33852,11 +33978,11 @@ function MonthCalendar({
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "calendar-toolbar-actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "btn btn-soft", onClick: handleSelectToday, children: "오늘" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "calendar-month-input", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-toolbar-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", className: "btn btn-soft", onClick: handleSelectToday, children: "오늘" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "calendar-month-input", children: [
           "월 이동",
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
             "input",
             {
               type: "month",
@@ -33867,30 +33993,30 @@ function MonthCalendar({
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "calendar-kpi-row", role: "status", "aria-live": "polite", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-kpi-row", role: "status", "aria-live": "polite", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { children: [
         "총 ",
         monthStats.total,
         "건"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { children: [
         "미완료 ",
         monthStats.pending,
         "건"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { children: [
         "완료 ",
         monthStats.done,
         "건"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { children: [
         "충돌 ",
         monthStats.conflicts,
         "건"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "calendar-weekdays", children: WEEK_LABELS[weekStartsOn].map((day) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: day }, day)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "calendar-grid", children: days.map((date) => {
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-weekdays", children: WEEK_LABELS[weekStartsOn].map((day) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: day }, day)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-grid", children: days.map((date) => {
       const key = getDateKey(date);
       const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
       const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
@@ -33904,7 +34030,7 @@ function MonthCalendar({
         summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
         "Enter로 선택, 더블클릭으로 일정 추가"
       ].filter(Boolean).join(", ");
-      return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "button",
         {
           type: "button",
@@ -33965,31 +34091,31 @@ function MonthCalendar({
           },
           "aria-label": ariaLabel,
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "calendar-day-top", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "calendar-day-number", children: date.getDate() }),
-              summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "calendar-day-count", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-day-number", children: date.getDate() }),
+              summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-day-count", children: [
                 summary.total,
                 "건"
               ] }) : null
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "calendar-progress", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: { width: `${completionRatio}%` } }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "calendar-event-stack", children: [
-              summary.titles.slice(0, 2).map((title, index) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "calendar-event-line", title, children: title }, `${key}-title-${index}`)),
-              summary.total > 2 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "calendar-event-more", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-progress", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { width: `${completionRatio}%` } }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-event-stack", children: [
+              summary.titles.slice(0, 2).map((title, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-event-line", title, children: title }, `${key}-title-${index}`)),
+              summary.total > 2 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-event-more", children: [
                 "+",
                 summary.total - 2
               ] }) : null
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "calendar-indicators", children: [
-              summary.pending > 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "calendar-indicator pending", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-indicators", children: [
+              summary.pending > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator pending", children: [
                 "미완료 ",
                 summary.pending
               ] }) : null,
-              summary.major > 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "calendar-indicator major", children: [
+              summary.major > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator major", children: [
                 "중요 ",
                 summary.major
               ] }) : null,
-              summary.conflicts > 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "calendar-indicator conflict", children: [
+              summary.conflicts > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator conflict", children: [
                 "충돌 ",
                 summary.conflicts
               ] }) : null
@@ -33999,14 +34125,166 @@ function MonthCalendar({
         key
       );
     }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "description-text", children: "팁: 날짜 더블클릭으로 해당 날짜 일정 등록, 드래그로 날짜 이동, 방향키로 날짜 이동" })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "description-text", children: "팁: 날짜 더블클릭으로 해당 날짜 일정 등록, 드래그로 날짜 이동, 방향키로 날짜 이동" })
   ] });
 }
 
+// src/components/TaskItem.tsx
+var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
+function TaskItem({
+  task,
+  project,
+  taskType,
+  timeFormat,
+  selected,
+  hasConflict,
+  onClick,
+  onStatusChange,
+  draggableTask = false,
+  onDragTaskStateChange,
+  selectable = false,
+  selectedForBulk = false,
+  onToggleSelect
+}) {
+  const navigate = useNavigate();
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    "article",
+    {
+      className: `task-item ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${hasConflict ? "conflict" : ""} ${draggableTask ? "draggable" : ""}`,
+      style: { borderLeftColor: project?.color ?? "#94a3b8" },
+      onClick,
+      draggable: draggableTask,
+      onDragStart: (event) => {
+        if (!draggableTask) {
+          return;
+        }
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("application/x-task-id", task.id);
+        event.dataTransfer.setData("text/plain", task.id);
+        onDragTaskStateChange?.(task.id);
+      },
+      onDragEnd: () => {
+        if (!draggableTask) {
+          return;
+        }
+        onDragTaskStateChange?.(null);
+      },
+      role: onClick ? "button" : void 0,
+      tabIndex: onClick ? 0 : void 0,
+      "aria-label": `${task.title} 일정 카드`,
+      onKeyDown: (event) => {
+        if (onClick && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onClick();
+        }
+      },
+      children: [
+        selectable ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "task-select-row", onClick: (event) => event.stopPropagation(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: selectedForBulk,
+              onChange: (event) => {
+                onToggleSelect?.(event.target.checked);
+              },
+              "aria-label": `${task.title} 선택`
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "일괄 작업에 포함" })
+        ] }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("header", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h4", { children: task.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "badge-row", children: [
+            hasConflict ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "conflict-badge", children: "시간 충돌" }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `status-badge ${task.status.toLowerCase()}`, children: STATUS_LABELS[task.status] })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "task-time", children: [
+          formatDateTime(task.startAt, timeFormat),
+          task.endAt ? ` - ${formatDateTime(task.endAt, timeFormat)}` : ""
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "tag-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "tag project-tag project-tag-button",
+              style: { backgroundColor: `${project?.color ?? "#334155"}22`, color: project?.color ?? "#334155" },
+              onClick: (event) => {
+                event.stopPropagation();
+                if (project?.id) {
+                  navigate(`/projects?projectId=${encodeURIComponent(project.id)}`);
+                } else {
+                  navigate("/projects");
+                }
+              },
+              children: project?.name ?? "프로젝트 없음"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            "span",
+            {
+              className: "tag type-tag",
+              style: { backgroundColor: `${taskType?.color ?? "#64748b"}22`, color: taskType?.color ?? "#64748b" },
+              children: taskType?.name ?? "종류 없음"
+            }
+          ),
+          task.isMajor ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "tag major-tag", children: "중요" }) : null
+        ] }),
+        task.content ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "task-content", children: task.content }) : null,
+        onStatusChange ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "button-row compact", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            "button",
+            {
+              type: "button",
+              className: `btn btn-soft ${task.status === "NOT_DONE" ? "is-active" : ""}`,
+              onClick: (event) => {
+                event.stopPropagation();
+                onStatusChange("NOT_DONE");
+              },
+              "aria-pressed": task.status === "NOT_DONE",
+              "aria-label": "상태를 미완료로 변경",
+              children: STATUS_LABELS.NOT_DONE
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            "button",
+            {
+              type: "button",
+              className: `btn btn-soft ${task.status === "ON_HOLD" ? "is-active" : ""}`,
+              onClick: (event) => {
+                event.stopPropagation();
+                onStatusChange("ON_HOLD");
+              },
+              "aria-pressed": task.status === "ON_HOLD",
+              "aria-label": "상태를 보류로 변경",
+              children: STATUS_LABELS.ON_HOLD
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            "button",
+            {
+              type: "button",
+              className: `btn btn-soft ${task.status === "DONE" ? "is-active" : ""}`,
+              onClick: (event) => {
+                event.stopPropagation();
+                onStatusChange("DONE");
+              },
+              "aria-pressed": task.status === "DONE",
+              "aria-label": "상태를 완료로 변경",
+              children: STATUS_LABELS.DONE
+            }
+          )
+        ] }) : null
+      ]
+    }
+  );
+}
+
 // src/pages/DashboardPage.tsx
-var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
 var GLOBAL_MEMO_KEY = "global";
-var GLOBAL_MEMO_AUTOSAVE_DELAY_MS = 900;
 var DAY_FILTER_OPTIONS = [
   { value: "ALL", label: "전체" },
   { value: "PENDING", label: "미완료" },
@@ -34047,26 +34325,25 @@ function matchesDayFilter(task, filter, conflictCount) {
 }
 function DashboardPage() {
   const { tasks, projects, taskTypes, memos, setting, createTask, updateTask, removeTask, saveMemo } = useAppData();
-  const [selectedDate, setSelectedDate] = (0, import_react8.useState)(() => getDateKey(/* @__PURE__ */ new Date()));
-  const [globalMemoDraft, setGlobalMemoDraft] = (0, import_react8.useState)(null);
-  const [memoSaved, setMemoSaved] = (0, import_react8.useState)("");
-  const [memoError, setMemoError] = (0, import_react8.useState)("");
-  const [taskModalState, setTaskModalState] = (0, import_react8.useState)(null);
-  const [taskFormSerial, setTaskFormSerial] = (0, import_react8.useState)(0);
-  const [draggingTaskId, setDraggingTaskId] = (0, import_react8.useState)(null);
-  const [dropMessage, setDropMessage] = (0, import_react8.useState)("");
-  const [dropError, setDropError] = (0, import_react8.useState)("");
-  const [dayFilter, setDayFilter] = (0, import_react8.useState)("ALL");
-  const memoSnapshotRef = (0, import_react8.useRef)("");
-  const visibleTasks = (0, import_react8.useMemo)(
+  const [selectedDate, setSelectedDate] = (0, import_react9.useState)(() => getDateKey(/* @__PURE__ */ new Date()));
+  const [memoSaved, setMemoSaved] = (0, import_react9.useState)("");
+  const [memoError, setMemoError] = (0, import_react9.useState)("");
+  const [taskModalState, setTaskModalState] = (0, import_react9.useState)(null);
+  const [taskFormSerial, setTaskFormSerial] = (0, import_react9.useState)(0);
+  const [isAiOpen, setIsAiOpen] = (0, import_react9.useState)(false);
+  const [draggingTaskId, setDraggingTaskId] = (0, import_react9.useState)(null);
+  const [dropMessage, setDropMessage] = (0, import_react9.useState)("");
+  const [dropError, setDropError] = (0, import_react9.useState)("");
+  const [dayFilter, setDayFilter] = (0, import_react9.useState)("ALL");
+  const visibleTasks = (0, import_react9.useMemo)(
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
     [tasks, setting.showPastCompleted]
   );
-  const projectMap = (0, import_react8.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
-  const typeMap = (0, import_react8.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
-  const memoMap = (0, import_react8.useMemo)(() => Object.fromEntries(memos.map((memo2) => [memo2.date, memo2])), [memos]);
-  const conflictMap = (0, import_react8.useMemo)(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
-  const daySummaryByDate = (0, import_react8.useMemo)(() => {
+  const projectMap = (0, import_react9.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
+  const typeMap = (0, import_react9.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const memoMap = (0, import_react9.useMemo)(() => Object.fromEntries(memos.map((memo2) => [memo2.date, memo2])), [memos]);
+  const conflictMap = (0, import_react9.useMemo)(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
+  const daySummaryByDate = (0, import_react9.useMemo)(() => {
     const map = {};
     for (const task of visibleTasks) {
       const key = getDateKey(task.startAt);
@@ -34112,12 +34389,12 @@ function DashboardPage() {
     major: 0,
     titles: []
   };
-  const dayTasks = (0, import_react8.useMemo)(
+  const dayTasks = (0, import_react9.useMemo)(
     () => visibleTasks.filter((task) => getDateKey(task.startAt) === selectedDate).filter((task) => matchesDayFilter(task, dayFilter, conflictMap[task.id]?.length ?? 0)).sort(compareByStartAtAsc),
     [visibleTasks, selectedDate, dayFilter, conflictMap]
   );
-  const majorTasks = (0, import_react8.useMemo)(() => visibleTasks.filter((task) => task.isMajor).sort(compareByStartAtAsc).slice(0, 8), [visibleTasks]);
-  const upcomingTasks = (0, import_react8.useMemo)(() => {
+  const majorTasks = (0, import_react9.useMemo)(() => visibleTasks.filter((task) => task.isMajor).sort(compareByStartAtAsc).slice(0, 8), [visibleTasks]);
+  const upcomingTasks = (0, import_react9.useMemo)(() => {
     const todayStart = (/* @__PURE__ */ new Date(`${getDateKey(/* @__PURE__ */ new Date())}T00:00:00`)).getTime();
     const nextWeekEnd = addDays(/* @__PURE__ */ new Date(), 7).getTime();
     return visibleTasks.filter((task) => task.status !== "DONE").filter((task) => {
@@ -34125,7 +34402,7 @@ function DashboardPage() {
       return Number.isFinite(startAt) && startAt >= todayStart && startAt <= nextWeekEnd;
     }).sort(compareByStartAtAsc).slice(0, 10);
   }, [visibleTasks]);
-  const briefing = (0, import_react8.useMemo)(() => {
+  const briefing = (0, import_react9.useMemo)(() => {
     const now = Date.now();
     const today = /* @__PURE__ */ new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime();
@@ -34173,7 +34450,7 @@ function DashboardPage() {
       conflictCount
     };
   }, [visibleTasks, conflictMap]);
-  const editingTask = (0, import_react8.useMemo)(() => {
+  const editingTask = (0, import_react9.useMemo)(() => {
     if (!taskModalState || taskModalState.mode !== "edit") {
       return void 0;
     }
@@ -34181,11 +34458,7 @@ function DashboardPage() {
   }, [taskModalState, tasks]);
   const activeTaskModalState = taskModalState?.mode === "edit" && !editingTask ? null : taskModalState;
   const globalMemoSource = memoMap[GLOBAL_MEMO_KEY]?.content ?? "";
-  const globalMemoContent = globalMemoDraft ?? globalMemoSource;
-  (0, import_react8.useEffect)(() => {
-    memoSnapshotRef.current = globalMemoSource.trim();
-  }, [globalMemoSource]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (!activeTaskModalState) {
       return;
     }
@@ -34199,26 +34472,6 @@ function DashboardPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [activeTaskModalState]);
-  (0, import_react8.useEffect)(() => {
-    if (globalMemoDraft === null) {
-      return;
-    }
-    const normalized = globalMemoDraft.trim();
-    if (normalized === memoSnapshotRef.current) {
-      return;
-    }
-    const timerId = window.setTimeout(() => {
-      void saveMemo(GLOBAL_MEMO_KEY, globalMemoDraft).then(() => {
-        memoSnapshotRef.current = normalized;
-        setMemoSaved("자동 저장됨");
-      }).catch((saveError) => {
-        setMemoError(saveError instanceof Error ? saveError.message : "메모 저장에 실패했습니다.");
-      });
-    }, GLOBAL_MEMO_AUTOSAVE_DELAY_MS);
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [globalMemoDraft, saveMemo]);
   async function handleCreateTask(input) {
     await createTask(input);
     setTaskModalState(null);
@@ -34263,14 +34516,14 @@ function DashboardPage() {
       setDraggingTaskId(null);
     }
   }
-  async function handleSaveGlobalMemo() {
+  async function handleSaveGlobalMemo(content) {
     setMemoError("");
     try {
-      await saveMemo(GLOBAL_MEMO_KEY, globalMemoContent);
-      memoSnapshotRef.current = globalMemoContent.trim();
+      await saveMemo(GLOBAL_MEMO_KEY, content);
       setMemoSaved("저장 완료");
     } catch (saveError) {
       setMemoError(saveError instanceof Error ? saveError.message : "메모 저장에 실패했습니다.");
+      throw saveError;
     }
   }
   function openCreateTaskForDate(dateKey) {
@@ -34278,12 +34531,46 @@ function DashboardPage() {
     setTaskFormSerial((prev) => prev + 1);
     setTaskModalState({ mode: "create" });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "dashboard-page", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(AiAssistantWorkspace, { compact: true, showEndpointInfo: false }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel briefing-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "오늘/주간 브리핑" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("small", { children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "dashboard-page", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      MonthCalendar,
+      {
+        selectedDate,
+        weekStartsOn: setting.weekStartsOn,
+        daySummaryByDate,
+        onSelectDate: setSelectedDate,
+        onDropTaskToDate: handleDropTaskToDate,
+        onCreateTaskAtDate: openCreateTaskForDate
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      MarkdownMemo,
+      {
+        content: globalMemoSource,
+        savedMessage: memoSaved,
+        errorMessage: memoError,
+        onEditStart: () => {
+          setMemoSaved("");
+          setMemoError("");
+        },
+        onSave: handleSaveGlobalMemo
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "panel ai-launch-panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "eyebrow", children: "AI COMMAND" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: "말로 일정 만들기" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "description-text", children: "자연어로 요청하면 AI가 질문, 초안, 변경안 검토를 한 화면에서 정리합니다." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "btn btn-primary btn-hero", onClick: () => setIsAiOpen(true), children: "AI 일정 입력 열기" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "panel briefing-panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "eyebrow", children: "BRIEFING" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: "오늘/주간 브리핑" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { children: [
           "오늘 ",
           briefing.todayCount,
           "건 | 이번 주 ",
@@ -34291,126 +34578,84 @@ function DashboardPage() {
           "건"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "kpi-grid", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "kpi-card accent", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { children: "오늘 남은 일정" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: briefing.todayCount })
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "kpi-grid", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "kpi-card accent", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: "오늘 남은 일정" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: briefing.todayCount })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "kpi-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { children: "이번 주 남은 일정" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: briefing.weekCount })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "kpi-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: "이번 주 남은 일정" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: briefing.weekCount })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "kpi-card danger", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { children: "지연 위험" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: briefing.overdueCount })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "kpi-card danger", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: "지연 위험" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: briefing.overdueCount })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "kpi-card danger", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { children: "충돌 일정" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: briefing.conflictCount })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "kpi-card danger", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: "충돌 일정" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: briefing.conflictCount })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "kpi-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { children: "선택 날짜" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: selectedDaySummary.total })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "kpi-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: "선택 날짜" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: selectedDaySummary.total })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "briefing-grid", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "briefing-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "오늘 우선순위" }),
-          briefing.todayItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "empty-text", children: "오늘 남은 일정이 없습니다." }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "mini-list", children: briefing.todayItems.map((task) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "briefing-grid", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "briefing-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "오늘 우선순위" }),
+          briefing.todayItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "empty-text", children: "오늘 남은 일정이 없습니다." }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { className: "mini-list", children: briefing.todayItems.map((task) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { children: [
             task.title,
             " (",
             formatDateTime(task.startAt, setting.timeFormat),
             ")"
           ] }, `briefing-today-${task.id}`)) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "briefing-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "이번 주 주요 일정" }),
-          briefing.weekItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "empty-text", children: "이번 주 일정이 없습니다." }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "mini-list", children: briefing.weekItems.map((task) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "briefing-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "이번 주 주요 일정" }),
+          briefing.weekItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "empty-text", children: "이번 주 일정이 없습니다." }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { className: "mini-list", children: briefing.weekItems.map((task) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { children: [
             task.title,
             " (",
             getDateKey(task.startAt),
             ")"
           ] }, `briefing-week-${task.id}`)) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "briefing-card metrics", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "운영 상태" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("article", { className: "briefing-card metrics", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "운영 상태" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("p", { children: [
             "선택 날짜 미완료: ",
             selectedDaySummary.pending,
             "건"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("p", { children: [
             "선택 날짜 완료: ",
             selectedDaySummary.done,
             "건"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("p", { children: [
             "선택 날짜 충돌: ",
             selectedDaySummary.conflicts,
             "건"
           ] }),
-          draggingTaskId ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "description-text", children: "드래그 중입니다. 날짜 칸에 놓아 일정을 재배치하세요." }) : null
+          draggingTaskId ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "description-text", children: "드래그 중입니다. 날짜 칸에 놓아 일정을 재배치하세요." }) : null
         ] })
       ] }),
-      dropMessage ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "success-text", children: dropMessage }) : null,
-      dropError ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "error-text", children: dropError }) : null
+      dropMessage ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "success-text", children: dropMessage }) : null,
+      dropError ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "error-text", children: dropError }) : null
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel global-memo-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "전체 메모" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-          "button",
-          {
-            type: "button",
-            className: "btn btn-primary",
-            onClick: () => {
-              void handleSaveGlobalMemo();
-            },
-            children: "메모 저장"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-        "textarea",
-        {
-          value: globalMemoContent,
-          onChange: (event) => {
-            setMemoSaved("");
-            setMemoError("");
-            setGlobalMemoDraft(event.target.value);
-          },
-          rows: 4,
-          placeholder: "전체 일정 공유 메모를 작성하세요."
-        }
-      ),
-      memoSaved ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "success-text", children: memoSaved }) : null,
-      memoError ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "error-text", children: memoError }) : null
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "dashboard-grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-        MonthCalendar,
-        {
-          selectedDate,
-          weekStartsOn: setting.weekStartsOn,
-          daySummaryByDate,
-          onSelectDate: setSelectedDate,
-          onDropTaskToDate: handleDropTaskToDate,
-          onCreateTaskAtDate: openCreateTaskForDate
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "날짜별 일정" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "panel-header-actions", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("small", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "dashboard-grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "panel", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: "날짜별 일정" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "panel-header-actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { children: [
               selectedDate,
               " · 총 ",
               selectedDaySummary.total,
               "건"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
               "button",
               {
                 type: "button",
@@ -34423,7 +34668,7 @@ function DashboardPage() {
             )
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "button-row", children: DAY_FILTER_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "button-row", children: DAY_FILTER_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
           "button",
           {
             type: "button",
@@ -34433,9 +34678,9 @@ function DashboardPage() {
           },
           option.value
         )) }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "task-stack", children: [
-          dayTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "empty-text", children: "조건에 맞는 일정이 없습니다." }) : null,
-          dayTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "task-stack", children: [
+          dayTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "empty-text", children: "조건에 맞는 일정이 없습니다." }) : null,
+          dayTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             TaskItem,
             {
               task,
@@ -34453,13 +34698,13 @@ function DashboardPage() {
           ))
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "panel", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "중요/다가오는 일정" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mini-list-block", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "중요 일정" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "task-stack", children: [
-            majorTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "empty-text", children: "중요 일정이 없습니다." }) : null,
-            majorTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "panel", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: "중요/다가오는 일정" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "mini-list-block", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "중요 일정" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "task-stack", children: [
+            majorTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "empty-text", children: "중요 일정이 없습니다." }) : null,
+            majorTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
               TaskItem,
               {
                 task,
@@ -34477,10 +34722,10 @@ function DashboardPage() {
             ))
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mini-list-block", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "다가오는 7일" }),
-          upcomingTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "empty-text", children: "다가오는 일정이 없습니다." }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "mini-list", children: upcomingTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "mini-list-block", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "다가오는 7일" }),
+          upcomingTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "empty-text", children: "다가오는 일정이 없습니다." }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { className: "mini-list", children: upcomingTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { children: [
             task.title,
             " (",
             formatDateTime(task.startAt, setting.timeFormat),
@@ -34489,14 +34734,55 @@ function DashboardPage() {
         ] })
       ] })
     ] }),
-    activeTaskModalState ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    isAiOpen ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      "div",
+      {
+        className: "modal-backdrop",
+        onClick: () => {
+          setIsAiOpen(false);
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+          "section",
+          {
+            className: "modal-card panel ai-modal-card",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-label": "AI 일정 입력",
+            onClick: (event) => {
+              event.stopPropagation();
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "eyebrow", children: "AI COMMAND" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: "AI 일정 입력" })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn btn-soft",
+                    onClick: () => {
+                      setIsAiOpen(false);
+                    },
+                    children: "닫기"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(AiAssistantWorkspace, { compact: true, showEndpointInfo: false, className: "embedded" })
+            ]
+          }
+        )
+      }
+    ) : null,
+    activeTaskModalState ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
       "div",
       {
         className: "modal-backdrop",
         onClick: () => {
           setTaskModalState(null);
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+        children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "section",
           {
             className: "modal-card panel",
@@ -34507,9 +34793,9 @@ function DashboardPage() {
               event.stopPropagation();
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: activeTaskModalState.mode === "create" ? "일정 추가" : "일정 수정" }),
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: activeTaskModalState.mode === "create" ? "일정 추가" : "일정 수정" }),
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
                   "button",
                   {
                     type: "button",
@@ -34521,7 +34807,7 @@ function DashboardPage() {
                   }
                 )
               ] }),
-              activeTaskModalState.mode === "create" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+              activeTaskModalState.mode === "create" ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
                 TaskForm,
                 {
                   projects,
@@ -34532,7 +34818,7 @@ function DashboardPage() {
                   onSubmit: handleCreateTask
                 },
                 `dashboard-new-task-${selectedDate}-${taskFormSerial}`
-              ) : editingTask ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+              ) : editingTask ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
                 TaskForm,
                 {
                   projects,
@@ -34557,15 +34843,15 @@ function DashboardPage() {
 }
 
 // src/pages/ProjectsPage.tsx
-var import_react9 = __toESM(require_react(), 1);
+var import_react10 = __toESM(require_react(), 1);
 
 // src/components/ColorSelector.tsx
-var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
 function ColorSelector({ value, onChange }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "color-selector", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "color-preset-grid", children: COLOR_PRESETS.map((color) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "color-selector", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "color-preset-grid", children: COLOR_PRESETS.map((color) => {
       const selected = value.toLowerCase() === color.toLowerCase();
-      return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
         "button",
         {
           type: "button",
@@ -34578,8 +34864,8 @@ function ColorSelector({ value, onChange }) {
         color
       );
     }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "color-tools", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "color-tools", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
         "button",
         {
           type: "button",
@@ -34590,9 +34876,9 @@ function ColorSelector({ value, onChange }) {
           children: "랜덤"
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "color-custom-input", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: "color-custom-input", children: [
         "직접 선택",
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
           "input",
           {
             type: "color",
@@ -34604,13 +34890,34 @@ function ColorSelector({ value, onChange }) {
         )
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "color-value", children: value.toUpperCase() })
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "color-value", children: value.toUpperCase() })
   ] });
 }
 
 // src/pages/ProjectsPage.tsx
-var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
 var PROJECT_FORM_AUTOSAVE_DELAY_MS = 700;
+function createEmptyProjectForm() {
+  return {
+    id: void 0,
+    name: "",
+    color: pickRandomPresetColor(),
+    description: "",
+    isActive: true
+  };
+}
+function createProjectFormFromProject(project) {
+  if (!project) {
+    return createEmptyProjectForm();
+  }
+  return {
+    id: project.id,
+    name: project.name,
+    color: project.color,
+    description: project.description ?? "",
+    isActive: project.isActive
+  };
+}
 function buildProjectInput(form) {
   const name = form.name.trim();
   if (!name) {
@@ -34635,27 +34942,6 @@ function serializeProjectInput(input) {
     isActive: input.isActive
   });
 }
-function createEmptyProjectForm() {
-  return {
-    id: void 0,
-    name: "",
-    color: pickRandomPresetColor(),
-    description: "",
-    isActive: true
-  };
-}
-function createProjectFormFromProject(project) {
-  if (!project) {
-    return createEmptyProjectForm();
-  }
-  return {
-    id: project.id,
-    name: project.name,
-    color: project.color,
-    description: project.description ?? "",
-    isActive: project.isActive
-  };
-}
 function toTaskInput4(task, statusOverride, projectIdOverride) {
   return {
     title: task.title,
@@ -34668,25 +34954,24 @@ function toTaskInput4(task, statusOverride, projectIdOverride) {
     isMajor: task.isMajor
   };
 }
-function ProjectEditorPanel({
-  initialProject,
-  createMode,
-  onSaveProject,
-  onDeleteProject,
-  onExitCreateMode
-}) {
-  const [form, setForm] = (0, import_react9.useState)(() => {
+function ProjectEditorPanel({ initialProject, createMode, onSaveProject, onDeleteProject, onClose }) {
+  const [form, setForm] = (0, import_react10.useState)(() => {
     return createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject);
   });
-  const [error, setError] = (0, import_react9.useState)("");
-  const [success, setSuccess] = (0, import_react9.useState)("");
-  const autoSaveSnapshotRef = (0, import_react9.useRef)(
+  const [error, setError] = (0, import_react10.useState)("");
+  const [success, setSuccess] = (0, import_react10.useState)("");
+  const autoSaveSnapshotRef = (0, import_react10.useRef)(
     (() => {
       const built = buildProjectInput(form);
       return built.input ? serializeProjectInput(built.input) : "";
     })()
   );
-  (0, import_react9.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
+    setForm(createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject));
+    setError("");
+    setSuccess("");
+  }, [createMode, initialProject?.id]);
+  (0, import_react10.useEffect)(() => {
     if (createMode || !form.id) {
       autoSaveSnapshotRef.current = "";
       return;
@@ -34725,10 +35010,7 @@ function ProjectEditorPanel({
       await onSaveProject(built.input);
       autoSaveSnapshotRef.current = serializeProjectInput(built.input);
       setSuccess(form.id ? "저장됨." : "프로젝트가 생성되었습니다.");
-      if (!form.id) {
-        setForm(createEmptyProjectForm());
-        autoSaveSnapshotRef.current = "";
-      }
+      onClose();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "프로젝트 저장에 실패했습니다.");
     }
@@ -34742,21 +35024,20 @@ function ProjectEditorPanel({
     try {
       await onDeleteProject(form.id);
       setSuccess("프로젝트가 삭제되었습니다.");
-      setForm(createEmptyProjectForm());
-      autoSaveSnapshotRef.current = "";
+      onClose();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "프로젝트 삭제에 실패했습니다.");
     }
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "panel", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: createMode ? "새 프로젝트" : "프로젝트 수정" }),
-      createMode ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: "btn btn-soft", type: "button", onClick: onExitCreateMode, children: "선택한 프로젝트로 돌아가기" }) : null
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "modal-card panel project-settings-card", role: "dialog", "aria-modal": "true", "aria-label": "프로젝트 설정", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "panel-header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { children: createMode ? "새 프로젝트" : "프로젝트 설정" }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "btn btn-soft", type: "button", onClick: onClose, children: "닫기" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("form", { className: "task-form", onSubmit: handleSubmit, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("form", { className: "task-form", onSubmit: handleSubmit, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
         "프로젝트명",
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           "input",
           {
             type: "text",
@@ -34766,13 +35047,13 @@ function ProjectEditorPanel({
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
         "색상",
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(ColorSelector, { value: form.color, onChange: (nextColor) => setForm((prev) => ({ ...prev, color: nextColor })) })
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(ColorSelector, { value: form.color, onChange: (nextColor) => setForm((prev) => ({ ...prev, color: nextColor })) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
         "프로젝트 설명",
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           "textarea",
           {
             rows: 6,
@@ -34782,8 +35063,8 @@ function ProjectEditorPanel({
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "checkbox-inline", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: "checkbox-inline", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           "input",
           {
             type: "checkbox",
@@ -34793,9 +35074,9 @@ function ProjectEditorPanel({
         ),
         "사용"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "button-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: "btn btn-primary", type: "submit", children: form.id ? "저장" : "생성" }),
-        form.id ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "button-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "btn btn-primary", type: "submit", children: form.id ? "저장" : "생성" }),
+        form.id ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           "button",
           {
             className: "btn btn-danger",
@@ -34806,95 +35087,116 @@ function ProjectEditorPanel({
             disabled: form.id === DEFAULT_PROJECT_ID,
             children: "삭제"
           }
-        ) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-          "button",
-          {
-            className: "btn btn-soft",
-            type: "button",
-            onClick: () => {
-              setError("");
-              setSuccess("");
-              const nextForm = createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject);
-              setForm(nextForm);
-              const built = buildProjectInput(nextForm);
-              autoSaveSnapshotRef.current = built.input ? serializeProjectInput(built.input) : "";
-            },
-            children: "초기화"
-          }
-        )
+        ) : null
       ] }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "error-text", children: error }) : null,
-      success ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "success-text", children: success }) : null
+      error ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "error-text", children: error }) : null,
+      success ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "success-text", children: success }) : null
     ] })
   ] });
 }
 function ProjectsPage() {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask, upsertProject, deleteProject } = useAppData();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isCreatingProject, setIsCreatingProject] = (0, import_react9.useState)(false);
-  const [taskKeyword, setTaskKeyword] = (0, import_react9.useState)("");
-  const [taskModalState, setTaskModalState] = (0, import_react9.useState)(null);
-  const [taskFormSerial, setTaskFormSerial] = (0, import_react9.useState)(0);
+  const [projectKeyword, setProjectKeyword] = (0, import_react10.useState)("");
+  const [taskKeyword, setTaskKeyword] = (0, import_react10.useState)("");
+  const [taskModalState, setTaskModalState] = (0, import_react10.useState)(null);
+  const [projectSettingsModal, setProjectSettingsModal] = (0, import_react10.useState)(null);
+  const [taskFormSerial, setTaskFormSerial] = (0, import_react10.useState)(0);
   const selectedProjectIdFromQuery = searchParams.get("projectId");
-  const sortedProjects = (0, import_react9.useMemo)(
-    () => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")),
-    [projects]
-  );
-  const selectedProject = (0, import_react9.useMemo)(() => {
+  const sortedProjects = (0, import_react10.useMemo)(() => {
+    const keyword = projectKeyword.trim().toLowerCase();
+    return [...projects].filter((project) => {
+      if (!keyword) {
+        return true;
+      }
+      return `${project.name} ${project.description ?? ""}`.toLowerCase().includes(keyword);
+    }).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  }, [projectKeyword, projects]);
+  const allSortedProjects = (0, import_react10.useMemo)(() => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")), [projects]);
+  const selectedProject = (0, import_react10.useMemo)(() => {
     if (selectedProjectIdFromQuery) {
-      const byQuery = sortedProjects.find((project) => project.id === selectedProjectIdFromQuery);
+      const byQuery = projects.find((project) => project.id === selectedProjectIdFromQuery);
       if (byQuery) {
         return byQuery;
       }
     }
-    return sortedProjects[0];
-  }, [selectedProjectIdFromQuery, sortedProjects]);
-  const taskCountByProject = (0, import_react9.useMemo)(() => {
+    return allSortedProjects[0];
+  }, [allSortedProjects, projects, selectedProjectIdFromQuery]);
+  const typeMap = (0, import_react10.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const projectMap = (0, import_react10.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
+  const conflictMap = (0, import_react10.useMemo)(() => buildTaskConflictMap(tasks), [tasks]);
+  const projectStats = (0, import_react10.useMemo)(() => {
+    const todayKey = getDateKey(/* @__PURE__ */ new Date());
+    const weekEndKey = getDateKey(addDays(/* @__PURE__ */ new Date(), 7));
     const map = {};
+    for (const project of projects) {
+      map[project.id] = { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+    }
     for (const task of tasks) {
-      map[task.projectId] = (map[task.projectId] ?? 0) + 1;
+      const stats = map[task.projectId] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+      stats.total += 1;
+      if (task.status === "DONE") {
+        stats.done += 1;
+      } else {
+        stats.active += 1;
+      }
+      const taskKey = getDateKey(task.startAt);
+      if (taskKey >= todayKey && taskKey <= weekEndKey) {
+        stats.week += 1;
+      }
+      if ((conflictMap[task.id]?.length ?? 0) > 0) {
+        stats.conflicts += 1;
+      }
+      stats.recent.push(task);
+      map[task.projectId] = stats;
+    }
+    for (const stats of Object.values(map)) {
+      stats.completion = stats.total > 0 ? Math.round(stats.done / stats.total * 100) : 0;
+      stats.recent = stats.recent.sort(compareByStartAtAsc).slice(0, 2);
     }
     return map;
-  }, [tasks]);
-  const typeMap = (0, import_react9.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
-  const projectMap = (0, import_react9.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
-  const conflictMap = (0, import_react9.useMemo)(() => buildTaskConflictMap(tasks), [tasks]);
-  const projectTasks = (0, import_react9.useMemo)(() => {
+  }, [conflictMap, projects, tasks]);
+  const projectTasks = (0, import_react10.useMemo)(() => {
     if (!selectedProject) {
       return [];
     }
+    const keyword = taskKeyword.trim().toLowerCase();
     return tasks.filter((task) => task.projectId === selectedProject.id).filter((task) => {
-      if (!taskKeyword.trim()) {
+      if (!keyword) {
         return true;
       }
-      const keyword = taskKeyword.trim().toLowerCase();
       const typeName = typeMap[task.taskTypeId]?.name ?? "";
-      const projectName = projectMap[task.projectId]?.name ?? "";
-      return `${task.title} ${task.content} ${typeName} ${projectName}`.toLowerCase().includes(keyword);
+      return `${task.title} ${task.content} ${typeName}`.toLowerCase().includes(keyword);
     }).sort(compareByStartAtAsc);
-  }, [selectedProject, tasks, taskKeyword, typeMap, projectMap]);
-  const editingTask = (0, import_react9.useMemo)(() => {
+  }, [selectedProject, taskKeyword, tasks, typeMap]);
+  const editingTask = (0, import_react10.useMemo)(() => {
     if (taskModalState?.mode !== "edit") {
       return void 0;
     }
     return tasks.find((task) => task.id === taskModalState.taskId);
   }, [taskModalState, tasks]);
   const activeTaskModalState = taskModalState?.mode === "edit" && !editingTask ? null : taskModalState;
-  (0, import_react9.useEffect)(() => {
-    if (!activeTaskModalState) {
+  const editingProject = (0, import_react10.useMemo)(() => {
+    if (projectSettingsModal?.mode !== "edit") {
+      return void 0;
+    }
+    return projects.find((project) => project.id === projectSettingsModal.projectId);
+  }, [projectSettingsModal, projects]);
+  (0, import_react10.useEffect)(() => {
+    if (!activeTaskModalState && !projectSettingsModal) {
       return;
     }
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         setTaskModalState(null);
+        setProjectSettingsModal(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeTaskModalState]);
+  }, [activeTaskModalState, projectSettingsModal]);
   async function handleCreateProjectTask(input) {
     if (!selectedProject) {
       return;
@@ -34930,85 +35232,134 @@ function ProjectsPage() {
     if (selectedProjectIdFromQuery === projectId) {
       setSearchParams({});
     }
-    setIsCreatingProject(false);
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "project-management-layout", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: "프로젝트" }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { children: [
-          sortedProjects.length,
-          "개"
-        ] })
+  function selectProject(projectId) {
+    setSearchParams({ projectId });
+    setTaskKeyword("");
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "projects-workspace", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "projects-overview", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "eyebrow", children: "PROJECTS" }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { children: "프로젝트" }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "description-text", children: "프로젝트별 진행 상황을 먼저 보고, 필요한 프로젝트 안에서 일정을 관리합니다." })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "button-row", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-        "button",
-        {
-          className: "btn btn-soft",
-          type: "button",
-          onClick: () => {
-            setIsCreatingProject(true);
-          },
-          children: "프로젝트 추가"
-        }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { className: "entity-list", children: sortedProjects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-        "li",
-        {
-          className: `entity-item ${selectedProject?.id === project.id ? "selected" : ""}`,
-          onClick: () => {
-            setSearchParams({ projectId: project.id });
-            setIsCreatingProject(false);
-          },
-          role: "button",
-          tabIndex: 0,
-          "aria-label": `${project.name} 프로젝트 선택`,
-          onKeyDown: (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              setSearchParams({ projectId: project.id });
-              setIsCreatingProject(false);
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "projects-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: "search-field", children: [
+          "검색",
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "input",
+            {
+              type: "text",
+              value: projectKeyword,
+              onChange: (event) => setProjectKeyword(event.target.value),
+              placeholder: "프로젝트 검색"
             }
-          },
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "color-dot", style: { backgroundColor: project.color } }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: project.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { children: [
-              taskCountByProject[project.id] ?? 0,
-              "건"
-            ] })
-          ]
-        },
-        project.id
-      )) })
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => setProjectSettingsModal({ mode: "create" }), children: "새 프로젝트" })
+      ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "panel project-task-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: selectedProject ? `${selectedProject.name} 일정` : "프로젝트 일정" }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "panel-header-actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { children: [
-            projectTasks.length,
-            "개"
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "project-card-grid", "aria-label": "프로젝트 목록", children: [
+      sortedProjects.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "empty-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { children: "프로젝트가 없습니다." }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: "검색어를 줄이거나 새 프로젝트를 추가하세요." })
+      ] }) : null,
+      sortedProjects.map((project) => {
+        const stats = projectStats[project.id] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+        return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `project-summary-card ${selectedProject?.id === project.id ? "selected" : ""}`,
+            onClick: () => selectProject(project.id),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "project-color-bar", style: { backgroundColor: project.color } }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { className: "project-card-title", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: project.name }),
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: project.isActive ? "사용 중" : "비활성" })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { className: "project-card-metrics", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+                  "진행 ",
+                  stats.active
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+                  "이번 주 ",
+                  stats.week
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+                  "완료율 ",
+                  stats.completion,
+                  "%"
+                ] }),
+                stats.conflicts > 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+                  "충돌 ",
+                  stats.conflicts
+                ] }) : null
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { className: "project-card-recent", children: [
+                stats.recent.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "아직 일정이 없습니다." }) : null,
+                stats.recent.map((task) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: task.title }, task.id))
+              ] })
+            ]
+          },
+          project.id
+        );
+      })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("section", { className: "project-detail-panel", children: selectedProject ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "panel-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "eyebrow", children: "PROJECT DETAIL" }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { children: selectedProject.name }),
+          selectedProject.description ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "description-text", children: selectedProject.description }) : null
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "panel-header-actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
             "button",
             {
               type: "button",
-              className: "btn btn-soft",
-              disabled: !selectedProject,
+              className: "btn btn-primary",
               onClick: () => {
                 setTaskFormSerial((prev) => prev + 1);
                 setTaskModalState({ mode: "create" });
               },
               children: "일정 추가"
             }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => setProjectSettingsModal({ mode: "edit", projectId: selectedProject.id }),
+              children: "프로젝트 설정"
+            }
           )
         ] })
       ] }),
-      selectedProject?.description ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "description-text", children: selectedProject.description }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "overview-stat-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+          "진행 ",
+          projectStats[selectedProject.id]?.active ?? 0
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+          "완료 ",
+          projectStats[selectedProject.id]?.done ?? 0
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+          "이번 주 ",
+          projectStats[selectedProject.id]?.week ?? 0
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+          "충돌 ",
+          projectStats[selectedProject.id]?.conflicts ?? 0
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: "search-field", children: [
         "프로젝트 일정 검색",
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           "input",
           {
             type: "text",
@@ -35018,10 +35369,9 @@ function ProjectsPage() {
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "task-stack", children: [
-        !selectedProject ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "empty-text", children: "프로젝트가 없습니다." }) : null,
-        selectedProject && projectTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "empty-text", children: "이 프로젝트에는 아직 일정이 없습니다." }) : null,
-        projectTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "task-stack", children: [
+        projectTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "empty-text", children: "이 프로젝트에는 아직 일정이 없습니다." }) : null,
+        projectTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           TaskItem,
           {
             task,
@@ -35029,102 +35379,80 @@ function ProjectsPage() {
             taskType: typeMap[task.taskTypeId],
             timeFormat: setting.timeFormat,
             hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
-            onClick: () => {
-              setTaskModalState({ mode: "edit", taskId: task.id });
-            },
+            onClick: () => setTaskModalState({ mode: "edit", taskId: task.id }),
             onStatusChange: (status) => {
-              void updateTask(task.id, toTaskInput4(task, status, selectedProject?.id));
+              void updateTask(task.id, toTaskInput4(task, status, selectedProject.id));
             }
           },
           task.id
         ))
       ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "empty-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { children: "프로젝트를 선택하세요." }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: "프로젝트 카드에서 항목을 선택하면 일정과 요약이 표시됩니다." })
+    ] }) }),
+    projectSettingsModal ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "modal-backdrop", onClick: () => setProjectSettingsModal(null), children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { onClick: (event) => event.stopPropagation(), children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
       ProjectEditorPanel,
       {
-        initialProject: !isCreatingProject ? selectedProject : void 0,
-        createMode: isCreatingProject,
+        initialProject: projectSettingsModal.mode === "edit" ? editingProject : void 0,
+        createMode: projectSettingsModal.mode === "create",
         onSaveProject: handleSaveProject,
         onDeleteProject: handleDeleteProject,
-        onExitCreateMode: () => {
-          setIsCreatingProject(false);
-        }
+        onClose: () => setProjectSettingsModal(null)
       },
-      `project-editor-${isCreatingProject ? "new" : selectedProject?.id ?? "none"}`
-    ),
-    activeTaskModalState ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-      "div",
+      projectSettingsModal.mode === "create" ? "new-project" : editingProject?.id ?? "project"
+    ) }) }) : null,
+    activeTaskModalState ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "modal-backdrop", onClick: () => setTaskModalState(null), children: /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+      "section",
       {
-        className: "modal-backdrop",
-        onClick: () => {
-          setTaskModalState(null);
+        className: "modal-card panel",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "프로젝트 일정 대화상자",
+        onClick: (event) => {
+          event.stopPropagation();
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-          "section",
-          {
-            className: "modal-card panel",
-            role: "dialog",
-            "aria-modal": "true",
-            "aria-label": "프로젝트 일정 대화상자",
-            onClick: (event) => {
-              event.stopPropagation();
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "panel-header", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { children: activeTaskModalState.mode === "create" ? "프로젝트 일정 추가" : "프로젝트 일정 수정" }),
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setTaskModalState(null), children: "닫기" })
+          ] }),
+          activeTaskModalState.mode === "create" && selectedProject ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            TaskForm,
+            {
+              projects,
+              taskTypes,
+              allTasks: tasks,
+              fixedProjectId: selectedProject.id,
+              timeFormat: setting.timeFormat,
+              onSubmit: handleCreateProjectTask
             },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "panel-header", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: activeTaskModalState.mode === "create" ? "프로젝트 일정 추가" : "프로젝트 일정 수정" }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-soft",
-                    onClick: () => {
-                      setTaskModalState(null);
-                    },
-                    children: "닫기"
-                  }
-                )
-              ] }),
-              activeTaskModalState.mode === "create" && selectedProject ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-                TaskForm,
-                {
-                  projects,
-                  taskTypes,
-                  allTasks: tasks,
-                  fixedProjectId: selectedProject.id,
-                  timeFormat: setting.timeFormat,
-                  onSubmit: handleCreateProjectTask
-                },
-                `project-task-new-${selectedProject.id}-${taskFormSerial}`
-              ) : null,
-              activeTaskModalState.mode === "edit" && editingTask && selectedProject ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-                TaskForm,
-                {
-                  projects,
-                  taskTypes,
-                  allTasks: tasks,
-                  fixedProjectId: selectedProject.id,
-                  initialTask: editingTask,
-                  timeFormat: setting.timeFormat,
-                  onSubmit: handleUpdateProjectTask,
-                  onDelete: handleDeleteProjectTask,
-                  onCancel: () => {
-                    setTaskModalState(null);
-                  }
-                },
-                `project-task-edit-${editingTask.id}`
-              ) : null
-            ]
-          }
-        )
+            `project-task-new-${selectedProject.id}-${taskFormSerial}`
+          ) : null,
+          activeTaskModalState.mode === "edit" && editingTask && selectedProject ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+            TaskForm,
+            {
+              projects,
+              taskTypes,
+              allTasks: tasks,
+              fixedProjectId: selectedProject.id,
+              initialTask: editingTask,
+              timeFormat: setting.timeFormat,
+              onSubmit: handleUpdateProjectTask,
+              onDelete: handleDeleteProjectTask,
+              onCancel: () => setTaskModalState(null)
+            },
+            `project-task-edit-${editingTask.id}`
+          ) : null
+        ]
       }
-    ) : null
+    ) }) : null
   ] });
 }
 
 // src/pages/SettingsPage.tsx
-var import_react10 = __toESM(require_react(), 1);
-var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
+var import_react11 = __toESM(require_react(), 1);
+var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
 function createEmptyTypeForm() {
   return {
     id: void 0,
@@ -35172,20 +35500,20 @@ function SettingsPage() {
     deleteAutoBackup,
     refreshAutoBackups
   } = useAppData();
-  const [message, setMessage] = (0, import_react10.useState)("");
-  const [error, setError] = (0, import_react10.useState)("");
-  const [backupMessage, setBackupMessage] = (0, import_react10.useState)("");
-  const [backupError, setBackupError] = (0, import_react10.useState)("");
-  const [typeForm, setTypeForm] = (0, import_react10.useState)(() => createEmptyTypeForm());
-  const [typeMessage, setTypeMessage] = (0, import_react10.useState)("");
-  const [typeError, setTypeError] = (0, import_react10.useState)("");
-  const typeAutoSaveSnapshotRef = (0, import_react10.useRef)("");
-  const lastTypeIdRef = (0, import_react10.useRef)(void 0);
-  const sortedTypes = (0, import_react10.useMemo)(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
-  (0, import_react10.useEffect)(() => {
+  const [message, setMessage] = (0, import_react11.useState)("");
+  const [error, setError] = (0, import_react11.useState)("");
+  const [backupMessage, setBackupMessage] = (0, import_react11.useState)("");
+  const [backupError, setBackupError] = (0, import_react11.useState)("");
+  const [typeForm, setTypeForm] = (0, import_react11.useState)(() => createEmptyTypeForm());
+  const [typeMessage, setTypeMessage] = (0, import_react11.useState)("");
+  const [typeError, setTypeError] = (0, import_react11.useState)("");
+  const typeAutoSaveSnapshotRef = (0, import_react11.useRef)("");
+  const lastTypeIdRef = (0, import_react11.useRef)(void 0);
+  const sortedTypes = (0, import_react11.useMemo)(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
+  (0, import_react11.useEffect)(() => {
     void refreshAutoBackups();
   }, [refreshAutoBackups]);
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     if (!typeForm.id) {
       typeAutoSaveSnapshotRef.current = "";
       lastTypeIdRef.current = void 0;
@@ -35334,13 +35662,13 @@ function SettingsPage() {
       isDefault: type.isDefault
     });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "settings-layout", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: "panel settings-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h2", { children: "일반 설정" }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "form-grid two-col", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "settings-layout", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "panel settings-panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h2", { children: "일반 설정" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "form-grid two-col", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "주 시작 요일",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
             "select",
             {
               value: setting.weekStartsOn,
@@ -35348,15 +35676,15 @@ function SettingsPage() {
                 void updateSetting({ weekStartsOn: event.target.value });
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "mon", children: "월요일" }),
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "sun", children: "일요일" })
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "mon", children: "월요일" }),
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "sun", children: "일요일" })
               ]
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "시간 표시 형식",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
             "select",
             {
               value: setting.timeFormat,
@@ -35364,15 +35692,15 @@ function SettingsPage() {
                 void updateSetting({ timeFormat: event.target.value });
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "24h", children: "24시간제" }),
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "12h", children: "12시간제" })
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "24h", children: "24시간제" }),
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "12h", children: "12시간제" })
               ]
             }
           )
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: "checkbox-inline", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "checkbox-inline", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           "input",
           {
             type: "checkbox",
@@ -35385,11 +35713,11 @@ function SettingsPage() {
         "지난 완료 업무를 기본으로 표시"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: "panel settings-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h2", { children: "알림 및 백업" }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "form-grid two-col", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: "checkbox-inline", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "panel settings-panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h2", { children: "알림 및 백업" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "form-grid two-col", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "checkbox-inline", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "checkbox",
@@ -35401,9 +35729,9 @@ function SettingsPage() {
           ),
           "일정 알림 사용"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "알림 사전 시간(분)",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "text",
@@ -35417,9 +35745,9 @@ function SettingsPage() {
           )
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "form-grid two-col", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: "checkbox-inline", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "form-grid two-col", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "checkbox-inline", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "checkbox",
@@ -35431,9 +35759,9 @@ function SettingsPage() {
           ),
           "자동 백업 사용"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "자동 백업 주기(분)",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "text",
@@ -35447,28 +35775,28 @@ function SettingsPage() {
           )
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "button-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: "btn btn-primary", type: "button", onClick: () => void handleCreateManualBackup(), children: "지금 자동 백업 생성" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: "btn btn-soft", type: "button", onClick: () => void refreshAutoBackups(), children: "백업 목록 새로고침" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "button-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { className: "btn btn-primary", type: "button", onClick: () => void handleCreateManualBackup(), children: "지금 자동 백업 생성" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { className: "btn btn-soft", type: "button", onClick: () => void refreshAutoBackups(), children: "백업 목록 새로고침" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "button-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: "btn btn-primary", type: "button", onClick: () => void handleExport(), children: "JSON 내보내기" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: "btn btn-soft file-upload", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "button-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { className: "btn btn-primary", type: "button", onClick: () => void handleExport(), children: "JSON 내보내기" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "btn btn-soft file-upload", children: [
           "JSON 가져오기",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { type: "file", accept: ".json,application/json", onChange: handleImport })
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { type: "file", accept: ".json,application/json", onChange: handleImport })
         ] })
       ] }),
-      backupMessage ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "success-text", children: backupMessage }) : null,
-      backupError ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "error-text", children: backupError }) : null,
-      message ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "success-text", children: message }) : null,
-      error ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "error-text", children: error }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "backup-list-block", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h3", { children: "자동 백업 목록" }),
-        autoBackups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "empty-text", children: "저장된 자동 백업이 없습니다." }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("ul", { className: "backup-list", children: autoBackups.map((backup) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("li", { className: "backup-item", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: formatDateTime(backup.createdAt, setting.timeFormat) }),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { className: "description-text", children: [
+      backupMessage ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "success-text", children: backupMessage }) : null,
+      backupError ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "error-text", children: backupError }) : null,
+      message ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "success-text", children: message }) : null,
+      error ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "error-text", children: error }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "backup-list-block", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h3", { children: "자동 백업 목록" }),
+        autoBackups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "empty-text", children: "저장된 자동 백업이 없습니다." }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { className: "backup-list", children: autoBackups.map((backup) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { className: "backup-item", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { children: formatDateTime(backup.createdAt, setting.timeFormat) }),
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "description-text", children: [
               "사유: ",
               backup.reason,
               " / 크기: ",
@@ -35476,8 +35804,8 @@ function SettingsPage() {
               " KB"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "button-row compact", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "button-row compact", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "button",
               {
                 className: "btn btn-soft",
@@ -35488,7 +35816,7 @@ function SettingsPage() {
                 children: "복원"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "button",
               {
                 className: "btn btn-danger",
@@ -35503,12 +35831,12 @@ function SettingsPage() {
         ] }, backup.id)) })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: "panel settings-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h2", { children: "AI 설정" }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "form-grid two-col", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "panel settings-panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("header", { className: "panel-header", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h2", { children: "AI 설정" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "form-grid two-col", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "LLM 모델명",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "text",
@@ -35520,9 +35848,9 @@ function SettingsPage() {
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "LLM API 키",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "password",
@@ -35536,22 +35864,22 @@ function SettingsPage() {
           )
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { className: "description-text", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "description-text", children: [
         "LLM Endpoint(코드 고정): ",
         LLM_CHAT_COMPLETIONS_URL
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "description-text", children: "모델명/API Key는 입력 즉시 저장됩니다." })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "description-text", children: "모델명/API Key는 입력 즉시 저장됩니다." })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: "panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { className: "panel-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h2", { children: "일정 종류 관리" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "panel", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { className: "panel-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h2", { children: "일정 종류 관리" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("small", { children: [
           sortedTypes.length,
           "개"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "settings-type-layout", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("ul", { className: "entity-list", children: sortedTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "settings-type-layout", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { className: "entity-list", children: sortedTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
           "li",
           {
             className: `entity-item ${typeForm.id === type.id ? "selected" : ""}`,
@@ -35566,18 +35894,18 @@ function SettingsPage() {
               }
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "color-dot", style: { backgroundColor: type.color } }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: type.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("small", { children: type.isDefault ? "기본" : "사용자" })
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "color-dot", style: { backgroundColor: type.color } }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { children: type.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("small", { children: type.isDefault ? "기본" : "사용자" })
             ]
           },
           type.id
         )) }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("form", { className: "task-form", onSubmit: handleTypeSubmit, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h3", { children: typeForm.id ? "종류 수정" : "새 종류" }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("form", { className: "task-form", onSubmit: handleTypeSubmit, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h3", { children: typeForm.id ? "종류 수정" : "새 종류" }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
             "종류명",
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "input",
               {
                 type: "text",
@@ -35587,9 +35915,9 @@ function SettingsPage() {
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
             "색상",
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               ColorSelector,
               {
                 value: typeForm.color,
@@ -35599,8 +35927,8 @@ function SettingsPage() {
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: "checkbox-inline", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "checkbox-inline", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -35610,10 +35938,10 @@ function SettingsPage() {
             ),
             "사용"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "button-row", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: "btn btn-primary", type: "submit", children: typeForm.id ? "저장" : "생성" }),
-            typeForm.id && !typeForm.isDefault ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: "btn btn-danger", type: "button", onClick: () => void handleTypeDelete(), children: "삭제" }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "button-row", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { className: "btn btn-primary", type: "submit", children: typeForm.id ? "저장" : "생성" }),
+            typeForm.id && !typeForm.isDefault ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { className: "btn btn-danger", type: "button", onClick: () => void handleTypeDelete(), children: "삭제" }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "button",
               {
                 className: "btn btn-soft",
@@ -35629,8 +35957,8 @@ function SettingsPage() {
               }
             )
           ] }),
-          typeMessage ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "success-text", children: typeMessage }) : null,
-          typeError ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "error-text", children: typeError }) : null
+          typeMessage ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "success-text", children: typeMessage }) : null,
+          typeError ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "error-text", children: typeError }) : null
         ] })
       ] })
     ] })
@@ -35638,8 +35966,16 @@ function SettingsPage() {
 }
 
 // src/pages/TasksPage.tsx
-var import_react11 = __toESM(require_react(), 1);
-var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
+var import_react12 = __toESM(require_react(), 1);
+var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+var QUICK_FILTERS = [
+  { value: "ALL", label: "전체" },
+  { value: "TODAY", label: "오늘" },
+  { value: "WEEK", label: "이번 주" },
+  { value: "PENDING", label: "미완료" },
+  { value: "CONFLICT", label: "충돌" },
+  { value: "MAJOR", label: "중요" }
+];
 function toTaskInput5(task, statusOverride) {
   return {
     title: task.title,
@@ -35652,191 +35988,57 @@ function toTaskInput5(task, statusOverride) {
     isMajor: task.isMajor
   };
 }
-function compareBySortRule(a, b, sortBy, direction) {
-  const startDiff = new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
-  if (sortBy === "priority") {
-    const priorityDiff = Number(a.isMajor) - Number(b.isMajor);
-    if (priorityDiff !== 0) {
-      return direction === "asc" ? priorityDiff : -priorityDiff;
+function isInCurrentWeek(task) {
+  const todayKey = getDateKey(/* @__PURE__ */ new Date());
+  const weekEndKey = getDateKey(addDays(/* @__PURE__ */ new Date(), 7));
+  const taskKey = getDateKey(task.startAt);
+  return taskKey >= todayKey && taskKey <= weekEndKey;
+}
+function groupVisibleTasks(tasks) {
+  const todayKey = getDateKey(/* @__PURE__ */ new Date());
+  const tomorrowKey = getDateKey(addDays(/* @__PURE__ */ new Date(), 1));
+  const weekEndKey = getDateKey(addDays(/* @__PURE__ */ new Date(), 7));
+  const groups = [
+    { id: "today", title: "오늘", tasks: [] },
+    { id: "tomorrow", title: "내일", tasks: [] },
+    { id: "week", title: "이번 주", tasks: [] },
+    { id: "later", title: "이후", tasks: [] },
+    { id: "done", title: "완료", tasks: [] }
+  ];
+  for (const task of tasks) {
+    if (task.status === "DONE") {
+      groups[4].tasks.push(task);
+      continue;
     }
-    return direction === "asc" ? startDiff : -startDiff;
-  }
-  if (sortBy === "startAt") {
-    return direction === "asc" ? startDiff : -startDiff;
-  }
-  const completedA = a.completedAt ? new Date(a.completedAt).getTime() : null;
-  const completedB = b.completedAt ? new Date(b.completedAt).getTime() : null;
-  if (completedA === null && completedB === null) {
-    return direction === "asc" ? startDiff : -startDiff;
-  }
-  if (completedA === null) {
-    return 1;
-  }
-  if (completedB === null) {
-    return -1;
-  }
-  const completedDiff = completedA - completedB;
-  return direction === "asc" ? completedDiff : -completedDiff;
-}
-var TASK_VIEW_STORAGE_KEY = "tasks_saved_views_v1";
-function normalizeSortState(value) {
-  const fallback = {
-    keyword: "",
-    sortBy: "priority",
-    direction: "desc"
-  };
-  if (!value || typeof value !== "object") {
-    return fallback;
-  }
-  const candidate = value;
-  const sortBy = candidate.sortBy === "startAt" || candidate.sortBy === "completedAt" || candidate.sortBy === "priority" ? candidate.sortBy : fallback.sortBy;
-  const direction = candidate.direction === "asc" || candidate.direction === "desc" ? candidate.direction : fallback.direction;
-  const keyword = typeof candidate.keyword === "string" ? candidate.keyword : fallback.keyword;
-  return { keyword, sortBy, direction };
-}
-var DEFAULT_TASK_FILTER_STATE = {
-  projectId: "",
-  taskTypeId: "",
-  status: "",
-  fromDate: "",
-  toDate: "",
-  majorOnly: false,
-  conflictOnly: false
-};
-function normalizeTaskFilterState(value) {
-  if (!value || typeof value !== "object") {
-    return { ...DEFAULT_TASK_FILTER_STATE };
-  }
-  const candidate = value;
-  return {
-    projectId: typeof candidate.projectId === "string" ? candidate.projectId : "",
-    taskTypeId: typeof candidate.taskTypeId === "string" ? candidate.taskTypeId : "",
-    status: candidate.status === "NOT_DONE" || candidate.status === "ON_HOLD" || candidate.status === "DONE" ? candidate.status : "",
-    fromDate: typeof candidate.fromDate === "string" ? candidate.fromDate : "",
-    toDate: typeof candidate.toDate === "string" ? candidate.toDate : "",
-    majorOnly: Boolean(candidate.majorOnly),
-    conflictOnly: Boolean(candidate.conflictOnly)
-  };
-}
-function escapeCsvValue(value) {
-  const normalized = `${value ?? ""}`;
-  if (!/[",\r\n]/.test(normalized)) {
-    return normalized;
-  }
-  return `"${normalized.replace(/"/g, '""')}"`;
-}
-function readSavedTaskViews() {
-  if (typeof localStorage === "undefined") {
-    return [];
-  }
-  try {
-    const raw = localStorage.getItem(TASK_VIEW_STORAGE_KEY);
-    if (!raw) {
-      return [];
+    const taskKey = getDateKey(task.startAt);
+    if (taskKey === todayKey) {
+      groups[0].tasks.push(task);
+    } else if (taskKey === tomorrowKey) {
+      groups[1].tasks.push(task);
+    } else if (taskKey > tomorrowKey && taskKey <= weekEndKey) {
+      groups[2].tasks.push(task);
+    } else {
+      groups[3].tasks.push(task);
     }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed.filter(
-      (item) => item && typeof item === "object" && typeof item.id === "string" && typeof item.name === "string"
-    ).map((item) => {
-      const candidate = item;
-      return {
-        id: candidate.id ?? "",
-        name: candidate.name ?? "",
-        sortState: normalizeSortState(candidate.sortState),
-        filterState: normalizeTaskFilterState(candidate.filterState),
-        updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : ""
-      };
-    });
-  } catch {
-    return [];
   }
-}
-function writeSavedTaskViews(views) {
-  if (typeof localStorage === "undefined") {
-    return;
-  }
-  localStorage.setItem(TASK_VIEW_STORAGE_KEY, JSON.stringify(views));
-}
-function getTaskViewId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `view-${crypto.randomUUID()}`;
-  }
-  return `view-${Math.random().toString(36).slice(2, 10)}`;
+  return groups.map((group) => ({ ...group, tasks: group.tasks.sort(compareByStartAtAsc) })).filter((group) => group.tasks.length > 0);
 }
 function TasksPage() {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
-  const [selectedTaskId, setSelectedTaskId] = (0, import_react11.useState)(null);
-  const [currentTime, setCurrentTime] = (0, import_react11.useState)(() => Date.now());
-  const [sortState, setSortState] = (0, import_react11.useState)({
-    keyword: "",
-    sortBy: "priority",
-    direction: "desc"
-  });
-  const [error, setError] = (0, import_react11.useState)("");
-  const [savedViews, setSavedViews] = (0, import_react11.useState)(() => readSavedTaskViews());
-  const [viewName, setViewName] = (0, import_react11.useState)("");
-  const [viewMessage, setViewMessage] = (0, import_react11.useState)("");
-  const [filterState, setFilterState] = (0, import_react11.useState)(() => ({ ...DEFAULT_TASK_FILTER_STATE }));
-  const [selectedTaskIdsForBulk, setSelectedTaskIdsForBulk] = (0, import_react11.useState)([]);
-  const [bulkMessage, setBulkMessage] = (0, import_react11.useState)("");
-  const projectMap = (0, import_react11.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
-  const typeMap = (0, import_react11.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
-  const conflictMap = (0, import_react11.useMemo)(() => buildTaskConflictMap(tasks), [tasks]);
-  const sortedTasks = (0, import_react11.useMemo)(() => {
-    return tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)).filter((task) => {
-      if (filterState.projectId && task.projectId !== filterState.projectId) {
-        return false;
-      }
-      if (filterState.taskTypeId && task.taskTypeId !== filterState.taskTypeId) {
-        return false;
-      }
-      if (filterState.status && task.status !== filterState.status) {
-        return false;
-      }
-      if (filterState.majorOnly && !task.isMajor) {
-        return false;
-      }
-      if (filterState.conflictOnly && (conflictMap[task.id]?.length ?? 0) === 0) {
-        return false;
-      }
-      const taskTime = new Date(task.startAt).getTime();
-      if (filterState.fromDate && taskTime < (/* @__PURE__ */ new Date(`${filterState.fromDate}T00:00:00`)).getTime()) {
-        return false;
-      }
-      if (filterState.toDate && taskTime > (/* @__PURE__ */ new Date(`${filterState.toDate}T23:59:59`)).getTime()) {
-        return false;
-      }
-      if (!sortState.keyword.trim()) {
-        return true;
-      }
-      const keyword = sortState.keyword.trim().toLowerCase();
-      const projectName = projectMap[task.projectId]?.name ?? "";
-      const typeName = typeMap[task.taskTypeId]?.name ?? "";
-      return `${task.title} ${task.content} ${projectName} ${typeName}`.toLowerCase().includes(keyword);
-    }).sort((a, b) => compareBySortRule(a, b, sortState.sortBy, sortState.direction));
-  }, [tasks, setting.showPastCompleted, sortState, filterState, projectMap, typeMap, conflictMap]);
-  const selectedTask = (0, import_react11.useMemo)(() => tasks.find((task) => task.id === selectedTaskId), [selectedTaskId, tasks]);
-  const selectedTaskSet = (0, import_react11.useMemo)(() => new Set(selectedTaskIdsForBulk), [selectedTaskIdsForBulk]);
-  const conflictTasks = (0, import_react11.useMemo)(
-    () => sortedTasks.filter((task) => (conflictMap[task.id]?.length ?? 0) > 0).slice(0, 8),
-    [sortedTasks, conflictMap]
-  );
-  const taskStats = (0, import_react11.useMemo)(() => {
-    const total = sortedTasks.length;
-    const done = sortedTasks.filter((task) => task.status === "DONE").length;
-    const onHold = sortedTasks.filter((task) => task.status === "ON_HOLD").length;
-    const overdue = sortedTasks.filter((task) => task.status !== "DONE" && new Date(task.startAt).getTime() < currentTime).length;
-    const completionRate = total > 0 ? Math.round(done / total * 100) : 0;
-    return { total, done, onHold, overdue, completionRate };
-  }, [sortedTasks, currentTime]);
-  const bulkTargetTasks = (0, import_react11.useMemo)(() => sortedTasks.filter((task) => selectedTaskSet.has(task.id)), [sortedTasks, selectedTaskSet]);
-  (0, import_react11.useEffect)(() => {
-    writeSavedTaskViews(savedViews);
-  }, [savedViews]);
-  (0, import_react11.useEffect)(() => {
+  const [currentTime, setCurrentTime] = (0, import_react12.useState)(() => Date.now());
+  const [keyword, setKeyword] = (0, import_react12.useState)("");
+  const [quickFilter, setQuickFilter] = (0, import_react12.useState)("ALL");
+  const [projectId, setProjectId] = (0, import_react12.useState)("");
+  const [taskTypeId, setTaskTypeId] = (0, import_react12.useState)("");
+  const [selectedTaskId, setSelectedTaskId] = (0, import_react12.useState)(null);
+  const [detailMode, setDetailMode] = (0, import_react12.useState)("empty");
+  const [createFormKey, setCreateFormKey] = (0, import_react12.useState)(0);
+  const [error, setError] = (0, import_react12.useState)("");
+  const [message, setMessage] = (0, import_react12.useState)("");
+  const projectMap = (0, import_react12.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
+  const typeMap = (0, import_react12.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const conflictMap = (0, import_react12.useMemo)(() => buildTaskConflictMap(tasks), [tasks]);
+  (0, import_react12.useEffect)(() => {
     const timerId = window.setInterval(() => {
       setCurrentTime(Date.now());
     }, 6e4);
@@ -35844,9 +36046,74 @@ function TasksPage() {
       window.clearInterval(timerId);
     };
   }, []);
+  const selectedTask = (0, import_react12.useMemo)(() => tasks.find((task) => task.id === selectedTaskId), [selectedTaskId, tasks]);
+  (0, import_react12.useEffect)(() => {
+    if (detailMode === "edit" && selectedTaskId && !selectedTask) {
+      setSelectedTaskId(null);
+      setDetailMode("empty");
+    }
+  }, [detailMode, selectedTask, selectedTaskId]);
+  const filteredTasks = (0, import_react12.useMemo)(() => {
+    const trimmedKeyword = keyword.trim().toLowerCase();
+    return tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)).filter((task) => {
+      if (projectId && task.projectId !== projectId) {
+        return false;
+      }
+      if (taskTypeId && task.taskTypeId !== taskTypeId) {
+        return false;
+      }
+      if (quickFilter === "TODAY" && getDateKey(task.startAt) !== getDateKey(/* @__PURE__ */ new Date())) {
+        return false;
+      }
+      if (quickFilter === "WEEK" && !isInCurrentWeek(task)) {
+        return false;
+      }
+      if (quickFilter === "PENDING" && task.status === "DONE") {
+        return false;
+      }
+      if (quickFilter === "CONFLICT" && (conflictMap[task.id]?.length ?? 0) === 0) {
+        return false;
+      }
+      if (quickFilter === "MAJOR" && !task.isMajor) {
+        return false;
+      }
+      if (!trimmedKeyword) {
+        return true;
+      }
+      const projectName = projectMap[task.projectId]?.name ?? "";
+      const typeName = typeMap[task.taskTypeId]?.name ?? "";
+      return `${task.title} ${task.content} ${projectName} ${typeName}`.toLowerCase().includes(trimmedKeyword);
+    }).sort(compareByStartAtAsc);
+  }, [conflictMap, keyword, projectId, projectMap, quickFilter, setting.showPastCompleted, taskTypeId, tasks, typeMap]);
+  const groupedTasks = (0, import_react12.useMemo)(() => groupVisibleTasks(filteredTasks), [filteredTasks]);
+  const taskStats = (0, import_react12.useMemo)(() => {
+    const activeSource = tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted));
+    return {
+      total: activeSource.length,
+      pending: activeSource.filter((task) => task.status !== "DONE").length,
+      today: activeSource.filter((task) => getDateKey(task.startAt) === getDateKey(/* @__PURE__ */ new Date())).length,
+      conflicts: activeSource.filter((task) => (conflictMap[task.id]?.length ?? 0) > 0).length,
+      overdue: activeSource.filter((task) => task.status !== "DONE" && new Date(task.startAt).getTime() < currentTime).length
+    };
+  }, [conflictMap, currentTime, setting.showPastCompleted, tasks]);
+  function openCreatePanel() {
+    setError("");
+    setMessage("");
+    setSelectedTaskId(null);
+    setDetailMode("create");
+    setCreateFormKey((prev) => prev + 1);
+  }
+  function openTask(taskId) {
+    setError("");
+    setMessage("");
+    setSelectedTaskId(taskId);
+    setDetailMode("edit");
+  }
   async function handleCreate(input) {
     setError("");
     await createTask(input);
+    setMessage("일정을 추가했습니다.");
+    setDetailMode("empty");
   }
   async function handleUpdate(input) {
     if (!selectedTaskId) {
@@ -35854,6 +36121,7 @@ function TasksPage() {
     }
     setError("");
     await updateTask(selectedTaskId, input);
+    setMessage("일정을 저장했습니다.");
   }
   async function handleDelete() {
     if (!selectedTaskId) {
@@ -35862,448 +36130,198 @@ function TasksPage() {
     setError("");
     await removeTask(selectedTaskId);
     setSelectedTaskId(null);
+    setDetailMode("empty");
+    setMessage("일정을 삭제했습니다.");
   }
-  function handleSaveCurrentView() {
-    const name = viewName.trim();
-    if (!name) {
-      setError("뷰 이름을 입력해 주세요.");
-      return;
-    }
-    setError("");
-    const now = toIsoNow();
-    setSavedViews((prev) => {
-      const existingIndex = prev.findIndex((item) => item.name.toLowerCase() === name.toLowerCase());
-      const entry = {
-        id: existingIndex >= 0 ? prev[existingIndex].id : getTaskViewId(),
-        name,
-        sortState: normalizeSortState(sortState),
-        filterState: normalizeTaskFilterState(filterState),
-        updatedAt: now
-      };
-      if (existingIndex >= 0) {
-        const next = [...prev];
-        next[existingIndex] = entry;
-        return next;
-      }
-      return [entry, ...prev].slice(0, 20);
-    });
-    setViewName("");
-    setViewMessage(`저장됨: ${name}`);
+  function resetFilters() {
+    setKeyword("");
+    setQuickFilter("ALL");
+    setProjectId("");
+    setTaskTypeId("");
   }
-  function handleApplyView(view) {
-    setSortState(normalizeSortState(view.sortState));
-    setFilterState(normalizeTaskFilterState(view.filterState));
-    setViewMessage(`적용됨: ${view.name}`);
-  }
-  function handleDeleteView(viewId) {
-    setSavedViews((prev) => prev.filter((item) => item.id !== viewId));
-    setViewMessage("저장된 뷰가 삭제되었습니다.");
-  }
-  function handleToggleTaskSelection(taskId, checked) {
-    setSelectedTaskIdsForBulk((prev) => {
-      if (checked) {
-        if (prev.includes(taskId)) {
-          return prev;
-        }
-        return [...prev, taskId];
-      }
-      return prev.filter((id) => id !== taskId);
-    });
-  }
-  async function handleBulkStatusChange(status) {
-    if (bulkTargetTasks.length === 0) {
-      setError("상태변경할 일정을 먼저 선택해 주세요.");
-      return;
-    }
-    setError("");
-    setBulkMessage("");
-    let successCount = 0;
-    const failedTitles = [];
-    for (const task of bulkTargetTasks) {
-      try {
-        await updateTask(task.id, toTaskInput5(task, status));
-        successCount += 1;
-      } catch {
-        failedTitles.push(task.title);
-      }
-    }
-    setBulkMessage(`상태 변경 완료: ${successCount}건`);
-    if (failedTitles.length > 0) {
-      setError(`실패 ${failedTitles.length}건: ${failedTitles.slice(0, 3).join(", ")}`);
-    }
-    setSelectedTaskIdsForBulk([]);
-  }
-  async function handleBulkDelete() {
-    if (bulkTargetTasks.length === 0) {
-      setError("삭제할 일정을 먼저 선택해 주세요.");
-      return;
-    }
-    const shouldDelete = window.confirm(`선택한 ${bulkTargetTasks.length}개 일정을 삭제할까요?`);
-    if (!shouldDelete) {
-      return;
-    }
-    setError("");
-    setBulkMessage("");
-    let successCount = 0;
-    const failedTitles = [];
-    for (const task of bulkTargetTasks) {
-      try {
-        await removeTask(task.id);
-        successCount += 1;
-      } catch {
-        failedTitles.push(task.title);
-      }
-    }
-    setBulkMessage(`삭제 완료: ${successCount}건`);
-    if (failedTitles.length > 0) {
-      setError(`삭제 실패 ${failedTitles.length}건: ${failedTitles.slice(0, 3).join(", ")}`);
-    }
-    setSelectedTaskIdsForBulk([]);
-  }
-  function handleExportCsv(onlySelected = false) {
-    const source = onlySelected ? bulkTargetTasks : sortedTasks;
-    if (source.length === 0) {
-      setError("내보낼 일정이 없습니다.");
-      return;
-    }
-    const header = ["title", "content", "project", "taskType", "status", "startAt", "endAt", "isMajor"];
-    const rows = source.map(
-      (task) => [
-        task.title,
-        task.content,
-        projectMap[task.projectId]?.name ?? task.projectId,
-        typeMap[task.taskTypeId]?.name ?? task.taskTypeId,
-        task.status,
-        task.startAt,
-        task.endAt ?? "",
-        task.isMajor ? "Y" : "N"
-      ].map(escapeCsvValue).join(",")
-    );
-    const csv = [header.join(","), ...rows].join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `tasks-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setBulkMessage(`CSV 내보내기 완료: ${source.length}건`);
-  }
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "tasks-layout", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "panel filter-panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { children: "정렬" }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tasks-workspace", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "tasks-overview", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "eyebrow", children: "TASKS" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h2", { children: "일정" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "description-text", children: "모든 일정을 찾고, 상태를 확인하고, 필요한 항목만 빠르게 수정합니다." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "overview-stat-row", "aria-label": "일정 요약", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+          "전체 ",
+          taskStats.total
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+          "오늘 ",
+          taskStats.today
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+          "미완료 ",
+          taskStats.pending
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+          "충돌 ",
+          taskStats.conflicts
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+          "지연 ",
+          taskStats.overdue
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "tasks-control-bar", "aria-label": "일정 검색과 필터", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { className: "search-field", children: [
         "검색",
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
           "input",
           {
             type: "text",
-            value: sortState.keyword,
-            onChange: (event) => setSortState((prev) => ({ ...prev, keyword: event.target.value })),
-            placeholder: "제목/내용/프로젝트/종류 검색"
+            value: keyword,
+            onChange: (event) => setKeyword(event.target.value),
+            placeholder: "제목, 내용, 프로젝트, 종류 검색"
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-        "정렬 기준",
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
-          "select",
-          {
-            value: sortState.sortBy,
-            onChange: (event) => setSortState((prev) => ({ ...prev, sortBy: event.target.value })),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "priority", children: "중요도" }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "startAt", children: "시작 시간" }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "completedAt", children: "완료 시간" })
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-        "순서",
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
-          "select",
-          {
-            value: sortState.direction,
-            onChange: (event) => setSortState((prev) => ({ ...prev, direction: event.target.value })),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "desc", children: "내림차순" }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "asc", children: "오름차순" })
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-        "Project",
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
-          "select",
-          {
-            value: filterState.projectId,
-            onChange: (event) => setFilterState((prev) => ({ ...prev, projectId: event.target.value })),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "", children: "All" }),
-              projects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: project.id, children: project.name }, `filter-project-${project.id}`))
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-        "Task Type",
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
-          "select",
-          {
-            value: filterState.taskTypeId,
-            onChange: (event) => setFilterState((prev) => ({ ...prev, taskTypeId: event.target.value })),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "", children: "All" }),
-              taskTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: type.id, children: type.name }, `filter-type-${type.id}`))
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-        "Status",
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
-          "select",
-          {
-            value: filterState.status,
-            onChange: (event) => setFilterState((prev) => ({
-              ...prev,
-              status: event.target.value === "NOT_DONE" || event.target.value === "ON_HOLD" || event.target.value === "DONE" ? event.target.value : ""
-            })),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "", children: "All" }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "NOT_DONE", children: STATUS_LABELS.NOT_DONE }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "ON_HOLD", children: STATUS_LABELS.ON_HOLD }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "DONE", children: STATUS_LABELS.DONE })
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "form-grid two-col", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-          "From",
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-            "input",
-            {
-              type: "date",
-              value: filterState.fromDate,
-              onChange: (event) => setFilterState((prev) => ({ ...prev, fromDate: event.target.value }))
-            }
-          )
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-          "To",
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-            "input",
-            {
-              type: "date",
-              value: filterState.toDate,
-              onChange: (event) => setFilterState((prev) => ({ ...prev, toDate: event.target.value }))
-            }
-          )
-        ] })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: "checkbox-inline", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-          "input",
-          {
-            type: "checkbox",
-            checked: filterState.majorOnly,
-            onChange: (event) => setFilterState((prev) => ({ ...prev, majorOnly: event.target.checked }))
-          }
-        ),
-        "Major only"
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: "checkbox-inline", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-          "input",
-          {
-            type: "checkbox",
-            checked: filterState.conflictOnly,
-            onChange: (event) => setFilterState((prev) => ({ ...prev, conflictOnly: event.target.checked }))
-          }
-        ),
-        "Conflict only"
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "chip-row", role: "group", "aria-label": "빠른 필터", children: QUICK_FILTERS.map((filter) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
         "button",
         {
           type: "button",
-          className: "btn btn-soft",
-          onClick: () => {
-            setSortState({
-              keyword: "",
-              sortBy: "priority",
-              direction: "desc"
-            });
-            setFilterState({ ...DEFAULT_TASK_FILTER_STATE });
-            setSelectedTaskIdsForBulk([]);
-            setBulkMessage("");
-          },
-          children: "초기화"
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "mini-list-block", "aria-label": "저장한 뷰", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { children: "저장 뷰" }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { children: [
-          "뷰 이름",
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("input", { type: "text", value: viewName, onChange: (event) => setViewName(event.target.value), placeholder: "예: 오늘 집중" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: handleSaveCurrentView, children: "현재 필터 저장" }),
-        viewMessage ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "success-text", children: viewMessage }) : null,
-        savedViews.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "empty-text", children: "저장한 뷰가 없습니다." }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "mini-list saved-view-list", children: savedViews.map((view) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("li", { className: "saved-view-item", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: view.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "button-row compact", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => handleApplyView(view), children: "적용" }),
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-danger", onClick: () => handleDeleteView(view.id), children: "삭제" })
-          ] })
-        ] }, view.id)) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "mini-list-block", "aria-label": "충돌 일정 요약", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { children: "충돌 일정" }),
-        conflictTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "empty-text", children: "충돌이 없습니다." }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "mini-list", children: conflictTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("li", { children: [
-          task.title,
-          " (",
-          conflictMap[task.id]?.length ?? 0,
-          "건)"
-        ] }, `conflict-${task.id}`)) })
-      ] })
+          className: `filter-chip ${quickFilter === filter.value ? "active" : ""}`,
+          onClick: () => setQuickFilter(filter.value),
+          children: filter.label
+        },
+        filter.value
+      )) }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-primary", onClick: openCreatePanel, children: "새 일정" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "panel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "panel-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { children: "일정 목록" }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("small", { children: [
-          sortedTasks.length,
-          "개"
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "advanced-filter-bar", "aria-label": "세부 필터", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
+        "프로젝트",
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("select", { value: projectId, onChange: (event) => setProjectId(event.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "전체 프로젝트" }),
+          projects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: project.id, children: project.name }, project.id))
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "kpi-grid", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.total }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Visible" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.done }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Done" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.onHold }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "On hold" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card danger", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: taskStats.overdue }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Overdue" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "kpi-card accent", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("strong", { children: [
-            taskStats.completionRate,
-            "%"
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
+        "종류",
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("select", { value: taskTypeId, onChange: (event) => setTaskTypeId(event.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "전체 종류" }),
+          taskTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: type.id, children: type.name }, type.id))
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-soft", onClick: resetFilters, children: "필터 초기화" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tasks-split-view", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "task-group-list", "aria-label": "일정 목록", children: [
+        groupedTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "empty-state", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h3", { children: "조건에 맞는 일정이 없습니다." }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "검색어와 필터를 줄이거나 새 일정을 추가하세요." }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-primary", onClick: openCreatePanel, children: "새 일정" })
+        ] }) : null,
+        groupedTasks.map((group) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "task-date-group", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("header", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h3", { children: group.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+              group.tasks.length,
+              "개"
+            ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { children: "Completion" })
-        ] })
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "task-stack", children: group.tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+            TaskItem,
+            {
+              task,
+              project: projectMap[task.projectId],
+              taskType: typeMap[task.taskTypeId],
+              timeFormat: setting.timeFormat,
+              selected: selectedTaskId === task.id,
+              hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
+              onClick: () => openTask(task.id),
+              onStatusChange: (status) => {
+                void updateTask(task.id, toTaskInput5(task, status)).catch((updateError) => {
+                  setError(updateError instanceof Error ? updateError.message : "상태 변경에 실패했습니다.");
+                });
+              }
+            },
+            task.id
+          )) })
+        ] }, group.id))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "bulk-toolbar", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "description-text", children: [
-          "Bulk selected: ",
-          bulkTargetTasks.length
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "button-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setSelectedTaskIdsForBulk(sortedTasks.map((task) => task.id)), children: "Select all" }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setSelectedTaskIdsForBulk([]), children: "Clear" }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => void handleBulkStatusChange("NOT_DONE"), children: STATUS_LABELS.NOT_DONE }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => void handleBulkStatusChange("ON_HOLD"), children: STATUS_LABELS.ON_HOLD }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => void handleBulkStatusChange("DONE"), children: STATUS_LABELS.DONE }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-danger", onClick: () => void handleBulkDelete(), children: "Delete selected" }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => handleExportCsv(false), children: "Export CSV (all)" }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => handleExportCsv(true), children: "Export CSV (selected)" })
-        ] }),
-        bulkMessage ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "success-text", children: bulkMessage }) : null
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "task-stack", children: [
-        sortedTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "empty-text", children: "등록된 일정이 없습니다." }) : null,
-        sortedTasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-          TaskItem,
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("aside", { className: "task-detail-panel", "aria-label": "일정 상세", children: [
+        detailMode === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "empty-state compact", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h3", { children: "일정을 선택하세요." }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "목록에서 일정을 선택하면 상세 정보와 편집 폼이 이곳에 표시됩니다." }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-primary", onClick: openCreatePanel, children: "새 일정 추가" }),
+          message ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "success-text", children: message }) : null
+        ] }) : null,
+        detailMode === "create" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          TaskForm,
           {
-            task,
-            project: projectMap[task.projectId],
-            taskType: typeMap[task.taskTypeId],
+            projects,
+            taskTypes,
+            allTasks: tasks,
             timeFormat: setting.timeFormat,
-            selected: selectedTaskId === task.id,
-            hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
-            selectable: true,
-            selectedForBulk: selectedTaskSet.has(task.id),
-            onToggleSelect: (checked) => handleToggleTaskSelection(task.id, checked),
-            onClick: () => setSelectedTaskId(task.id),
-            onStatusChange: (status) => {
-              void updateTask(task.id, toTaskInput5(task, status)).catch((updateError) => {
-                setError(updateError instanceof Error ? updateError.message : "상태 변경에 실패했습니다.");
-              });
-            }
+            onSubmit: handleCreate
           },
-          task.id
-        ))
+          `new-task-${createFormKey}`
+        ) : null,
+        detailMode === "edit" && selectedTask ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "detail-context", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "badge-pill", children: "선택한 일정" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: selectedTask.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("small", { children: formatDateTime(selectedTask.startAt, setting.timeFormat) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+            TaskForm,
+            {
+              projects,
+              taskTypes,
+              allTasks: tasks,
+              initialTask: selectedTask,
+              timeFormat: setting.timeFormat,
+              onSubmit: handleUpdate,
+              onDelete: handleDelete,
+              onCancel: () => {
+                setSelectedTaskId(null);
+                setDetailMode("empty");
+              }
+            },
+            selectedTask.id
+          )
+        ] }) : null,
+        error ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "error-text", children: error }) : null,
+        message && detailMode !== "empty" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "success-text", children: message }) : null
       ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "panel", children: [
-      selectedTask ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-        TaskForm,
-        {
-          projects,
-          taskTypes,
-          allTasks: tasks,
-          initialTask: selectedTask,
-          timeFormat: setting.timeFormat,
-          onSubmit: handleUpdate,
-          onDelete: handleDelete,
-          onCancel: () => setSelectedTaskId(null)
-        },
-        selectedTask.id
-      ) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-        TaskForm,
-        {
-          projects,
-          taskTypes,
-          allTasks: tasks,
-          timeFormat: setting.timeFormat,
-          onSubmit: handleCreate
-        },
-        "new-task-form"
-      ),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "error-text", children: error }) : null
     ] })
   ] });
 }
 
 // src/App.tsx
-var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
 function RoutedApp() {
   const { isReady } = useAppData();
   if (!isReady) {
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "loading-screen", children: "초기 데이터를 불러오는 중입니다..." });
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "loading-screen", children: "초기 데이터를 불러오는 중입니다..." });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(HashRouter, { children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Routes, { children: /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(Route, { element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(AppShell, {}), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/dashboard", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(DashboardPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/tasks", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(TasksPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/ai", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/projects", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ProjectsPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/types", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Navigate, { to: "/settings", replace: true }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/archive", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ArchivePage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "/settings", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(SettingsPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Route, { path: "*", element: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Navigate, { to: "/dashboard", replace: true }) })
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(HashRouter, { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Routes, { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(Route, { element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(AppShell, {}), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/dashboard", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(DashboardPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/tasks", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(TasksPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/ai", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/projects", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ProjectsPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/types", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/settings", replace: true }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/archive", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ArchivePage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/settings", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(SettingsPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "*", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/dashboard", replace: true }) })
   ] }) }) });
 }
 function App() {
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(AppDataProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(RoutedApp, {}) });
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(AppDataProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(RoutedApp, {}) });
 }
 
 // src/main.tsx
-var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
 (0, import_client.createRoot)(document.getElementById("root")).render(
-  /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(import_react12.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(App, {}) })
+  /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(import_react13.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(App, {}) })
 );
 /*! Bundled license information:
 

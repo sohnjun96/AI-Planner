@@ -6,9 +6,9 @@ import { TaskForm } from "./TaskForm";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
-  { to: "/tasks", label: "일정 관리" },
-  { to: "/projects", label: "프로젝트 관리" },
-  { to: "/archive", label: "지난 업무" },
+  { to: "/tasks", label: "일정" },
+  { to: "/projects", label: "프로젝트" },
+  { to: "/archive", label: "보관함" },
   { to: "/settings", label: "설정" },
 ];
 
@@ -30,9 +30,9 @@ export function AppShell() {
   const commandItems = useMemo<CommandItem[]>(
     () => [
       { id: "go-dashboard", label: "이동: 대시보드", keywords: "대시보드 홈 dashboard", run: () => navigate("/dashboard") },
-      { id: "go-tasks", label: "이동: 일정 관리", keywords: "일정 목록 tasks", run: () => navigate("/tasks") },
+      { id: "go-tasks", label: "이동: 일정", keywords: "일정 목록 tasks", run: () => navigate("/tasks") },
       { id: "go-projects", label: "이동: 프로젝트", keywords: "프로젝트 projects", run: () => navigate("/projects") },
-      { id: "go-archive", label: "이동: 지난 업무", keywords: "아카이브 archive", run: () => navigate("/archive") },
+      { id: "go-archive", label: "이동: 보관함", keywords: "보관함 archive", run: () => navigate("/archive") },
       { id: "go-settings", label: "이동: 설정", keywords: "설정 settings", run: () => navigate("/settings") },
       {
         id: "quick-add",
@@ -109,71 +109,74 @@ export function AppShell() {
         본문으로 건너뛰기
       </a>
 
-      <aside className="sidebar" aria-label="기본 메뉴">
-        <h1 className="brand">업무 일정관리</h1>
-        <nav className="sidebar-nav" aria-label="페이지 이동">
+      <header className="app-top-nav">
+        <div className="top-nav-brand" aria-label="AI Planner">
+          <span className="brand-mark">AP</span>
+          <div>
+            <p className="eyebrow">AI PLANNER</p>
+            <h1>업무 일정관리</h1>
+          </div>
+        </div>
+
+        <nav className="top-nav-list" aria-label="페이지 이동">
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
               {item.label}
             </NavLink>
           ))}
         </nav>
-      </aside>
 
-      <div className="main-area">
-        <header className="topbar">
-          <div className="topbar-actions">
-            <label className="checkbox-inline">
-              <input
-                type="checkbox"
-                checked={setting.showPastCompleted}
-                onChange={(event) => {
-                  void updateSetting({ showPastCompleted: event.target.checked });
-                }}
-              />
-              지난 완료 일정 보기
-            </label>
-
-            <button
-              type="button"
-              className="btn btn-soft"
-              onClick={() => {
-                void undoLastChange().catch(() => {});
+        <div className="top-nav-actions">
+          <label className="checkbox-inline compact">
+            <input
+              type="checkbox"
+              checked={setting.showPastCompleted}
+              onChange={(event) => {
+                void updateSetting({ showPastCompleted: event.target.checked });
               }}
-              disabled={!canUndo}
-              title={undoDescription ?? "되돌릴 작업이 없습니다."}
-            >
-              되돌리기
-            </button>
+            />
+            지난 완료 보기
+          </label>
 
-            <button
-              type="button"
-              className="btn btn-soft"
-              onClick={() => {
-                setIsCommandOpen(true);
-              }}
-              aria-label="명령 팔레트 열기, 단축키 Ctrl+K"
-            >
-              명령
-            </button>
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => {
+              void undoLastChange().catch(() => {});
+            }}
+            disabled={!canUndo}
+            title={undoDescription ?? "되돌릴 작업이 없습니다."}
+          >
+            되돌리기
+          </button>
 
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                setIsQuickAddOpen(true);
-              }}
-              aria-label="빠른 일정 추가, 단축키 Ctrl+Shift+N"
-            >
-              빠른 일정 추가
-            </button>
-          </div>
-        </header>
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => {
+              setIsCommandOpen(true);
+            }}
+            aria-label="명령 팔레트 열기, 단축키 Ctrl+K"
+          >
+            명령
+          </button>
 
-        <main className="page-content" id="main-content" tabIndex={-1}>
-          <Outlet />
-        </main>
-      </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setIsQuickAddOpen(true);
+            }}
+            aria-label="빠른 일정 추가, 단축키 Ctrl+Shift+N"
+          >
+            빠른 추가
+          </button>
+        </div>
+      </header>
+
+      <main className="page-content" id="main-content" tabIndex={-1}>
+        <Outlet />
+      </main>
 
       {isCommandOpen ? (
         <div
@@ -192,7 +195,10 @@ export function AppShell() {
             }}
           >
             <header className="panel-header">
-              <h2>명령 팔레트</h2>
+              <div>
+                <p className="eyebrow">COMMAND</p>
+                <h2>명령 팔레트</h2>
+              </div>
               <button
                 type="button"
                 className="btn btn-soft"
@@ -244,7 +250,10 @@ export function AppShell() {
             }}
           >
             <header className="panel-header">
-              <h2>빠른 일정 추가</h2>
+              <div>
+                <p className="eyebrow">QUICK ADD</p>
+                <h2>빠른 일정 추가</h2>
+              </div>
               <button
                 type="button"
                 className="btn btn-soft"

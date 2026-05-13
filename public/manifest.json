@@ -4,7 +4,8 @@
   "description": "Full-page work schedule manager with calendar, project and task-type organization.",
   "version": "0.1.0",
   "action": {
-    "default_title": "Open Work Schedule Manager"
+    "default_title": "AI Planner",
+    "default_popup": "popup.html"
   },
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": ["<all_urls>"],

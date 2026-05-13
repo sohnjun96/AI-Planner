@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ColorSelector } from "../components/ColorSelector";
 import { TaskForm } from "../components/TaskForm";
@@ -6,7 +6,7 @@ import { TaskItem } from "../components/TaskItem";
 import { DEFAULT_PROJECT_ID, pickRandomPresetColor } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Project, Task, TaskFormInput, TaskStatus } from "../models";
-import { compareByStartAtAsc } from "../utils/date";
+import { addDays, compareByStartAtAsc, getDateKey } from "../utils/date";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 
 interface ProjectFormState {
@@ -25,7 +25,51 @@ interface ProjectInput {
   isActive: boolean;
 }
 
+type ProjectTaskModalState =
+  | {
+      mode: "create";
+    }
+  | {
+      mode: "edit";
+      taskId: string;
+    }
+  | null;
+
+type ProjectSettingsModalState =
+  | {
+      mode: "create";
+    }
+  | {
+      mode: "edit";
+      projectId: string;
+    }
+  | null;
+
 const PROJECT_FORM_AUTOSAVE_DELAY_MS = 700;
+
+function createEmptyProjectForm(): ProjectFormState {
+  return {
+    id: undefined,
+    name: "",
+    color: pickRandomPresetColor(),
+    description: "",
+    isActive: true,
+  };
+}
+
+function createProjectFormFromProject(project?: Project): ProjectFormState {
+  if (!project) {
+    return createEmptyProjectForm();
+  }
+
+  return {
+    id: project.id,
+    name: project.name,
+    color: project.color,
+    description: project.description ?? "",
+    isActive: project.isActive,
+  };
+}
 
 function buildProjectInput(form: ProjectFormState): { input?: ProjectInput; error?: string } {
   const name = form.name.trim();
@@ -54,40 +98,6 @@ function serializeProjectInput(input: ProjectInput): string {
   });
 }
 
-type ProjectTaskModalState =
-  | {
-      mode: "create";
-    }
-  | {
-      mode: "edit";
-      taskId: string;
-    }
-  | null;
-
-function createEmptyProjectForm(): ProjectFormState {
-  return {
-    id: undefined,
-    name: "",
-    color: pickRandomPresetColor(),
-    description: "",
-    isActive: true,
-  };
-}
-
-function createProjectFormFromProject(project?: Project): ProjectFormState {
-  if (!project) {
-    return createEmptyProjectForm();
-  }
-
-  return {
-    id: project.id,
-    name: project.name,
-    color: project.color,
-    description: project.description ?? "",
-    isActive: project.isActive,
-  };
-}
-
 function toTaskInput(task: Task, statusOverride?: TaskStatus, projectIdOverride?: string): TaskFormInput {
   return {
     title: task.title,
@@ -106,16 +116,10 @@ interface ProjectEditorPanelProps {
   createMode: boolean;
   onSaveProject: (input: ProjectInput) => Promise<void>;
   onDeleteProject: (projectId: string) => Promise<void>;
-  onExitCreateMode: () => void;
+  onClose: () => void;
 }
 
-function ProjectEditorPanel({
-  initialProject,
-  createMode,
-  onSaveProject,
-  onDeleteProject,
-  onExitCreateMode,
-}: ProjectEditorPanelProps) {
+function ProjectEditorPanel({ initialProject, createMode, onSaveProject, onDeleteProject, onClose }: ProjectEditorPanelProps) {
   const [form, setForm] = useState<ProjectFormState>(() => {
     return createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject);
   });
@@ -127,6 +131,12 @@ function ProjectEditorPanel({
       return built.input ? serializeProjectInput(built.input) : "";
     })(),
   );
+
+  useEffect(() => {
+    setForm(createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject));
+    setError("");
+    setSuccess("");
+  }, [createMode, initialProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (createMode || !form.id) {
@@ -176,11 +186,7 @@ function ProjectEditorPanel({
       await onSaveProject(built.input);
       autoSaveSnapshotRef.current = serializeProjectInput(built.input);
       setSuccess(form.id ? "저장됨." : "프로젝트가 생성되었습니다.");
-
-      if (!form.id) {
-        setForm(createEmptyProjectForm());
-        autoSaveSnapshotRef.current = "";
-      }
+      onClose();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "프로젝트 저장에 실패했습니다.");
     }
@@ -196,22 +202,19 @@ function ProjectEditorPanel({
     try {
       await onDeleteProject(form.id);
       setSuccess("프로젝트가 삭제되었습니다.");
-      setForm(createEmptyProjectForm());
-      autoSaveSnapshotRef.current = "";
+      onClose();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "프로젝트 삭제에 실패했습니다.");
     }
   }
 
   return (
-    <section className="panel">
+    <section className="modal-card panel project-settings-card" role="dialog" aria-modal="true" aria-label="프로젝트 설정">
       <header className="panel-header">
-        <h2>{createMode ? "새 프로젝트" : "프로젝트 수정"}</h2>
-        {createMode ? (
-          <button className="btn btn-soft" type="button" onClick={onExitCreateMode}>
-            선택한 프로젝트로 돌아가기
-          </button>
-        ) : null}
+        <h2>{createMode ? "새 프로젝트" : "프로젝트 설정"}</h2>
+        <button className="btn btn-soft" type="button" onClick={onClose}>
+          닫기
+        </button>
       </header>
 
       <form className="task-form" onSubmit={handleSubmit}>
@@ -266,21 +269,6 @@ function ProjectEditorPanel({
               삭제
             </button>
           ) : null}
-
-          <button
-            className="btn btn-soft"
-            type="button"
-            onClick={() => {
-              setError("");
-              setSuccess("");
-              const nextForm = createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject);
-              setForm(nextForm);
-              const built = buildProjectInput(nextForm);
-              autoSaveSnapshotRef.current = built.input ? serializeProjectInput(built.input) : "";
-            }}
-          >
-            초기화
-          </button>
         </div>
 
         {error ? <p className="error-text">{error}</p> : null}
@@ -293,58 +281,95 @@ function ProjectEditorPanel({
 export function ProjectsPage() {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask, upsertProject, deleteProject } = useAppData();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [projectKeyword, setProjectKeyword] = useState("");
   const [taskKeyword, setTaskKeyword] = useState("");
   const [taskModalState, setTaskModalState] = useState<ProjectTaskModalState>(null);
+  const [projectSettingsModal, setProjectSettingsModal] = useState<ProjectSettingsModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
 
   const selectedProjectIdFromQuery = searchParams.get("projectId");
 
-  const sortedProjects = useMemo(
-    () => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")),
-    [projects],
-  );
+  const sortedProjects = useMemo(() => {
+    const keyword = projectKeyword.trim().toLowerCase();
+    return [...projects]
+      .filter((project) => {
+        if (!keyword) {
+          return true;
+        }
+        return `${project.name} ${project.description ?? ""}`.toLowerCase().includes(keyword);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  }, [projectKeyword, projects]);
+
+  const allSortedProjects = useMemo(() => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")), [projects]);
 
   const selectedProject = useMemo(() => {
     if (selectedProjectIdFromQuery) {
-      const byQuery = sortedProjects.find((project) => project.id === selectedProjectIdFromQuery);
+      const byQuery = projects.find((project) => project.id === selectedProjectIdFromQuery);
       if (byQuery) {
         return byQuery;
       }
     }
-    return sortedProjects[0];
-  }, [selectedProjectIdFromQuery, sortedProjects]);
-
-  const taskCountByProject = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const task of tasks) {
-      map[task.projectId] = (map[task.projectId] ?? 0) + 1;
-    }
-    return map;
-  }, [tasks]);
+    return allSortedProjects[0];
+  }, [allSortedProjects, projects, selectedProjectIdFromQuery]);
 
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const conflictMap = useMemo(() => buildTaskConflictMap(tasks), [tasks]);
+
+  const projectStats = useMemo(() => {
+    const todayKey = getDateKey(new Date());
+    const weekEndKey = getDateKey(addDays(new Date(), 7));
+    const map: Record<string, { total: number; active: number; done: number; week: number; conflicts: number; recent: Task[]; completion: number }> = {};
+
+    for (const project of projects) {
+      map[project.id] = { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+    }
+
+    for (const task of tasks) {
+      const stats = map[task.projectId] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+      stats.total += 1;
+      if (task.status === "DONE") {
+        stats.done += 1;
+      } else {
+        stats.active += 1;
+      }
+      const taskKey = getDateKey(task.startAt);
+      if (taskKey >= todayKey && taskKey <= weekEndKey) {
+        stats.week += 1;
+      }
+      if ((conflictMap[task.id]?.length ?? 0) > 0) {
+        stats.conflicts += 1;
+      }
+      stats.recent.push(task);
+      map[task.projectId] = stats;
+    }
+
+    for (const stats of Object.values(map)) {
+      stats.completion = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
+      stats.recent = stats.recent.sort(compareByStartAtAsc).slice(0, 2);
+    }
+
+    return map;
+  }, [conflictMap, projects, tasks]);
 
   const projectTasks = useMemo(() => {
     if (!selectedProject) {
       return [];
     }
 
+    const keyword = taskKeyword.trim().toLowerCase();
     return tasks
       .filter((task) => task.projectId === selectedProject.id)
       .filter((task) => {
-        if (!taskKeyword.trim()) {
+        if (!keyword) {
           return true;
         }
-        const keyword = taskKeyword.trim().toLowerCase();
         const typeName = typeMap[task.taskTypeId]?.name ?? "";
-        const projectName = projectMap[task.projectId]?.name ?? "";
-        return `${task.title} ${task.content} ${typeName} ${projectName}`.toLowerCase().includes(keyword);
+        return `${task.title} ${task.content} ${typeName}`.toLowerCase().includes(keyword);
       })
       .sort(compareByStartAtAsc);
-  }, [selectedProject, tasks, taskKeyword, typeMap, projectMap]);
+  }, [selectedProject, taskKeyword, tasks, typeMap]);
 
   const editingTask = useMemo(() => {
     if (taskModalState?.mode !== "edit") {
@@ -356,14 +381,22 @@ export function ProjectsPage() {
   const activeTaskModalState: ProjectTaskModalState =
     taskModalState?.mode === "edit" && !editingTask ? null : taskModalState;
 
+  const editingProject = useMemo(() => {
+    if (projectSettingsModal?.mode !== "edit") {
+      return undefined;
+    }
+    return projects.find((project) => project.id === projectSettingsModal.projectId);
+  }, [projectSettingsModal, projects]);
+
   useEffect(() => {
-    if (!activeTaskModalState) {
+    if (!activeTaskModalState && !projectSettingsModal) {
       return;
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setTaskModalState(null);
+        setProjectSettingsModal(null);
       }
     };
 
@@ -371,7 +404,7 @@ export function ProjectsPage() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeTaskModalState]);
+  }, [activeTaskModalState, projectSettingsModal]);
 
   async function handleCreateProjectTask(input: TaskFormInput) {
     if (!selectedProject) {
@@ -412,135 +445,169 @@ export function ProjectsPage() {
 
   async function handleDeleteProject(projectId: string) {
     await deleteProject(projectId);
-
     if (selectedProjectIdFromQuery === projectId) {
       setSearchParams({});
     }
+  }
 
-    setIsCreatingProject(false);
+  function selectProject(projectId: string) {
+    setSearchParams({ projectId });
+    setTaskKeyword("");
   }
 
   return (
-    <div className="project-management-layout">
-      <section className="panel">
-        <header className="panel-header">
+    <div className="projects-workspace">
+      <section className="projects-overview">
+        <div>
+          <p className="eyebrow">PROJECTS</p>
           <h2>프로젝트</h2>
-          <small>{sortedProjects.length}개</small>
-        </header>
-
-        <div className="button-row">
-          <button
-            className="btn btn-soft"
-            type="button"
-            onClick={() => {
-              setIsCreatingProject(true);
-            }}
-          >
-            프로젝트 추가
+          <p className="description-text">프로젝트별 진행 상황을 먼저 보고, 필요한 프로젝트 안에서 일정을 관리합니다.</p>
+        </div>
+        <div className="projects-actions">
+          <label className="search-field">
+            검색
+            <input
+              type="text"
+              value={projectKeyword}
+              onChange={(event) => setProjectKeyword(event.target.value)}
+              placeholder="프로젝트 검색"
+            />
+          </label>
+          <button type="button" className="btn btn-primary" onClick={() => setProjectSettingsModal({ mode: "create" })}>
+            새 프로젝트
           </button>
         </div>
-
-        <ul className="entity-list">
-          {sortedProjects.map((project) => (
-            <li
-              key={project.id}
-              className={`entity-item ${selectedProject?.id === project.id ? "selected" : ""}`}
-              onClick={() => {
-                setSearchParams({ projectId: project.id });
-                setIsCreatingProject(false);
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label={`${project.name} 프로젝트 선택`}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  setSearchParams({ projectId: project.id });
-                  setIsCreatingProject(false);
-                }
-              }}
-            >
-              <span className="color-dot" style={{ backgroundColor: project.color }} />
-              <strong>{project.name}</strong>
-              <small>{taskCountByProject[project.id] ?? 0}건</small>
-            </li>
-          ))}
-        </ul>
       </section>
 
-      <section className="panel project-task-panel">
-        <header className="panel-header">
-          <h2>{selectedProject ? `${selectedProject.name} 일정` : "프로젝트 일정"}</h2>
-          <div className="panel-header-actions">
-            <small>{projectTasks.length}개</small>
-            <button
-              type="button"
-              className="btn btn-soft"
-              disabled={!selectedProject}
-              onClick={() => {
-                setTaskFormSerial((prev) => prev + 1);
-                setTaskModalState({ mode: "create" });
-              }}
-              >
-              일정 추가
-            </button>
+      <section className="project-card-grid" aria-label="프로젝트 목록">
+        {sortedProjects.length === 0 ? (
+          <div className="empty-state">
+            <h3>프로젝트가 없습니다.</h3>
+            <p>검색어를 줄이거나 새 프로젝트를 추가하세요.</p>
           </div>
-        </header>
+        ) : null}
 
-        {selectedProject?.description ? <p className="description-text">{selectedProject.description}</p> : null}
-
-        <label>
-          프로젝트 일정 검색
-          <input
-            type="text"
-            value={taskKeyword}
-            onChange={(event) => setTaskKeyword(event.target.value)}
-            placeholder="제목 또는 내용 검색"
-          />
-        </label>
-
-        <div className="task-stack">
-          {!selectedProject ? <p className="empty-text">프로젝트가 없습니다.</p> : null}
-          {selectedProject && projectTasks.length === 0 ? (
-            <p className="empty-text">이 프로젝트에는 아직 일정이 없습니다.</p>
-          ) : null}
-          {projectTasks.map((task) => (
-            <TaskItem
-              key={task.id}
-              task={task}
-              project={projectMap[task.projectId]}
-              taskType={typeMap[task.taskTypeId]}
-              timeFormat={setting.timeFormat}
-              hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
-              onClick={() => {
-                setTaskModalState({ mode: "edit", taskId: task.id });
-              }}
-              onStatusChange={(status) => {
-                void updateTask(task.id, toTaskInput(task, status, selectedProject?.id));
-              }}
-            />
-          ))}
-        </div>
+        {sortedProjects.map((project) => {
+          const stats = projectStats[project.id] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+          return (
+            <button
+              key={project.id}
+              type="button"
+              className={`project-summary-card ${selectedProject?.id === project.id ? "selected" : ""}`}
+              onClick={() => selectProject(project.id)}
+            >
+              <span className="project-color-bar" style={{ backgroundColor: project.color }} />
+              <span className="project-card-title">
+                <strong>{project.name}</strong>
+                <small>{project.isActive ? "사용 중" : "비활성"}</small>
+              </span>
+              <span className="project-card-metrics">
+                <span>진행 {stats.active}</span>
+                <span>이번 주 {stats.week}</span>
+                <span>완료율 {stats.completion}%</span>
+                {stats.conflicts > 0 ? <span>충돌 {stats.conflicts}</span> : null}
+              </span>
+              <span className="project-card-recent">
+                {stats.recent.length === 0 ? <small>아직 일정이 없습니다.</small> : null}
+                {stats.recent.map((task) => (
+                  <small key={task.id}>{task.title}</small>
+                ))}
+              </span>
+            </button>
+          );
+        })}
       </section>
 
-      <ProjectEditorPanel
-        key={`project-editor-${isCreatingProject ? "new" : selectedProject?.id ?? "none"}`}
-        initialProject={!isCreatingProject ? selectedProject : undefined}
-        createMode={isCreatingProject}
-        onSaveProject={handleSaveProject}
-        onDeleteProject={handleDeleteProject}
-        onExitCreateMode={() => {
-          setIsCreatingProject(false);
-        }}
-      />
+      <section className="project-detail-panel">
+        {selectedProject ? (
+          <>
+            <header className="panel-header">
+              <div>
+                <p className="eyebrow">PROJECT DETAIL</p>
+                <h2>{selectedProject.name}</h2>
+                {selectedProject.description ? <p className="description-text">{selectedProject.description}</p> : null}
+              </div>
+              <div className="panel-header-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setTaskFormSerial((prev) => prev + 1);
+                    setTaskModalState({ mode: "create" });
+                  }}
+                >
+                  일정 추가
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-soft"
+                  onClick={() => setProjectSettingsModal({ mode: "edit", projectId: selectedProject.id })}
+                >
+                  프로젝트 설정
+                </button>
+              </div>
+            </header>
+
+            <div className="overview-stat-row">
+              <span>진행 {projectStats[selectedProject.id]?.active ?? 0}</span>
+              <span>완료 {projectStats[selectedProject.id]?.done ?? 0}</span>
+              <span>이번 주 {projectStats[selectedProject.id]?.week ?? 0}</span>
+              <span>충돌 {projectStats[selectedProject.id]?.conflicts ?? 0}</span>
+            </div>
+
+            <label className="search-field">
+              프로젝트 일정 검색
+              <input
+                type="text"
+                value={taskKeyword}
+                onChange={(event) => setTaskKeyword(event.target.value)}
+                placeholder="제목 또는 내용 검색"
+              />
+            </label>
+
+            <div className="task-stack">
+              {projectTasks.length === 0 ? <p className="empty-text">이 프로젝트에는 아직 일정이 없습니다.</p> : null}
+              {projectTasks.map((task) => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  project={projectMap[task.projectId]}
+                  taskType={typeMap[task.taskTypeId]}
+                  timeFormat={setting.timeFormat}
+                  hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
+                  onClick={() => setTaskModalState({ mode: "edit", taskId: task.id })}
+                  onStatusChange={(status) => {
+                    void updateTask(task.id, toTaskInput(task, status, selectedProject.id));
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <h3>프로젝트를 선택하세요.</h3>
+            <p>프로젝트 카드에서 항목을 선택하면 일정과 요약이 표시됩니다.</p>
+          </div>
+        )}
+      </section>
+
+      {projectSettingsModal ? (
+        <div className="modal-backdrop" onClick={() => setProjectSettingsModal(null)}>
+          <div onClick={(event) => event.stopPropagation()}>
+            <ProjectEditorPanel
+              key={projectSettingsModal.mode === "create" ? "new-project" : editingProject?.id ?? "project"}
+              initialProject={projectSettingsModal.mode === "edit" ? editingProject : undefined}
+              createMode={projectSettingsModal.mode === "create"}
+              onSaveProject={handleSaveProject}
+              onDeleteProject={handleDeleteProject}
+              onClose={() => setProjectSettingsModal(null)}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {activeTaskModalState ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setTaskModalState(null);
-          }}
-        >
+        <div className="modal-backdrop" onClick={() => setTaskModalState(null)}>
           <section
             className="modal-card panel"
             role="dialog"
@@ -552,13 +619,7 @@ export function ProjectsPage() {
           >
             <header className="panel-header">
               <h2>{activeTaskModalState.mode === "create" ? "프로젝트 일정 추가" : "프로젝트 일정 수정"}</h2>
-              <button
-                type="button"
-                className="btn btn-soft"
-                onClick={() => {
-                  setTaskModalState(null);
-                }}
-              >
+              <button type="button" className="btn btn-soft" onClick={() => setTaskModalState(null)}>
                 닫기
               </button>
             </header>
@@ -586,9 +647,7 @@ export function ProjectsPage() {
                 timeFormat={setting.timeFormat}
                 onSubmit={handleUpdateProjectTask}
                 onDelete={handleDeleteProjectTask}
-                onCancel={() => {
-                  setTaskModalState(null);
-                }}
+                onCancel={() => setTaskModalState(null)}
               />
             ) : null}
           </section>
@@ -597,4 +656,3 @@ export function ProjectsPage() {
     </div>
   );
 }
-

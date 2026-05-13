@@ -9,13 +9,57 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const publicDir = path.join(rootDir, "public");
 
+function toDistHref(outputPath) {
+  return `./${path.relative(distDir, path.resolve(rootDir, outputPath)).replace(/\\/g, "/")}`;
+}
+
+function cssHrefsForEntry(entryName, cssOutputs) {
+  const exactMatch = cssOutputs.find((filePath) => path.basename(filePath) === `${entryName}.css`);
+  return (exactMatch ? [exactMatch] : cssOutputs).map(toDistHref);
+}
+
+async function readHtmlMetadata(sourceHtmlPath, fallbackTitle) {
+  const sourceHtml = await readFile(sourceHtmlPath, "utf8");
+  const langMatched = sourceHtml.match(/<html[^>]*lang="([^"]+)"/i);
+  const titleMatched = sourceHtml.match(/<title>([^<]+)<\/title>/i);
+
+  return {
+    lang: langMatched?.[1] ?? "ko",
+    title: titleMatched?.[1] ?? fallbackTitle,
+  };
+}
+
+async function writeBuiltHtml({ fileName, title, lang, jsHref, cssHrefs, bodyClass = "" }) {
+  const cssLinks = cssHrefs.map((href) => `<link rel="stylesheet" href="${href}" />`).join("\n    ");
+  const classAttribute = bodyClass ? ` class="${bodyClass}"` : "";
+  const html = `<!doctype html>
+<html lang="${lang}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title}</title>
+    ${cssLinks}
+  </head>
+  <body${classAttribute}>
+    <div id="root"></div>
+    <script type="module" src="${jsHref}"></script>
+  </body>
+</html>
+`;
+
+  await writeFile(path.join(distDir, fileName), html, "utf8");
+}
+
 async function runBuild() {
   await mkdir(distDir, { recursive: true });
   await cp(publicDir, distDir, { recursive: true, force: true });
 
   const buildResult = await build({
     absWorkingDir: rootDir,
-    entryPoints: ["src/main.tsx"],
+    entryPoints: {
+      app: "src/main.tsx",
+      popup: "src/popup/main.tsx",
+    },
     outdir: "dist/assets",
     bundle: true,
     platform: "browser",
@@ -25,51 +69,43 @@ async function runBuild() {
     jsx: "automatic",
     minify: false,
     sourcemap: false,
-    entryNames: "app",
+    entryNames: "[name]",
     assetNames: "asset-[name]-[hash]",
     metafile: true,
     logLevel: "info",
     write: true,
   });
 
-  const outputEntries = Object.keys(buildResult.metafile.outputs);
-  const jsOutput = outputEntries.find(
-    (filePath) => filePath.endsWith(".js") && Boolean(buildResult.metafile.outputs[filePath].entryPoint),
-  );
-  const cssOutput = outputEntries.find((filePath) => filePath.endsWith(".css"));
+  const outputs = buildResult.metafile.outputs;
+  const appJsOutput = Object.keys(outputs).find((filePath) => outputs[filePath].entryPoint === "src/main.tsx");
+  const popupJsOutput = Object.keys(outputs).find((filePath) => outputs[filePath].entryPoint === "src/popup/main.tsx");
+  const cssOutputs = Object.keys(outputs)
+    .filter((filePath) => filePath.endsWith(".css"))
+    .sort();
 
-  if (!jsOutput) {
-    throw new Error("Failed to locate bundled JavaScript output.");
+  if (!appJsOutput || !popupJsOutput) {
+    throw new Error("Failed to locate bundled JavaScript outputs.");
   }
 
-  const jsHref = `./${path.relative(distDir, path.resolve(rootDir, jsOutput)).replace(/\\/g, "/")}`;
-  const cssHref = cssOutput
-    ? `./${path.relative(distDir, path.resolve(rootDir, cssOutput)).replace(/\\/g, "/")}`
-    : "";
+  const appMeta = await readHtmlMetadata(path.join(rootDir, "index.html"), "업무 일정관리");
+  const popupMeta = await readHtmlMetadata(path.join(rootDir, "popup.html"), "AI Planner Popup");
 
-  const sourceHtmlPath = path.join(rootDir, "index.html");
-  const sourceHtml = await readFile(sourceHtmlPath, "utf8");
-  const langMatched = sourceHtml.match(/<html[^>]*lang=\"([^\"]+)\"/i);
-  const lang = langMatched?.[1] ?? "ko";
-  const titleMatched = sourceHtml.match(/<title>([^<]+)<\/title>/i);
-  const title = titleMatched?.[1] ?? "업무 일정관리";
+  await writeBuiltHtml({
+    fileName: "index.html",
+    title: appMeta.title,
+    lang: appMeta.lang,
+    jsHref: toDistHref(appJsOutput),
+    cssHrefs: cssHrefsForEntry("app", cssOutputs),
+  });
 
-  const builtHtml = `<!doctype html>
-<html lang="${lang}">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${title}</title>
-    ${cssHref ? `<link rel="stylesheet" href="${cssHref}" />` : ""}
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="${jsHref}"></script>
-  </body>
-</html>
-`;
-
-  await writeFile(path.join(distDir, "index.html"), builtHtml, "utf8");
+  await writeBuiltHtml({
+    fileName: "popup.html",
+    title: popupMeta.title,
+    lang: popupMeta.lang,
+    jsHref: toDistHref(popupJsOutput),
+    cssHrefs: cssHrefsForEntry("popup", cssOutputs),
+    bodyClass: "popup-body",
+  });
 }
 
 runBuild().catch((error) => {
