@@ -8,7 +8,7 @@ import type {
   AgentProposal,
   AgentUpdateTaskOperation,
 } from "../agent/scheduleAgent";
-import { LLM_CHAT_COMPLETIONS_URL } from "../constants";
+import { LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput, TaskStatus } from "../models";
 import { formatDateTime } from "../utils/date";
@@ -58,14 +58,14 @@ function isValidIsoDate(value: string): boolean {
   return !Number.isNaN(new Date(value).getTime());
 }
 
-function formatOperationLabel(operation: AgentOperation): string {
+function formatOperationLabel(operation: AgentOperation, taskTitle?: string): string {
   if (operation.action === "create_task") {
     return `일정 추가: ${operation.title}`;
   }
   if (operation.action === "update_task") {
-    return `일정 수정: ${operation.taskId}`;
+    return `일정 수정: ${taskTitle ?? operation.taskId}`;
   }
-  return `일정 삭제: ${operation.taskId}`;
+  return `일정 삭제: ${taskTitle ?? operation.taskId}`;
 }
 
 function toFriendlyError(error: unknown): string {
@@ -123,6 +123,9 @@ function describeChangeValue(key: string, value: unknown, timeFormat: "24h" | "1
   if ((key === "startAt" || key === "endAt") && typeof value === "string" && isValidIsoDate(value)) {
     return formatDateTime(value, timeFormat);
   }
+  if (key === "status" && isTaskStatus(value)) {
+    return STATUS_LABELS[value];
+  }
   if (typeof value === "boolean") {
     return value ? "예" : "아니오";
   }
@@ -134,8 +137,8 @@ export function AiAssistantWorkspace({
   showEndpointInfo = true,
   directApply = false,
   title = "AI 일정 입력",
-  subtitle = "요청, AI 질문, 초안 검토를 한 공간에서 처리합니다.",
-  placeholder = "예: 내일 오전 10시에 보고서 제출 일정 추가해줘. 프로젝트는 일반, 종류는 제출.",
+  subtitle = "요청, 질문, 초안 검토를 한 공간에서 처리합니다.",
+  placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
   className = "",
   onApplied,
 }: AiAssistantWorkspaceProps) {
@@ -143,7 +146,7 @@ export function AiAssistantWorkspace({
   const [draft, setDraft] = useState("");
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastAssistantMessage, setLastAssistantMessage] = useState(
-    "일정 요청을 입력하면 AI가 필요한 질문과 초안/변경안을 압축해서 보여드립니다.",
+    "일정 요청을 입력하면 AI가 필요한 질문과 초안, 변경안을 정리해서 보여줍니다.",
   );
   const [lastQuestion, setLastQuestion] = useState("");
   const [pendingProposal, setPendingProposal] = useState<AgentProposal | undefined>(undefined);
@@ -381,12 +384,15 @@ export function AiAssistantWorkspace({
         continue;
       }
 
+      const taskTitle =
+        operation.action === "create_task" ? operation.title : taskMap[operation.taskId]?.title ?? operation.taskId;
+
       try {
         await applyOperation(operation);
-        successLogs.push(formatOperationLabel(operation));
+        successLogs.push(formatOperationLabel(operation, taskTitle));
       } catch (applyError) {
         const message = applyError instanceof Error ? applyError.message : "반영 실패";
-        failedLogs.push(`${formatOperationLabel(operation)} (${message})`);
+        failedLogs.push(`${formatOperationLabel(operation, taskTitle)} (${message})`);
         failedIndexSet.add(index);
       }
     }
@@ -540,7 +546,7 @@ export function AiAssistantWorkspace({
               void handleSend(lastUserMessage);
             }}
           >
-            마지막 요청 재시도
+            마지막 요청 다시 실행
           </button>
         </div>
       </div>
@@ -615,7 +621,7 @@ export function AiAssistantWorkspace({
             ) : null}
           </div>
         ) : (
-          <p className="empty-text">대기 중인 초안/변경안이 없습니다.</p>
+          <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
         )}
 
         {applyResult ? <p className="success-text">{applyResult}</p> : null}

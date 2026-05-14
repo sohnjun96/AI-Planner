@@ -96,6 +96,7 @@ export function MonthCalendar({
   const monthStats = useMemo(() => {
     let total = 0;
     let pending = 0;
+    let onHold = 0;
     let done = 0;
     let conflicts = 0;
 
@@ -105,11 +106,12 @@ export function MonthCalendar({
       const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
       total += summary.total;
       pending += summary.pending;
+      onHold += summary.onHold;
       done += summary.done;
       conflicts += summary.conflicts;
     }
 
-    return { total, pending, done, conflicts };
+    return { total, pending, onHold, done, conflicts };
   }, [daySummaryByDate, visibleMonth]);
 
   function moveSelectionByDays(daysToMove: number) {
@@ -177,10 +179,11 @@ export function MonthCalendar({
       </div>
 
       <div className="calendar-kpi-row" role="status" aria-live="polite">
-        <span>총 {monthStats.total}건</span>
-        <span>미완료 {monthStats.pending}건</span>
-        <span>완료 {monthStats.done}건</span>
-        <span>충돌 {monthStats.conflicts}건</span>
+        <span className="not_done">총 {monthStats.total}건</span>
+        <span className="not_done">미완료 {monthStats.pending}건</span>
+        <span className="on_hold">보류 {monthStats.onHold}건</span>
+        <span className="done">완료 {monthStats.done}건</span>
+        <span className="conflict">충돌 {monthStats.conflicts}건</span>
       </div>
 
       <div className="calendar-weekdays">
@@ -202,6 +205,7 @@ export function MonthCalendar({
             `${key}`,
             summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
             summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
+            summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
             summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
             "Enter로 선택, 더블클릭으로 일정 추가",
           ]
@@ -295,6 +299,7 @@ export function MonthCalendar({
 
               <div className="calendar-indicators">
                 {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
+                {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
                 {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
                 {summary.conflicts > 0 ? <span className="calendar-indicator conflict">충돌 {summary.conflicts}</span> : null}
               </div>
@@ -303,7 +308,7 @@ export function MonthCalendar({
         })}
       </div>
 
-      <p className="description-text">팁: 날짜 더블클릭으로 해당 날짜 일정 등록, 드래그로 날짜 이동, 방향키로 날짜 이동</p>
+      <p className="description-text">날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 할 일 카드를 드래그하면 날짜를 이동할 수 있습니다.</p>
     </section>
   );
 }

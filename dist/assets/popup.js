@@ -27757,6 +27757,11 @@ var LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
 var LLM_DEFAULT_MODEL = "gpt-4o-mini";
 var DEFAULT_NOTIFY_BEFORE_MINUTES = 30;
 var DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES = 360;
+var STATUS_LABELS = {
+  NOT_DONE: "미완료",
+  ON_HOLD: "보류",
+  DONE: "완료"
+};
 var DEFAULT_TASK_TYPES = [
   {
     id: "type-write",
@@ -29412,14 +29417,14 @@ function toTaskInput(task) {
 function isValidIsoDate(value) {
   return !Number.isNaN(new Date(value).getTime());
 }
-function formatOperationLabel(operation) {
+function formatOperationLabel(operation, taskTitle) {
   if (operation.action === "create_task") {
     return `일정 추가: ${operation.title}`;
   }
   if (operation.action === "update_task") {
-    return `일정 수정: ${operation.taskId}`;
+    return `일정 수정: ${taskTitle ?? operation.taskId}`;
   }
-  return `일정 삭제: ${operation.taskId}`;
+  return `일정 삭제: ${taskTitle ?? operation.taskId}`;
 }
 function toFriendlyError(error) {
   const raw = error instanceof Error ? error.message : "AI 처리 중 오류가 발생했습니다.";
@@ -29469,6 +29474,9 @@ function describeChangeValue(key, value, timeFormat) {
   if ((key === "startAt" || key === "endAt") && typeof value === "string" && isValidIsoDate(value)) {
     return formatDateTime(value, timeFormat);
   }
+  if (key === "status" && isTaskStatus2(value)) {
+    return STATUS_LABELS[value];
+  }
   if (typeof value === "boolean") {
     return value ? "예" : "아니오";
   }
@@ -29479,8 +29487,8 @@ function AiAssistantWorkspace({
   showEndpointInfo = true,
   directApply = false,
   title = "AI 일정 입력",
-  subtitle = "요청, AI 질문, 초안 검토를 한 공간에서 처리합니다.",
-  placeholder = "예: 내일 오전 10시에 보고서 제출 일정 추가해줘. 프로젝트는 일반, 종류는 제출.",
+  subtitle = "요청, 질문, 초안 검토를 한 공간에서 처리합니다.",
+  placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
   className = "",
   onApplied
 }) {
@@ -29488,7 +29496,7 @@ function AiAssistantWorkspace({
   const [draft, setDraft] = (0, import_react3.useState)("");
   const [lastUserMessage, setLastUserMessage] = (0, import_react3.useState)("");
   const [lastAssistantMessage, setLastAssistantMessage] = (0, import_react3.useState)(
-    "일정 요청을 입력하면 AI가 필요한 질문과 초안/변경안을 압축해서 보여드립니다."
+    "일정 요청을 입력하면 AI가 필요한 질문과 초안, 변경안을 정리해서 보여줍니다."
   );
   const [lastQuestion, setLastQuestion] = (0, import_react3.useState)("");
   const [pendingProposal, setPendingProposal] = (0, import_react3.useState)(void 0);
@@ -29695,12 +29703,13 @@ function AiAssistantWorkspace({
       if (!operation) {
         continue;
       }
+      const taskTitle = operation.action === "create_task" ? operation.title : taskMap[operation.taskId]?.title ?? operation.taskId;
       try {
         await applyOperation(operation);
-        successLogs.push(formatOperationLabel(operation));
+        successLogs.push(formatOperationLabel(operation, taskTitle));
       } catch (applyError) {
         const message = applyError instanceof Error ? applyError.message : "반영 실패";
-        failedLogs.push(`${formatOperationLabel(operation)} (${message})`);
+        failedLogs.push(`${formatOperationLabel(operation, taskTitle)} (${message})`);
         failedIndexSet.add(index);
       }
     }
@@ -29830,7 +29839,7 @@ function AiAssistantWorkspace({
             onClick: () => {
               void handleSend(lastUserMessage);
             },
-            children: "마지막 요청 재시도"
+            children: "마지막 요청 다시 실행"
           }
         )
       ] })
@@ -29888,7 +29897,7 @@ function AiAssistantWorkspace({
             }
           )
         ] }) : null
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안/변경안이 없습니다." }),
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안이나 변경안이 없습니다." }),
       applyResult ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "success-text", children: applyResult }) : null,
       error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
     ] })
