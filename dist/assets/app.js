@@ -27744,7 +27744,7 @@ var require_jsx_runtime = __commonJS({
 });
 
 // src/main.tsx
-var import_react12 = __toESM(require_react(), 1);
+var import_react13 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // node_modules/react-router/dist/development/chunk-JZWAC4HX.mjs
@@ -30688,10 +30688,23 @@ function getDateKey(value) {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
 function addDays(date, days) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
+}
+function addMonths(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+function getMonthGridStart(date, weekStartsOn) {
+  const first = startOfMonth(date);
+  const currentDay = first.getDay();
+  const startIndex = weekStartsOn === "mon" ? 1 : 0;
+  const diff = (currentDay - startIndex + 7) % 7;
+  return addDays(first, -diff);
 }
 function isPastCompletedHidden(task, showPastCompleted) {
   if (showPastCompleted) {
@@ -30714,6 +30727,26 @@ function combineDateTimeToIso(date, time) {
   const [hour, minute] = time.split(":").map(Number);
   const composed = new Date(year, month - 1, day, hour, minute, 0);
   return composed.toISOString();
+}
+function shiftIsoToDateKey(isoValue, dateKey) {
+  const source = new Date(isoValue);
+  if (!Number.isFinite(source.getTime())) {
+    return isoValue;
+  }
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return isoValue;
+  }
+  const shifted = new Date(
+    year,
+    month - 1,
+    day,
+    source.getHours(),
+    source.getMinutes(),
+    source.getSeconds(),
+    source.getMilliseconds()
+  );
+  return shifted.toISOString();
 }
 function compareByStartAtAsc(a, b) {
   return new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
@@ -35493,8 +35526,290 @@ function SettingsPage() {
 }
 
 // src/pages/TasksPage.tsx
+var import_react12 = __toESM(require_react(), 1);
+
+// src/components/MonthCalendar.tsx
 var import_react11 = __toESM(require_react(), 1);
 var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
+var EMPTY_SUMMARY = {
+  total: 0,
+  done: 0,
+  pending: 0,
+  onHold: 0,
+  conflicts: 0,
+  major: 0,
+  titles: []
+};
+var WEEK_LABELS = {
+  mon: ["월", "화", "수", "목", "금", "토", "일"],
+  sun: ["일", "월", "화", "수", "목", "금", "토"]
+};
+function toMonthInputValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+function parseMonthInputValue(value) {
+  const [yearRaw, monthRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return null;
+  }
+  return new Date(year, month - 1, 1);
+}
+function getDensityLevel(total) {
+  if (total <= 0) {
+    return 0;
+  }
+  if (total <= 2) {
+    return 1;
+  }
+  if (total <= 4) {
+    return 2;
+  }
+  if (total <= 7) {
+    return 3;
+  }
+  return 4;
+}
+function MonthCalendar({
+  selectedDate,
+  weekStartsOn,
+  daySummaryByDate,
+  onSelectDate,
+  onDropTaskToDate,
+  onCreateTaskAtDate
+}) {
+  const [visibleMonth, setVisibleMonth] = (0, import_react11.useState)(() => startOfMonth(new Date(selectedDate)));
+  const [dragOverDateKey, setDragOverDateKey] = (0, import_react11.useState)(null);
+  const selectedKey = getDateKey(selectedDate);
+  const todayKey = getDateKey(/* @__PURE__ */ new Date());
+  const days = (0, import_react11.useMemo)(() => {
+    const start = getMonthGridStart(visibleMonth, weekStartsOn);
+    return Array.from({ length: 42 }, (_, index) => addDays(start, index));
+  }, [visibleMonth, weekStartsOn]);
+  const monthLabel = (0, import_react11.useMemo)(
+    () => new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric",
+      month: "long"
+    }).format(visibleMonth),
+    [visibleMonth]
+  );
+  const monthStats = (0, import_react11.useMemo)(() => {
+    let total = 0;
+    let pending = 0;
+    let done = 0;
+    let conflicts = 0;
+    const lastDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
+    for (let day = 1; day <= lastDay; day += 1) {
+      const key = getDateKey(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day));
+      const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
+      total += summary.total;
+      pending += summary.pending;
+      done += summary.done;
+      conflicts += summary.conflicts;
+    }
+    return { total, pending, done, conflicts };
+  }, [daySummaryByDate, visibleMonth]);
+  function moveSelectionByDays(daysToMove) {
+    const next = addDays(new Date(selectedDate), daysToMove);
+    setVisibleMonth(startOfMonth(next));
+    onSelectDate(getDateKey(next));
+  }
+  function selectDate(date) {
+    setVisibleMonth(startOfMonth(date));
+    onSelectDate(getDateKey(date));
+  }
+  function handleMonthInputChange(value) {
+    const parsed = parseMonthInputValue(value);
+    if (!parsed) {
+      return;
+    }
+    setVisibleMonth(parsed);
+    onSelectDate(getDateKey(parsed));
+  }
+  function handleSelectToday() {
+    const today = /* @__PURE__ */ new Date();
+    setVisibleMonth(startOfMonth(today));
+    onSelectDate(getDateKey(today));
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "panel calendar-panel", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "calendar-header calendar-toolbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "calendar-nav-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-soft",
+            "aria-label": "이전 달 보기",
+            onClick: () => setVisibleMonth((prev) => addMonths(prev, -1)),
+            children: "이전 달"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { children: monthLabel }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-soft",
+            "aria-label": "다음 달 보기",
+            onClick: () => setVisibleMonth((prev) => addMonths(prev, 1)),
+            children: "다음 달"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "calendar-toolbar-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", className: "btn btn-soft", onClick: handleSelectToday, children: "오늘" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "calendar-month-input", children: [
+          "월 이동",
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+            "input",
+            {
+              type: "month",
+              value: toMonthInputValue(visibleMonth),
+              onChange: (event) => handleMonthInputChange(event.target.value)
+            }
+          )
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "calendar-kpi-row", role: "status", "aria-live": "polite", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        "총 ",
+        monthStats.total,
+        "건"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        "미완료 ",
+        monthStats.pending,
+        "건"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        "완료 ",
+        monthStats.done,
+        "건"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        "충돌 ",
+        monthStats.conflicts,
+        "건"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "calendar-weekdays", children: WEEK_LABELS[weekStartsOn].map((day) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { children: day }, day)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "calendar-grid", children: days.map((date) => {
+      const key = getDateKey(date);
+      const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
+      const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
+      const density = getDensityLevel(summary.total);
+      const completionRatio = summary.total > 0 ? Math.round(summary.done / summary.total * 100) : 0;
+      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+      const ariaLabel = [
+        `${key}`,
+        summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
+        summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
+        summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
+        "Enter로 선택, 더블클릭으로 일정 추가"
+      ].filter(Boolean).join(", ");
+      return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: `calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${todayKey === key ? "today" : ""} ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${dragOverDateKey === key ? "drag-target" : ""}`,
+          onClick: () => selectDate(date),
+          onDoubleClick: () => {
+            onCreateTaskAtDate?.(key);
+          },
+          onKeyDown: (event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              moveSelectionByDays(-1);
+            } else if (event.key === "ArrowRight") {
+              event.preventDefault();
+              moveSelectionByDays(1);
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              moveSelectionByDays(-7);
+            } else if (event.key === "ArrowDown") {
+              event.preventDefault();
+              moveSelectionByDays(7);
+            } else if (event.key === "Home") {
+              event.preventDefault();
+              handleSelectToday();
+            }
+          },
+          onDragOver: (event) => {
+            if (!onDropTaskToDate) {
+              return;
+            }
+            const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+            if (!taskId) {
+              return;
+            }
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            if (dragOverDateKey !== key) {
+              setDragOverDateKey(key);
+            }
+          },
+          onDragLeave: () => {
+            if (dragOverDateKey === key) {
+              setDragOverDateKey(null);
+            }
+          },
+          onDrop: (event) => {
+            if (!onDropTaskToDate) {
+              return;
+            }
+            const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+            if (!taskId) {
+              return;
+            }
+            event.preventDefault();
+            setDragOverDateKey(null);
+            setVisibleMonth(startOfMonth(date));
+            void onDropTaskToDate(taskId, key);
+          },
+          "aria-label": ariaLabel,
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "calendar-day-top", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "calendar-day-number", children: date.getDate() }),
+              summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "calendar-day-count", children: [
+                summary.total,
+                "건"
+              ] }) : null
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "calendar-progress", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { width: `${completionRatio}%` } }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "calendar-event-stack", children: [
+              summary.titles.slice(0, 2).map((title, index) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "calendar-event-line", title, children: title }, `${key}-title-${index}`)),
+              summary.total > 2 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "calendar-event-more", children: [
+                "+",
+                summary.total - 2
+              ] }) : null
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "calendar-indicators", children: [
+              summary.pending > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "calendar-indicator pending", children: [
+                "미완료 ",
+                summary.pending
+              ] }) : null,
+              summary.major > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "calendar-indicator major", children: [
+                "중요 ",
+                summary.major
+              ] }) : null,
+              summary.conflicts > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "calendar-indicator conflict", children: [
+                "충돌 ",
+                summary.conflicts
+              ] }) : null
+            ] })
+          ]
+        },
+        key
+      );
+    }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "description-text", children: "팁: 날짜 더블클릭으로 해당 날짜 일정 등록, 드래그로 날짜 이동, 방향키로 날짜 이동" })
+  ] });
+}
+
+// src/pages/TasksPage.tsx
+var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
 var QUICK_FILTERS = [
   { value: "ALL", label: "전체" },
   { value: "TODAY", label: "오늘" },
@@ -35503,6 +35818,20 @@ var QUICK_FILTERS = [
   { value: "CONFLICT", label: "충돌" },
   { value: "MAJOR", label: "중요" }
 ];
+var VIEW_MODES = [
+  { value: "LIST", label: "목록" },
+  { value: "WEEK", label: "주간" },
+  { value: "MONTH", label: "월간" }
+];
+var EMPTY_SUMMARY2 = {
+  total: 0,
+  done: 0,
+  pending: 0,
+  onHold: 0,
+  conflicts: 0,
+  major: 0,
+  titles: []
+};
 function toTaskInput5(task, statusOverride) {
   return {
     title: task.title,
@@ -35520,6 +35849,13 @@ function isInCurrentWeek(task) {
   const weekEndKey = getDateKey(addDays(/* @__PURE__ */ new Date(), 7));
   const taskKey = getDateKey(task.startAt);
   return taskKey >= todayKey && taskKey <= weekEndKey;
+}
+function getWeekStart(dateKey, weekStartsOn) {
+  const source = /* @__PURE__ */ new Date(`${dateKey}T00:00:00`);
+  const currentDay = source.getDay();
+  const startIndex = weekStartsOn === "mon" ? 1 : 0;
+  const diff = (currentDay - startIndex + 7) % 7;
+  return addDays(source, -diff);
 }
 function groupVisibleTasks(tasks) {
   const todayKey = getDateKey(/* @__PURE__ */ new Date());
@@ -35550,22 +35886,34 @@ function groupVisibleTasks(tasks) {
   }
   return groups.map((group) => ({ ...group, tasks: group.tasks.sort(compareByStartAtAsc) })).filter((group) => group.tasks.length > 0);
 }
+function formatDayLabel(date) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "short",
+    day: "numeric",
+    weekday: "short"
+  }).format(date);
+}
 function TasksPage() {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
-  const [currentTime, setCurrentTime] = (0, import_react11.useState)(() => Date.now());
-  const [keyword, setKeyword] = (0, import_react11.useState)("");
-  const [quickFilter, setQuickFilter] = (0, import_react11.useState)("ALL");
-  const [projectId, setProjectId] = (0, import_react11.useState)("");
-  const [taskTypeId, setTaskTypeId] = (0, import_react11.useState)("");
-  const [selectedTaskId, setSelectedTaskId] = (0, import_react11.useState)(null);
-  const [detailMode, setDetailMode] = (0, import_react11.useState)("empty");
-  const [createFormKey, setCreateFormKey] = (0, import_react11.useState)(0);
-  const [error, setError] = (0, import_react11.useState)("");
-  const [message, setMessage] = (0, import_react11.useState)("");
-  const projectMap = (0, import_react11.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
-  const typeMap = (0, import_react11.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
-  const conflictMap = (0, import_react11.useMemo)(() => buildTaskConflictMap(tasks), [tasks]);
-  (0, import_react11.useEffect)(() => {
+  const [currentTime, setCurrentTime] = (0, import_react12.useState)(() => Date.now());
+  const [keyword, setKeyword] = (0, import_react12.useState)("");
+  const [quickFilter, setQuickFilter] = (0, import_react12.useState)("ALL");
+  const [viewMode, setViewMode] = (0, import_react12.useState)("LIST");
+  const [projectId, setProjectId] = (0, import_react12.useState)("");
+  const [taskTypeId, setTaskTypeId] = (0, import_react12.useState)("");
+  const [selectedTaskId, setSelectedTaskId] = (0, import_react12.useState)(null);
+  const [selectedDate, setSelectedDate] = (0, import_react12.useState)(() => getDateKey(/* @__PURE__ */ new Date()));
+  const [detailMode, setDetailMode] = (0, import_react12.useState)("empty");
+  const [createFormKey, setCreateFormKey] = (0, import_react12.useState)(0);
+  const [createDefaultDate, setCreateDefaultDate] = (0, import_react12.useState)(void 0);
+  const [error, setError] = (0, import_react12.useState)("");
+  const [message, setMessage] = (0, import_react12.useState)("");
+  const [dropMessage, setDropMessage] = (0, import_react12.useState)("");
+  const [dropError, setDropError] = (0, import_react12.useState)("");
+  const projectMap = (0, import_react12.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
+  const typeMap = (0, import_react12.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const conflictMap = (0, import_react12.useMemo)(() => buildTaskConflictMap(tasks), [tasks]);
+  (0, import_react12.useEffect)(() => {
     const timerId = window.setInterval(() => {
       setCurrentTime(Date.now());
     }, 6e4);
@@ -35573,14 +35921,14 @@ function TasksPage() {
       window.clearInterval(timerId);
     };
   }, []);
-  const selectedTask = (0, import_react11.useMemo)(() => tasks.find((task) => task.id === selectedTaskId), [selectedTaskId, tasks]);
-  (0, import_react11.useEffect)(() => {
+  const selectedTask = (0, import_react12.useMemo)(() => tasks.find((task) => task.id === selectedTaskId), [selectedTaskId, tasks]);
+  (0, import_react12.useEffect)(() => {
     if (detailMode === "edit" && selectedTaskId && !selectedTask) {
       setSelectedTaskId(null);
       setDetailMode("empty");
     }
   }, [detailMode, selectedTask, selectedTaskId]);
-  const filteredTasks = (0, import_react11.useMemo)(() => {
+  const filteredTasks = (0, import_react12.useMemo)(() => {
     const trimmedKeyword = keyword.trim().toLowerCase();
     return tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)).filter((task) => {
       if (projectId && task.projectId !== projectId) {
@@ -35612,8 +35960,51 @@ function TasksPage() {
       return `${task.title} ${task.content} ${projectName} ${typeName}`.toLowerCase().includes(trimmedKeyword);
     }).sort(compareByStartAtAsc);
   }, [conflictMap, keyword, projectId, projectMap, quickFilter, setting.showPastCompleted, taskTypeId, tasks, typeMap]);
-  const groupedTasks = (0, import_react11.useMemo)(() => groupVisibleTasks(filteredTasks), [filteredTasks]);
-  const taskStats = (0, import_react11.useMemo)(() => {
+  const groupedTasks = (0, import_react12.useMemo)(() => groupVisibleTasks(filteredTasks), [filteredTasks]);
+  const daySummaryByDate = (0, import_react12.useMemo)(() => {
+    const map = {};
+    for (const task of filteredTasks) {
+      const key = getDateKey(task.startAt);
+      if (!map[key]) {
+        map[key] = { ...EMPTY_SUMMARY2, titles: [] };
+      }
+      const summary = map[key];
+      summary.total += 1;
+      if (task.status === "DONE") {
+        summary.done += 1;
+      } else {
+        summary.pending += 1;
+      }
+      if (task.status === "ON_HOLD") {
+        summary.onHold += 1;
+      }
+      if (task.isMajor) {
+        summary.major += 1;
+      }
+      if ((conflictMap[task.id]?.length ?? 0) > 0) {
+        summary.conflicts += 1;
+      }
+      if (summary.titles.length < 3) {
+        summary.titles.push(task.title);
+      }
+    }
+    return map;
+  }, [conflictMap, filteredTasks]);
+  const selectedDateTasks = (0, import_react12.useMemo)(
+    () => filteredTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStartAtAsc),
+    [filteredTasks, selectedDate]
+  );
+  const weekStart = (0, import_react12.useMemo)(() => getWeekStart(selectedDate, setting.weekStartsOn), [selectedDate, setting.weekStartsOn]);
+  const weekDays = (0, import_react12.useMemo)(
+    () => Array.from({ length: 7 }, (_, index) => {
+      const date = addDays(weekStart, index);
+      const key = getDateKey(date);
+      const items = filteredTasks.filter((task) => getDateKey(task.startAt) === key).sort(compareByStartAtAsc);
+      return { date, key, tasks: items };
+    }),
+    [filteredTasks, weekStart]
+  );
+  const taskStats = (0, import_react12.useMemo)(() => {
     const activeSource = tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted));
     return {
       total: activeSource.length,
@@ -35623,10 +36014,11 @@ function TasksPage() {
       overdue: activeSource.filter((task) => task.status !== "DONE" && new Date(task.startAt).getTime() < currentTime).length
     };
   }, [conflictMap, currentTime, setting.showPastCompleted, tasks]);
-  function openCreatePanel() {
+  function openCreatePanel(defaultDate) {
     setError("");
     setMessage("");
     setSelectedTaskId(null);
+    setCreateDefaultDate(defaultDate);
     setDetailMode("create");
     setCreateFormKey((prev) => prev + 1);
   }
@@ -35660,46 +36052,93 @@ function TasksPage() {
     setDetailMode("empty");
     setMessage("일정을 삭제했습니다.");
   }
+  async function handleDropTaskToDate(taskId, dateKey) {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) {
+      return;
+    }
+    setDropError("");
+    setDropMessage("");
+    try {
+      const nextStartAt = shiftIsoToDateKey(task.startAt, dateKey);
+      const startAtMs = new Date(task.startAt).getTime();
+      const endAtMs = task.endAt ? new Date(task.endAt).getTime() : Number.NaN;
+      const durationMs = Number.isFinite(startAtMs) && Number.isFinite(endAtMs) && endAtMs >= startAtMs ? endAtMs - startAtMs : null;
+      const nextEndAt = task.endAt ? durationMs !== null ? new Date(new Date(nextStartAt).getTime() + durationMs).toISOString() : shiftIsoToDateKey(task.endAt, dateKey) : void 0;
+      await updateTask(task.id, {
+        ...toTaskInput5(task),
+        startAt: nextStartAt,
+        endAt: nextEndAt
+      });
+      setSelectedDate(dateKey);
+      setDropMessage(`"${task.title}" 일정을 ${dateKey}(으)로 이동했습니다.`);
+    } catch (moveError) {
+      setDropError(moveError instanceof Error ? moveError.message : "일정 이동에 실패했습니다.");
+    }
+  }
   function resetFilters() {
     setKeyword("");
     setQuickFilter("ALL");
     setProjectId("");
     setTaskTypeId("");
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "tasks-workspace", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "tasks-overview", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "eyebrow", children: "TASKS" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h2", { children: "일정" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "description-text", children: "모든 일정을 찾고, 상태를 확인하고, 필요한 항목만 빠르게 수정합니다." })
+  function renderTaskList(items, emptyText) {
+    if (items.length === 0) {
+      return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "empty-text", children: emptyText });
+    }
+    return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "task-stack", children: items.map((task) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+      TaskItem,
+      {
+        task,
+        project: projectMap[task.projectId],
+        taskType: typeMap[task.taskTypeId],
+        timeFormat: setting.timeFormat,
+        selected: selectedTaskId === task.id,
+        hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
+        onClick: () => openTask(task.id),
+        onStatusChange: (status) => {
+          void updateTask(task.id, toTaskInput5(task, status)).catch((updateError) => {
+            setError(updateError instanceof Error ? updateError.message : "상태 변경에 실패했습니다.");
+          });
+        }
+      },
+      task.id
+    )) });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tasks-workspace", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "tasks-overview", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "eyebrow", children: "TASKS" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h2", { children: "일정" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "description-text", children: "일정을 목록, 주간, 월간 보기로 전환하며 찾고 조정합니다." })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "overview-stat-row", "aria-label": "일정 요약", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "overview-stat-row", "aria-label": "일정 요약", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
           "전체 ",
           taskStats.total
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
           "오늘 ",
           taskStats.today
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
           "미완료 ",
           taskStats.pending
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
           "충돌 ",
           taskStats.conflicts
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
           "지연 ",
           taskStats.overdue
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "tasks-control-bar", "aria-label": "일정 검색과 필터", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "search-field", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "tasks-control-bar", "aria-label": "일정 검색과 필터", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { className: "search-field", children: [
         "검색",
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
           "input",
           {
             type: "text",
@@ -35709,7 +36148,7 @@ function TasksPage() {
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "chip-row", role: "group", "aria-label": "빠른 필터", children: QUICK_FILTERS.map((filter) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "chip-row", role: "group", "aria-label": "빠른 필터", children: QUICK_FILTERS.map((filter) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
         "button",
         {
           type: "button",
@@ -35719,136 +36158,257 @@ function TasksPage() {
         },
         filter.value
       )) }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", className: "btn btn-primary", onClick: openCreatePanel, children: "새 일정" })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => openCreatePanel(selectedDate), children: "새 일정" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "advanced-filter-bar", "aria-label": "세부 필터", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "advanced-filter-bar", "aria-label": "세부 필터", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
         "프로젝트",
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { value: projectId, onChange: (event) => setProjectId(event.target.value), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "전체 프로젝트" }),
-          projects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: project.id, children: project.name }, project.id))
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("select", { value: projectId, onChange: (event) => setProjectId(event.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "전체 프로젝트" }),
+          projects.map((project) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: project.id, children: project.name }, project.id))
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
         "종류",
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { value: taskTypeId, onChange: (event) => setTaskTypeId(event.target.value), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "전체 종류" }),
-          taskTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: type.id, children: type.name }, type.id))
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("select", { value: taskTypeId, onChange: (event) => setTaskTypeId(event.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "전체 종류" }),
+          taskTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: type.id, children: type.name }, type.id))
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", className: "btn btn-soft", onClick: resetFilters, children: "필터 초기화" })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "segmented-control", role: "group", "aria-label": "일정 보기 방식", children: VIEW_MODES.map((mode) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        "button",
+        {
+          type: "button",
+          className: viewMode === mode.value ? "active" : "",
+          onClick: () => setViewMode(mode.value),
+          children: mode.label
+        },
+        mode.value
+      )) }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-soft", onClick: resetFilters, children: "필터 초기화" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "tasks-split-view", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "task-group-list", "aria-label": "일정 목록", children: [
-        groupedTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "empty-state", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h3", { children: "조건에 맞는 일정이 없습니다." }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "검색어와 필터를 줄이거나 새 일정을 추가하세요." }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", className: "btn btn-primary", onClick: openCreatePanel, children: "새 일정" })
+    viewMode === "LIST" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tasks-split-view", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "task-group-list", "aria-label": "일정 목록", children: [
+        groupedTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "empty-state", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h3", { children: "조건에 맞는 일정이 없습니다." }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "검색어와 필터를 줄이거나 새 일정을 추가하세요." }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => openCreatePanel(selectedDate), children: "새 일정" })
         ] }) : null,
-        groupedTasks.map((group) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "task-date-group", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h3", { children: group.title }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
+        groupedTasks.map((group) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "task-date-group", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("header", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h3", { children: group.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
               group.tasks.length,
               "개"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "task-stack", children: group.tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
-            TaskItem,
-            {
-              task,
-              project: projectMap[task.projectId],
-              taskType: typeMap[task.taskTypeId],
-              timeFormat: setting.timeFormat,
-              selected: selectedTaskId === task.id,
-              hasConflict: (conflictMap[task.id]?.length ?? 0) > 0,
-              onClick: () => openTask(task.id),
-              onStatusChange: (status) => {
-                void updateTask(task.id, toTaskInput5(task, status)).catch((updateError) => {
-                  setError(updateError instanceof Error ? updateError.message : "상태 변경에 실패했습니다.");
-                });
-              }
-            },
-            task.id
-          )) })
+          renderTaskList(group.tasks, "일정이 없습니다.")
         ] }, group.id))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("aside", { className: "task-detail-panel", "aria-label": "일정 상세", children: [
-        detailMode === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "empty-state compact", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h3", { children: "일정을 선택하세요." }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "목록에서 일정을 선택하면 상세 정보와 편집 폼이 이곳에 표시됩니다." }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", className: "btn btn-primary", onClick: openCreatePanel, children: "새 일정 추가" }),
-          message ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "success-text", children: message }) : null
-        ] }) : null,
-        detailMode === "create" ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
-          TaskForm,
-          {
-            projects,
-            taskTypes,
-            allTasks: tasks,
-            timeFormat: setting.timeFormat,
-            onSubmit: handleCreate
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        TaskDetailPanel,
+        {
+          detailMode,
+          selectedTask,
+          createFormKey,
+          createDefaultDate,
+          projects,
+          taskTypes,
+          tasks,
+          setting,
+          error,
+          message,
+          onCreate: handleCreate,
+          onUpdate: handleUpdate,
+          onDelete: handleDelete,
+          onCancel: () => {
+            setSelectedTaskId(null);
+            setDetailMode("empty");
           },
-          `new-task-${createFormKey}`
-        ) : null,
-        detailMode === "edit" && selectedTask ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "detail-context", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "badge-pill", children: "선택한 일정" }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { children: selectedTask.title }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("small", { children: formatDateTime(selectedTask.startAt, setting.timeFormat) })
+          onOpenCreate: () => openCreatePanel(selectedDate)
+        }
+      )
+    ] }) : null,
+    viewMode === "WEEK" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tasks-split-view", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "schedule-week-view", "aria-label": "주간 일정", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("header", { className: "schedule-view-header", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "eyebrow", children: "WEEK VIEW" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("h3", { children: [
+              getDateKey(weekDays[0].date),
+              " - ",
+              getDateKey(weekDays[6].date)
+            ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
-            TaskForm,
-            {
-              projects,
-              taskTypes,
-              allTasks: tasks,
-              initialTask: selectedTask,
-              timeFormat: setting.timeFormat,
-              onSubmit: handleUpdate,
-              onDelete: handleDelete,
-              onCancel: () => {
-                setSelectedTaskId(null);
-                setDetailMode("empty");
-              }
-            },
-            selectedTask.id
-          )
-        ] }) : null,
-        error ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "error-text", children: error }) : null,
-        message && detailMode !== "empty" ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "success-text", children: message }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "button-row", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setSelectedDate(getDateKey(addDays(weekStart, -7))), children: "이전 주" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setSelectedDate(getDateKey(/* @__PURE__ */ new Date())), children: "오늘" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setSelectedDate(getDateKey(addDays(weekStart, 7))), children: "다음 주" })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "week-board", children: weekDays.map((day) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: `week-column ${day.key === getDateKey(/* @__PURE__ */ new Date()) ? "today" : ""}`, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("header", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: formatDayLabel(day.date) }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+              day.tasks.length,
+              "개"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-soft week-add-button", onClick: () => openCreatePanel(day.key), children: "추가" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "week-task-list", children: [
+            day.tasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "empty-text", children: "일정 없음" }) : null,
+            day.tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("button", { type: "button", className: "week-task-card", onClick: () => openTask(task.id), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: task.title }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("small", { children: formatDateTime(task.startAt, setting.timeFormat) }),
+              conflictMap[task.id]?.length ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { children: "충돌" }) : null
+            ] }, task.id))
+          ] })
+        ] }, day.key)) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        TaskDetailPanel,
+        {
+          detailMode,
+          selectedTask,
+          createFormKey,
+          createDefaultDate,
+          projects,
+          taskTypes,
+          tasks,
+          setting,
+          error,
+          message,
+          onCreate: handleCreate,
+          onUpdate: handleUpdate,
+          onDelete: handleDelete,
+          onCancel: () => {
+            setSelectedTaskId(null);
+            setDetailMode("empty");
+          },
+          onOpenCreate: () => openCreatePanel(selectedDate)
+        }
+      )
+    ] }) : null,
+    viewMode === "MONTH" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "tasks-split-view", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "schedule-month-view", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          MonthCalendar,
+          {
+            selectedDate,
+            weekStartsOn: setting.weekStartsOn,
+            daySummaryByDate,
+            onSelectDate: setSelectedDate,
+            onDropTaskToDate: handleDropTaskToDate,
+            onCreateTaskAtDate: (dateKey) => openCreatePanel(dateKey)
+          }
+        ),
+        dropMessage ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "success-text", children: dropMessage }) : null,
+        dropError ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "error-text", children: dropError }) : null
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("aside", { className: "task-detail-panel", "aria-label": "선택한 날짜 일정", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "detail-context", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "badge-pill", children: "선택한 날짜" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: selectedDate }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("small", { children: [
+            (daySummaryByDate[selectedDate] ?? EMPTY_SUMMARY2).total,
+            "개 일정"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => openCreatePanel(selectedDate), children: "이 날짜에 일정 추가" }),
+        renderTaskList(selectedDateTasks, "선택한 날짜에 일정이 없습니다.")
       ] })
-    ] })
+    ] }) : null
+  ] });
+}
+function TaskDetailPanel({
+  detailMode,
+  selectedTask,
+  createFormKey,
+  createDefaultDate,
+  projects,
+  taskTypes,
+  tasks,
+  setting,
+  error,
+  message,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onCancel,
+  onOpenCreate
+}) {
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("aside", { className: "task-detail-panel", "aria-label": "일정 상세", children: [
+    detailMode === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "empty-state compact", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h3", { children: "일정을 선택하세요." }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "목록에서 일정을 선택하면 상세 정보와 편집 폼이 이곳에 표시됩니다." }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "btn btn-primary", onClick: onOpenCreate, children: "새 일정 추가" }),
+      message ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "success-text", children: message }) : null
+    ] }) : null,
+    detailMode === "create" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+      TaskForm,
+      {
+        projects,
+        taskTypes,
+        allTasks: tasks,
+        defaultStartDate: createDefaultDate,
+        timeFormat: setting.timeFormat,
+        onSubmit: onCreate
+      },
+      `new-task-${createFormKey}-${createDefaultDate ?? "today"}`
+    ) : null,
+    detailMode === "edit" && selectedTask ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "detail-context", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "badge-pill", children: "선택한 일정" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: selectedTask.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("small", { children: formatDateTime(selectedTask.startAt, setting.timeFormat) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        TaskForm,
+        {
+          projects,
+          taskTypes,
+          allTasks: tasks,
+          initialTask: selectedTask,
+          timeFormat: setting.timeFormat,
+          onSubmit: onUpdate,
+          onDelete,
+          onCancel
+        },
+        selectedTask.id
+      )
+    ] }) : null,
+    error ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "error-text", children: error }) : null,
+    message && detailMode !== "empty" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "success-text", children: message }) : null
   ] });
 }
 
 // src/App.tsx
-var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
 function RoutedApp() {
   const { isReady } = useAppData();
   if (!isReady) {
-    return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "loading-screen", children: "초기 데이터를 불러오는 중입니다..." });
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "loading-screen", children: "초기 데이터를 불러오는 중입니다..." });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(HashRouter, { children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Routes, { children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(Route, { element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(AppShell, {}), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/dashboard", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(DashboardPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/tasks", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(TasksPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/ai", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/projects", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(ProjectsPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/types", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Navigate, { to: "/settings", replace: true }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/archive", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(ArchivePage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "/settings", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(SettingsPage, {}) }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Route, { path: "*", element: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Navigate, { to: "/dashboard", replace: true }) })
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(HashRouter, { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Routes, { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(Route, { element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(AppShell, {}), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/dashboard", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(DashboardPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/tasks", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(TasksPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/ai", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/dashboard", replace: true }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/projects", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ProjectsPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/types", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/settings", replace: true }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/archive", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ArchivePage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "/settings", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(SettingsPage, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Route, { path: "*", element: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Navigate, { to: "/dashboard", replace: true }) })
   ] }) }) });
 }
 function App() {
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(AppDataProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(RoutedApp, {}) });
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(AppDataProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(RoutedApp, {}) });
 }
 
 // src/main.tsx
-var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
 (0, import_client.createRoot)(document.getElementById("root")).render(
-  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(import_react12.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(App, {}) })
+  /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(import_react13.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(App, {}) })
 );
 /*! Bundled license information:
 
