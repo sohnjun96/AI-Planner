@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { AiAssistantWorkspace } from "../components/AiAssistantWorkspace";
 import { MarkdownMemo } from "../components/MarkdownMemo";
-import { type CalendarDaySummary, MonthCalendar } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
 import { TaskItem } from "../components/TaskItem";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput } from "../models";
-import { addDays, compareByStartAtAsc, formatDateTime, getDateKey, isPastCompletedHidden, shiftIsoToDateKey } from "../utils/date";
+import { addDays, compareByStartAtAsc, formatDateTime, getDateKey, isPastCompletedHidden } from "../utils/date";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 
 const GLOBAL_MEMO_KEY = "global";
@@ -14,23 +13,13 @@ const GLOBAL_MEMO_KEY = "global";
 type TaskModalState =
   | {
       mode: "create";
+      defaultDate?: string;
     }
   | {
       mode: "edit";
       taskId: string;
     }
   | null;
-
-type DayFilter = "ALL" | "PENDING" | "DONE" | "ON_HOLD" | "MAJOR" | "CONFLICT";
-
-const DAY_FILTER_OPTIONS: Array<{ value: DayFilter; label: string }> = [
-  { value: "ALL", label: "전체" },
-  { value: "PENDING", label: "미완료" },
-  { value: "DONE", label: "완료" },
-  { value: "ON_HOLD", label: "보류" },
-  { value: "MAJOR", label: "중요" },
-  { value: "CONFLICT", label: "충돌" },
-];
 
 function toTaskInput(task: Task): TaskFormInput {
   return {
@@ -45,37 +34,37 @@ function toTaskInput(task: Task): TaskFormInput {
   };
 }
 
-function matchesDayFilter(task: Task, filter: DayFilter, conflictCount: number): boolean {
-  if (filter === "ALL") {
-    return true;
-  }
-  if (filter === "PENDING") {
-    return task.status !== "DONE";
-  }
-  if (filter === "DONE") {
-    return task.status === "DONE";
-  }
-  if (filter === "ON_HOLD") {
-    return task.status === "ON_HOLD";
-  }
-  if (filter === "MAJOR") {
-    return task.isMajor;
-  }
-  return conflictCount > 0;
+function formatFullDate(date: Date): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(date);
+}
+
+function formatWeekday(date: Date): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    weekday: "short",
+  }).format(date);
+}
+
+function isBetweenDateKeys(value: string, startKey: string, endKey: string): boolean {
+  const key = getDateKey(value);
+  return key >= startKey && key <= endKey;
 }
 
 export function DashboardPage() {
   const { tasks, projects, taskTypes, memos, setting, createTask, updateTask, removeTask, saveMemo } = useAppData();
-  const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
   const [memoSaved, setMemoSaved] = useState("");
   const [memoError, setMemoError] = useState("");
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
   const [isAiOpen, setIsAiOpen] = useState(false);
-  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-  const [dropMessage, setDropMessage] = useState("");
-  const [dropError, setDropError] = useState("");
-  const [dayFilter, setDayFilter] = useState<DayFilter>("ALL");
+
+  const today = useMemo(() => new Date(), []);
+  const todayKey = getDateKey(today);
+  const weekEndKey = getDateKey(addDays(today, 6));
 
   const visibleTasks = useMemo(
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
@@ -87,135 +76,53 @@ export function DashboardPage() {
   const memoMap = useMemo(() => Object.fromEntries(memos.map((memo) => [memo.date, memo])), [memos]);
   const conflictMap = useMemo(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
 
-  const daySummaryByDate = useMemo(() => {
-    const map: Record<string, CalendarDaySummary> = {};
-
-    for (const task of visibleTasks) {
-      const key = getDateKey(task.startAt);
-      if (!map[key]) {
-        map[key] = {
-          total: 0,
-          done: 0,
-          pending: 0,
-          onHold: 0,
-          conflicts: 0,
-          major: 0,
-          titles: [],
-        };
-      }
-
-      const summary = map[key];
-      summary.total += 1;
-      if (task.status === "DONE") {
-        summary.done += 1;
-      } else {
-        summary.pending += 1;
-      }
-      if (task.status === "ON_HOLD") {
-        summary.onHold += 1;
-      }
-      if (task.isMajor) {
-        summary.major += 1;
-      }
-      if ((conflictMap[task.id]?.length ?? 0) > 0) {
-        summary.conflicts += 1;
-      }
-      if (summary.titles.length < 3) {
-        summary.titles.push(task.title);
-      }
-    }
-
-    return map;
-  }, [visibleTasks, conflictMap]);
-
-  const selectedDaySummary: CalendarDaySummary = daySummaryByDate[selectedDate] ?? {
-    total: 0,
-    done: 0,
-    pending: 0,
-    onHold: 0,
-    conflicts: 0,
-    major: 0,
-    titles: [],
-  };
-
-  const dayTasks = useMemo(
-    () =>
-      visibleTasks
-        .filter((task) => getDateKey(task.startAt) === selectedDate)
-        .filter((task) => matchesDayFilter(task, dayFilter, conflictMap[task.id]?.length ?? 0))
-        .sort(compareByStartAtAsc),
-    [visibleTasks, selectedDate, dayFilter, conflictMap],
+  const todayTasks = useMemo(
+    () => visibleTasks.filter((task) => getDateKey(task.startAt) === todayKey).sort(compareByStartAtAsc),
+    [todayKey, visibleTasks],
   );
 
-  const majorTasks = useMemo(() => visibleTasks.filter((task) => task.isMajor).sort(compareByStartAtAsc).slice(0, 8), [visibleTasks]);
+  const todayOpenTasks = useMemo(() => todayTasks.filter((task) => task.status !== "DONE"), [todayTasks]);
 
-  const upcomingTasks = useMemo(() => {
-    const todayStart = new Date(`${getDateKey(new Date())}T00:00:00`).getTime();
-    const nextWeekEnd = addDays(new Date(), 7).getTime();
+  const weekTasks = useMemo(
+    () =>
+      visibleTasks
+        .filter((task) => isBetweenDateKeys(task.startAt, todayKey, weekEndKey))
+        .sort(compareByStartAtAsc),
+    [todayKey, visibleTasks, weekEndKey],
+  );
 
-    return visibleTasks
-      .filter((task) => task.status !== "DONE")
-      .filter((task) => {
-        const startAt = new Date(task.startAt).getTime();
-        return Number.isFinite(startAt) && startAt >= todayStart && startAt <= nextWeekEnd;
-      })
-      .sort(compareByStartAtAsc)
-      .slice(0, 10);
-  }, [visibleTasks]);
-
-  const briefing = useMemo(() => {
+  const attention = useMemo(() => {
     const now = Date.now();
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime();
-    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime();
-    const weekEndDate = addDays(today, 6);
-    const weekEnd = new Date(
-      weekEndDate.getFullYear(),
-      weekEndDate.getMonth(),
-      weekEndDate.getDate(),
-      23,
-      59,
-      59,
-      999,
-    ).getTime();
-
-    const todayItems: Task[] = [];
-    const weekItems: Task[] = [];
-    let overdueCount = 0;
-
-    for (const task of visibleTasks) {
-      if (task.status === "DONE") {
-        continue;
-      }
-      const startAt = new Date(task.startAt).getTime();
-      if (!Number.isFinite(startAt)) {
-        continue;
-      }
-      if (startAt < now) {
-        overdueCount += 1;
-      }
-      if (startAt >= todayStart && startAt <= todayEnd) {
-        todayItems.push(task);
-      }
-      if (startAt >= todayStart && startAt <= weekEnd) {
-        weekItems.push(task);
-      }
-    }
-
-    todayItems.sort(compareByStartAtAsc);
-    weekItems.sort(compareByStartAtAsc);
-
-    const conflictCount = visibleTasks.filter((task) => task.status !== "DONE" && (conflictMap[task.id]?.length ?? 0) > 0).length;
+    const overdue = visibleTasks
+      .filter((task) => task.status !== "DONE" && new Date(task.startAt).getTime() < now)
+      .sort(compareByStartAtAsc);
+    const conflicts = visibleTasks
+      .filter((task) => task.status !== "DONE" && (conflictMap[task.id]?.length ?? 0) > 0)
+      .sort(compareByStartAtAsc);
+    const important = weekTasks.filter((task) => task.status !== "DONE" && task.isMajor).sort(compareByStartAtAsc);
+    const upcoming = weekTasks.filter((task) => task.status !== "DONE").sort(compareByStartAtAsc).slice(0, 5);
 
     return {
-      todayItems: todayItems.slice(0, 5),
-      weekItems: weekItems.slice(0, 7),
-      todayCount: todayItems.length,
-      weekCount: weekItems.length,
-      overdueCount,
-      conflictCount,
+      overdue,
+      conflicts,
+      important,
+      upcoming,
     };
-  }, [visibleTasks, conflictMap]);
+  }, [conflictMap, visibleTasks, weekTasks]);
+
+  const weekStrip = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = addDays(today, index);
+      const key = getDateKey(date);
+      const dayTasks = visibleTasks.filter((task) => getDateKey(task.startAt) === key);
+      return {
+        key,
+        date,
+        total: dayTasks.length,
+        pending: dayTasks.filter((task) => task.status !== "DONE").length,
+      };
+    });
+  }, [today, visibleTasks]);
 
   const editingTask = useMemo(() => {
     if (!taskModalState || taskModalState.mode !== "edit") {
@@ -225,23 +132,23 @@ export function DashboardPage() {
   }, [taskModalState, tasks]);
 
   const activeTaskModalState: TaskModalState = taskModalState?.mode === "edit" && !editingTask ? null : taskModalState;
-
   const globalMemoSource = memoMap[GLOBAL_MEMO_KEY]?.content ?? "";
 
   useEffect(() => {
-    if (!activeTaskModalState) {
+    if (!activeTaskModalState && !isAiOpen) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setTaskModalState(null);
+        setIsAiOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeTaskModalState]);
+  }, [activeTaskModalState, isAiOpen]);
 
   async function handleCreateTask(input: TaskFormInput) {
     await createTask(input);
@@ -264,37 +171,6 @@ export function DashboardPage() {
     setTaskModalState(null);
   }
 
-  async function handleDropTaskToDate(taskId: string, dateKey: string) {
-    const task = tasks.find((item) => item.id === taskId);
-    if (!task) {
-      return;
-    }
-    setDropError("");
-    setDropMessage("");
-    try {
-      const nextStartAt = shiftIsoToDateKey(task.startAt, dateKey);
-      const startAtMs = new Date(task.startAt).getTime();
-      const endAtMs = task.endAt ? new Date(task.endAt).getTime() : Number.NaN;
-      const durationMs = Number.isFinite(startAtMs) && Number.isFinite(endAtMs) && endAtMs >= startAtMs ? endAtMs - startAtMs : null;
-      const nextEndAt = task.endAt
-        ? durationMs !== null
-          ? new Date(new Date(nextStartAt).getTime() + durationMs).toISOString()
-          : shiftIsoToDateKey(task.endAt, dateKey)
-        : undefined;
-      await updateTask(task.id, {
-        ...toTaskInput(task),
-        startAt: nextStartAt,
-        endAt: nextEndAt,
-      });
-      setSelectedDate(dateKey);
-      setDropMessage(`"${task.title}" 일정을 ${dateKey}(으)로 이동했습니다.`);
-    } catch (moveError) {
-      setDropError(moveError instanceof Error ? moveError.message : "일정 이동에 실패했습니다.");
-    } finally {
-      setDraggingTaskId(null);
-    }
-  }
-
   async function handleSaveGlobalMemo(content: string) {
     setMemoError("");
     try {
@@ -306,210 +182,175 @@ export function DashboardPage() {
     }
   }
 
-  function openCreateTaskForDate(dateKey: string) {
-    setSelectedDate(dateKey);
+  function openCreateTask(defaultDate = todayKey) {
     setTaskFormSerial((prev) => prev + 1);
-    setTaskModalState({ mode: "create" });
+    setTaskModalState({ mode: "create", defaultDate });
+  }
+
+  function openEditTask(taskId: string) {
+    setTaskModalState({ mode: "edit", taskId });
+  }
+
+  function renderTaskList(items: Task[], emptyText: string) {
+    if (items.length === 0) {
+      return <p className="empty-text">{emptyText}</p>;
+    }
+
+    return (
+      <div className="task-stack">
+        {items.map((task) => (
+          <TaskItem
+            key={task.id}
+            task={task}
+            project={projectMap[task.projectId]}
+            taskType={typeMap[task.taskTypeId]}
+            timeFormat={setting.timeFormat}
+            hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
+            onClick={() => openEditTask(task.id)}
+            onStatusChange={(status) => {
+              void updateTask(task.id, {
+                ...toTaskInput(task),
+                status,
+              });
+            }}
+          />
+        ))}
+      </div>
+    );
   }
 
   return (
-    <div className="dashboard-page">
-      <MonthCalendar
-        selectedDate={selectedDate}
-        weekStartsOn={setting.weekStartsOn}
-        daySummaryByDate={daySummaryByDate}
-        onSelectDate={setSelectedDate}
-        onDropTaskToDate={handleDropTaskToDate}
-        onCreateTaskAtDate={openCreateTaskForDate}
-      />
-
-      <MarkdownMemo
-        content={globalMemoSource}
-        savedMessage={memoSaved}
-        errorMessage={memoError}
-        onEditStart={() => {
-          setMemoSaved("");
-          setMemoError("");
-        }}
-        onSave={handleSaveGlobalMemo}
-      />
-
-      <section className="panel ai-launch-panel">
+    <div className="dashboard-workspace">
+      <section className="dashboard-today-hero">
         <div>
-          <p className="eyebrow">AI COMMAND</p>
-          <h2>말로 일정 만들기</h2>
-          <p className="description-text">자연어로 요청하면 AI가 질문, 초안, 변경안 검토를 한 화면에서 정리합니다.</p>
+          <p className="eyebrow">TODAY</p>
+          <h2>{formatFullDate(today)}</h2>
+          <p className="description-text">오늘 처리할 일과 위험 신호를 먼저 확인합니다.</p>
         </div>
-        <button type="button" className="btn btn-primary btn-hero" onClick={() => setIsAiOpen(true)}>
-          AI 일정 입력 열기
-        </button>
+        <div className="dashboard-hero-actions">
+          <button type="button" className="btn btn-primary" onClick={() => openCreateTask()}>
+            새 일정
+          </button>
+          <button type="button" className="btn btn-soft" onClick={() => setIsAiOpen(true)}>
+            AI 입력
+          </button>
+        </div>
+        <div className="dashboard-summary-row" aria-label="오늘 요약">
+          <span>오늘 남은 {todayOpenTasks.length}</span>
+          <span>지연 {attention.overdue.length}</span>
+          <span>충돌 {attention.conflicts.length}</span>
+          <span>중요 {attention.important.length}</span>
+        </div>
       </section>
 
-      <section className="panel briefing-panel">
-        <header className="panel-header">
+      <div className="dashboard-main-grid">
+        <section className="dashboard-card today-task-card">
+          <header className="dashboard-card-header">
+            <div>
+              <p className="eyebrow">TODAY TASKS</p>
+              <h3>오늘 할 일</h3>
+            </div>
+            <span>{todayTasks.length}개</span>
+          </header>
+          {renderTaskList(todayTasks, "오늘 예정된 일정이 없습니다.")}
+          {todayTasks.length === 0 ? (
+            <button type="button" className="btn btn-primary" onClick={() => openCreateTask()}>
+              새 일정 추가
+            </button>
+          ) : null}
+        </section>
+
+        <aside className="dashboard-side-stack">
+          <section className="dashboard-card dashboard-ai-card">
+            <header className="dashboard-card-header">
+              <div>
+                <p className="eyebrow">AI QUICK COMMAND</p>
+                <h3>AI 빠른 입력</h3>
+              </div>
+            </header>
+            <AiAssistantWorkspace
+              compact
+              showEndpointInfo={false}
+              title="자연어로 일정 만들기"
+              subtitle="요청을 입력하면 AI가 초안과 변경안을 제안합니다."
+              placeholder="예: 오늘 오후 4시에 회의 일정 추가해줘."
+              className="embedded dashboard-ai-workspace"
+            />
+          </section>
+
+          <section className="dashboard-card attention-card">
+            <header className="dashboard-card-header">
+              <div>
+                <p className="eyebrow">ATTENTION</p>
+                <h3>확인 필요</h3>
+              </div>
+            </header>
+            <div className="attention-list">
+              <button type="button" className="attention-item" onClick={() => attention.overdue[0] && openEditTask(attention.overdue[0].id)}>
+                <strong>지연 일정</strong>
+                <span>{attention.overdue.length}개</span>
+              </button>
+              <button
+                type="button"
+                className="attention-item"
+                onClick={() => attention.conflicts[0] && openEditTask(attention.conflicts[0].id)}
+              >
+                <strong>시간 충돌</strong>
+                <span>{attention.conflicts.length}개</span>
+              </button>
+              <button type="button" className="attention-item" onClick={() => attention.important[0] && openEditTask(attention.important[0].id)}>
+                <strong>이번 주 중요</strong>
+                <span>{attention.important.length}개</span>
+              </button>
+            </div>
+            <div className="upcoming-mini-list">
+              <h4>다가오는 일정</h4>
+              {attention.upcoming.length === 0 ? <p className="empty-text">이번 주 남은 일정이 없습니다.</p> : null}
+              {attention.upcoming.map((task) => (
+                <button key={task.id} type="button" className="upcoming-link" onClick={() => openEditTask(task.id)}>
+                  <span>{task.title}</span>
+                  <small>{formatDateTime(task.startAt, setting.timeFormat)}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <section className="dashboard-card week-strip-card">
+        <header className="dashboard-card-header">
           <div>
-            <p className="eyebrow">BRIEFING</p>
-            <h2>오늘/주간 브리핑</h2>
+            <p className="eyebrow">THIS WEEK</p>
+            <h3>이번 주</h3>
           </div>
           <small>
-            오늘 {briefing.todayCount}건 | 이번 주 {briefing.weekCount}건
+            {todayKey} - {weekEndKey}
           </small>
         </header>
-
-        <div className="kpi-grid">
-          <article className="kpi-card accent">
-            <small>오늘 남은 일정</small>
-            <strong>{briefing.todayCount}</strong>
-          </article>
-          <article className="kpi-card">
-            <small>이번 주 남은 일정</small>
-            <strong>{briefing.weekCount}</strong>
-          </article>
-          <article className="kpi-card danger">
-            <small>지연 위험</small>
-            <strong>{briefing.overdueCount}</strong>
-          </article>
-          <article className="kpi-card danger">
-            <small>충돌 일정</small>
-            <strong>{briefing.conflictCount}</strong>
-          </article>
-          <article className="kpi-card">
-            <small>선택 날짜</small>
-            <strong>{selectedDaySummary.total}</strong>
-          </article>
+        <div className="week-strip">
+          {weekStrip.map((day) => (
+            <button key={day.key} type="button" className="week-day-cell" onClick={() => openCreateTask(day.key)}>
+              <strong>{formatWeekday(day.date)}</strong>
+              <span>{day.date.getDate()}</span>
+              <small>전체 {day.total}</small>
+              <small>남은 {day.pending}</small>
+            </button>
+          ))}
         </div>
-
-        <div className="briefing-grid">
-          <article className="briefing-card">
-            <h3>오늘 우선순위</h3>
-            {briefing.todayItems.length === 0 ? <p className="empty-text">오늘 남은 일정이 없습니다.</p> : null}
-            <ul className="mini-list">
-              {briefing.todayItems.map((task) => (
-                <li key={`briefing-today-${task.id}`}>
-                  {task.title} ({formatDateTime(task.startAt, setting.timeFormat)})
-                </li>
-              ))}
-            </ul>
-          </article>
-
-          <article className="briefing-card">
-            <h3>이번 주 주요 일정</h3>
-            {briefing.weekItems.length === 0 ? <p className="empty-text">이번 주 일정이 없습니다.</p> : null}
-            <ul className="mini-list">
-              {briefing.weekItems.map((task) => (
-                <li key={`briefing-week-${task.id}`}>
-                  {task.title} ({getDateKey(task.startAt)})
-                </li>
-              ))}
-            </ul>
-          </article>
-
-          <article className="briefing-card metrics">
-            <h3>운영 상태</h3>
-            <p>선택 날짜 미완료: {selectedDaySummary.pending}건</p>
-            <p>선택 날짜 완료: {selectedDaySummary.done}건</p>
-            <p>선택 날짜 충돌: {selectedDaySummary.conflicts}건</p>
-            {draggingTaskId ? <p className="description-text">드래그 중입니다. 날짜 칸에 놓아 일정을 재배치하세요.</p> : null}
-          </article>
-        </div>
-
-        {dropMessage ? <p className="success-text">{dropMessage}</p> : null}
-        {dropError ? <p className="error-text">{dropError}</p> : null}
       </section>
 
-      <div className="dashboard-grid">
-        <section className="panel">
-          <header className="panel-header">
-            <h2>날짜별 일정</h2>
-            <div className="panel-header-actions">
-              <small>
-                {selectedDate} · 총 {selectedDaySummary.total}건
-              </small>
-              <button
-                type="button"
-                className="btn btn-soft"
-                onClick={() => {
-                  openCreateTaskForDate(selectedDate);
-                }}
-              >
-                일정 추가
-              </button>
-            </div>
-          </header>
-
-          <div className="button-row">
-            {DAY_FILTER_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`btn btn-soft ${dayFilter === option.value ? "is-active" : ""}`}
-                onClick={() => setDayFilter(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="task-stack">
-            {dayTasks.length === 0 ? <p className="empty-text">조건에 맞는 일정이 없습니다.</p> : null}
-            {dayTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                project={projectMap[task.projectId]}
-                taskType={typeMap[task.taskTypeId]}
-                timeFormat={setting.timeFormat}
-                hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
-                draggableTask
-                onDragTaskStateChange={setDraggingTaskId}
-                onClick={() => {
-                  setTaskModalState({ mode: "edit", taskId: task.id });
-                }}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="panel">
-          <header className="panel-header">
-            <h2>중요/다가오는 일정</h2>
-          </header>
-
-          <div className="mini-list-block">
-            <h3>중요 일정</h3>
-            <div className="task-stack">
-              {majorTasks.length === 0 ? <p className="empty-text">중요 일정이 없습니다.</p> : null}
-              {majorTasks.map((task) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  project={projectMap[task.projectId]}
-                  taskType={typeMap[task.taskTypeId]}
-                  timeFormat={setting.timeFormat}
-                  hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
-                  draggableTask
-                  onDragTaskStateChange={setDraggingTaskId}
-                  onClick={() => {
-                    setTaskModalState({ mode: "edit", taskId: task.id });
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="mini-list-block">
-            <h3>다가오는 7일</h3>
-            {upcomingTasks.length === 0 ? <p className="empty-text">다가오는 일정이 없습니다.</p> : null}
-            <ul className="mini-list">
-              {upcomingTasks.map((task) => (
-                <li key={`upcoming-${task.id}`}>
-                  {task.title} ({formatDateTime(task.startAt, setting.timeFormat)})
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-      </div>
+      <section className="dashboard-memo-section">
+        <MarkdownMemo
+          content={globalMemoSource}
+          savedMessage={memoSaved}
+          errorMessage={memoError}
+          onEditStart={() => {
+            setMemoSaved("");
+            setMemoError("");
+          }}
+          onSave={handleSaveGlobalMemo}
+        />
+      </section>
 
       {isAiOpen ? (
         <div
@@ -532,13 +373,7 @@ export function DashboardPage() {
                 <p className="eyebrow">AI COMMAND</p>
                 <h2>AI 일정 입력</h2>
               </div>
-              <button
-                type="button"
-                className="btn btn-soft"
-                onClick={() => {
-                  setIsAiOpen(false);
-                }}
-              >
+              <button type="button" className="btn btn-soft" onClick={() => setIsAiOpen(false)}>
                 닫기
               </button>
             </header>
@@ -558,31 +393,25 @@ export function DashboardPage() {
             className="modal-card panel"
             role="dialog"
             aria-modal="true"
-            aria-label="일정 상세/수정"
+            aria-label="일정 상세 또는 수정"
             onClick={(event) => {
               event.stopPropagation();
             }}
           >
             <header className="panel-header">
               <h2>{activeTaskModalState.mode === "create" ? "일정 추가" : "일정 수정"}</h2>
-              <button
-                type="button"
-                className="btn btn-soft"
-                onClick={() => {
-                  setTaskModalState(null);
-                }}
-              >
+              <button type="button" className="btn btn-soft" onClick={() => setTaskModalState(null)}>
                 닫기
               </button>
             </header>
 
             {activeTaskModalState.mode === "create" ? (
               <TaskForm
-                key={`dashboard-new-task-${selectedDate}-${taskFormSerial}`}
+                key={`dashboard-new-task-${activeTaskModalState.defaultDate ?? todayKey}-${taskFormSerial}`}
                 projects={projects}
                 taskTypes={taskTypes}
                 allTasks={tasks}
-                defaultStartDate={selectedDate}
+                defaultStartDate={activeTaskModalState.defaultDate ?? todayKey}
                 timeFormat={setting.timeFormat}
                 onSubmit={handleCreateTask}
               />
@@ -596,9 +425,7 @@ export function DashboardPage() {
                 timeFormat={setting.timeFormat}
                 onSubmit={handleUpdateTask}
                 onDelete={handleDeleteTask}
-                onCancel={() => {
-                  setTaskModalState(null);
-                }}
+                onCancel={() => setTaskModalState(null)}
               />
             ) : null}
           </section>

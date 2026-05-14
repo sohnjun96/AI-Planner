@@ -1610,6 +1610,200 @@ textarea:focus-visible,
   gap: 8px;
   flex-wrap: wrap;
 }
+.dashboard-workspace {
+  width: min(100%, var(--max-content));
+  margin: 0 auto;
+  padding: 40px clamp(16px, 3vw, 48px) 64px;
+  display: grid;
+  gap: 20px;
+}
+.dashboard-today-hero,
+.dashboard-card {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+}
+.dashboard-today-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 24px;
+  padding: 32px;
+}
+.dashboard-today-hero h2 {
+  margin: 0;
+  font-family:
+    "SF Pro Display",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.24px;
+}
+.dashboard-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dashboard-summary-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dashboard-summary-row span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  background: var(--surface-pearl);
+  color: var(--ink-muted-80);
+  font-size: 14px;
+}
+.dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  align-items: start;
+  gap: 20px;
+}
+.dashboard-side-stack {
+  display: grid;
+  gap: 20px;
+}
+.dashboard-card {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 28px;
+}
+.dashboard-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.dashboard-card-header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.18px;
+}
+.dashboard-card-header > span,
+.dashboard-card-header small {
+  color: var(--body-muted);
+  font-size: 14px;
+}
+.today-task-card {
+  min-height: 420px;
+}
+.dashboard-ai-card {
+  padding-bottom: 20px;
+}
+.dashboard-ai-workspace {
+  gap: 14px;
+}
+.dashboard-ai-workspace .panel-header {
+  display: none;
+}
+.dashboard-ai-workspace .ai-result-card {
+  max-height: 300px;
+  overflow: auto;
+}
+.attention-list {
+  display: grid;
+  gap: 8px;
+}
+.attention-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  background: var(--surface-pearl);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.attention-item span {
+  color: var(--primary);
+}
+.upcoming-mini-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.upcoming-mini-list h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+.upcoming-link {
+  display: grid;
+  gap: 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 8px 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.upcoming-link small {
+  color: var(--body-muted);
+}
+.week-strip-card {
+  gap: 20px;
+}
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+.week-day-cell {
+  display: grid;
+  gap: 6px;
+  min-height: 124px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: var(--surface-pearl);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.week-day-cell strong {
+  font-size: 14px;
+  color: var(--body-muted);
+}
+.week-day-cell span {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+.week-day-cell small {
+  color: var(--body-muted);
+}
+.dashboard-memo-section .global-memo-panel {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  background: var(--canvas);
+}
 @media (max-width: 1200px) {
   .tasks-layout,
   .project-management-layout,
@@ -1617,7 +1811,8 @@ textarea:focus-visible,
   .settings-type-layout,
   .dashboard-grid,
   .ai-request-grid,
-  .tasks-split-view {
+  .tasks-split-view,
+  .dashboard-main-grid {
     grid-template-columns: 1fr;
   }
   .tasks-control-bar,
@@ -1692,6 +1887,15 @@ textarea:focus-visible,
   .archive-task-card {
     grid-template-columns: 1fr;
   }
+  .dashboard-today-hero {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-hero-actions {
+    justify-content: flex-start;
+  }
+  .week-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .project-card-grid {
     grid-template-columns: 1fr;
   }
@@ -1717,6 +1921,17 @@ textarea:focus-visible,
     display: none;
   }
   .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-workspace {
+    padding: 24px 16px 48px;
+  }
+  .dashboard-today-hero,
+  .dashboard-card,
+  .dashboard-memo-section .global-memo-panel {
+    padding: 20px;
+  }
+  .week-strip {
     grid-template-columns: 1fr;
   }
 }
