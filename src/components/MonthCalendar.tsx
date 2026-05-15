@@ -75,6 +75,7 @@ export function MonthCalendar({
 }: MonthCalendarProps) {
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date(selectedDate)));
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
 
   const selectedKey = getDateKey(selectedDate);
   const todayKey = getDateKey(new Date());
@@ -125,6 +126,11 @@ export function MonthCalendar({
     onSelectDate(getDateKey(date));
   }
 
+  function moveVisibleMonth(amount: number) {
+    setVisibleMonth((prev) => addMonths(prev, amount));
+    setIsMonthPickerOpen(false);
+  }
+
   function handleMonthInputChange(value: string) {
     const parsed = parseMonthInputValue(value);
     if (!parsed) {
@@ -132,12 +138,14 @@ export function MonthCalendar({
     }
     setVisibleMonth(parsed);
     onSelectDate(getDateKey(parsed));
+    setIsMonthPickerOpen(false);
   }
 
   function handleSelectToday() {
     const today = new Date();
     setVisibleMonth(startOfMonth(today));
     onSelectDate(getDateKey(today));
+    setIsMonthPickerOpen(false);
   }
 
   return (
@@ -146,20 +154,42 @@ export function MonthCalendar({
         <div className="calendar-nav-row">
           <button
             type="button"
-            className="btn btn-soft"
+            className="calendar-icon-button"
             aria-label="이전 달 보기"
-            onClick={() => setVisibleMonth((prev) => addMonths(prev, -1))}
+            onClick={() => moveVisibleMonth(-1)}
           >
-            이전 달
+            ‹
           </button>
-          <strong>{monthLabel}</strong>
+          <div className="calendar-month-control">
+            <button
+              type="button"
+              className="calendar-month-label-button"
+              aria-expanded={isMonthPickerOpen}
+              aria-label={`${monthLabel} 월 이동 열기`}
+              onClick={() => setIsMonthPickerOpen((prev) => !prev)}
+            >
+              {monthLabel}
+            </button>
+            {isMonthPickerOpen ? (
+              <div className="calendar-month-popover" role="group" aria-label="월 이동">
+                <input
+                  type="month"
+                  value={toMonthInputValue(visibleMonth)}
+                  onChange={(event) => handleMonthInputChange(event.target.value)}
+                />
+                <button type="button" className="btn btn-soft" onClick={handleSelectToday}>
+                  오늘
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
-            className="btn btn-soft"
+            className="calendar-icon-button"
             aria-label="다음 달 보기"
-            onClick={() => setVisibleMonth((prev) => addMonths(prev, 1))}
+            onClick={() => moveVisibleMonth(1)}
           >
-            다음 달
+            ›
           </button>
         </div>
 
@@ -167,14 +197,6 @@ export function MonthCalendar({
           <button type="button" className="btn btn-soft" onClick={handleSelectToday}>
             오늘
           </button>
-          <label className="calendar-month-input">
-            월 이동
-            <input
-              type="month"
-              value={toMonthInputValue(visibleMonth)}
-              onChange={(event) => handleMonthInputChange(event.target.value)}
-            />
-          </label>
         </div>
       </div>
 
@@ -289,12 +311,12 @@ export function MonthCalendar({
               </div>
 
               <div className="calendar-event-stack">
-                {summary.titles.slice(0, 2).map((title, index) => (
+                {summary.titles.slice(0, 3).map((title, index) => (
                   <span key={`${key}-title-${index}`} className="calendar-event-line" title={title}>
                     {title}
                   </span>
                 ))}
-                {summary.total > 2 ? <span className="calendar-event-more">+{summary.total - 2}</span> : null}
+                {summary.total > 3 ? <span className="calendar-event-more">+{summary.total - 3}</span> : null}
               </div>
 
               <div className="calendar-indicators">

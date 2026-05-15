@@ -272,119 +272,14 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="settings-layout">
-      <section className="panel settings-panel">
-        <header className="panel-header">
-          <h2>일반 설정</h2>
-        </header>
-
-        <div className="form-grid two-col">
-          <label>
-            주 시작 요일
-            <select
-              value={setting.weekStartsOn}
-              onChange={(event) => {
-                void updateSetting({ weekStartsOn: event.target.value as "sun" | "mon" });
-              }}
-            >
-              <option value="mon">월요일</option>
-              <option value="sun">일요일</option>
-            </select>
-          </label>
-
-          <label>
-            시간 표시 형식
-            <select
-              value={setting.timeFormat}
-              onChange={(event) => {
-                void updateSetting({ timeFormat: event.target.value as "24h" | "12h" });
-              }}
-            >
-              <option value="24h">24시간제</option>
-              <option value="12h">12시간제</option>
-            </select>
-          </label>
+    <div className="settings-workspace">
+      <section className="settings-hero">
+        <div>
+          <p className="eyebrow">SETTINGS</p>
+          <h2>설정</h2>
+          <p className="description-text">캘린더 표시, 알림, 백업, AI 연결과 일정 종류를 한 화면에서 조정합니다.</p>
         </div>
-
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={setting.showPastCompleted}
-            onChange={(event) => {
-              void updateSetting({ showPastCompleted: event.target.checked });
-            }}
-          />
-          지난 완료 업무를 기본으로 표시
-        </label>
-      </section>
-
-      <section className="panel settings-panel">
-        <header className="panel-header">
-          <h2>알림 및 백업</h2>
-        </header>
-
-        <div className="form-grid two-col">
-          <label className="checkbox-inline">
-            <input
-              type="checkbox"
-              checked={Boolean(setting.notificationsEnabled)}
-              onChange={(event) => {
-                void updateSetting({ notificationsEnabled: event.target.checked });
-              }}
-            />
-            일정 알림 사용
-          </label>
-
-          <label>
-            알림 사전 시간(분)
-            <input
-              type="text"
-              inputMode="numeric"
-              value={String(setting.notifyBeforeMinutes ?? 30)}
-              onChange={(event) => {
-                const next = Number(event.target.value.replace(/[^0-9]/g, ""));
-                void updateSetting({ notifyBeforeMinutes: Number.isFinite(next) ? next : 0 });
-              }}
-            />
-          </label>
-        </div>
-
-        <div className="form-grid two-col">
-          <label className="checkbox-inline">
-            <input
-              type="checkbox"
-              checked={Boolean(setting.autoBackupEnabled)}
-              onChange={(event) => {
-                void updateSetting({ autoBackupEnabled: event.target.checked });
-              }}
-            />
-            자동 백업 사용
-          </label>
-
-          <label>
-            자동 백업 주기(분)
-            <input
-              type="text"
-              inputMode="numeric"
-              value={String(setting.autoBackupIntervalMinutes ?? 360)}
-              onChange={(event) => {
-                const next = Number(event.target.value.replace(/[^0-9]/g, ""));
-                void updateSetting({ autoBackupIntervalMinutes: Number.isFinite(next) ? next : 15 });
-              }}
-            />
-          </label>
-        </div>
-
-        <div className="button-row">
-          <button className="btn btn-primary" type="button" onClick={() => void handleCreateManualBackup()}>
-            지금 자동 백업 생성
-          </button>
-          <button className="btn btn-soft" type="button" onClick={() => void refreshAutoBackups()}>
-            백업 목록 새로고침
-          </button>
-        </div>
-
-        <div className="button-row">
+        <div className="settings-hero-actions">
           <button className="btn btn-primary" type="button" onClick={() => void handleExport()}>
             JSON 내보내기
           </button>
@@ -393,178 +288,324 @@ export function SettingsPage() {
             <input type="file" accept=".json,application/json" onChange={handleImport} />
           </label>
         </div>
-
-        {backupMessage ? <p className="success-text">{backupMessage}</p> : null}
-        {backupError ? <p className="error-text">{backupError}</p> : null}
-        {message ? <p className="success-text">{message}</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
-
-        <div className="backup-list-block">
-          <h3>자동 백업 목록</h3>
-          {autoBackups.length === 0 ? <p className="empty-text">저장된 자동 백업이 없습니다.</p> : null}
-
-          <ul className="backup-list">
-            {autoBackups.map((backup) => (
-              <li key={backup.id} className="backup-item">
-                <div>
-                  <strong>{formatDateTime(backup.createdAt, setting.timeFormat)}</strong>
-                  <p className="description-text">사유: {backup.reason} / 크기: {(backup.size / 1024).toFixed(1)} KB</p>
-                </div>
-                <div className="button-row compact">
-                  <button
-                    className="btn btn-soft"
-                    type="button"
-                    onClick={() => {
-                      void handleRestoreBackup(backup.id);
-                    }}
-                  >
-                    복원
-                  </button>
-                  <button
-                    className="btn btn-danger"
-                    type="button"
-                    onClick={() => {
-                      void handleDeleteBackup(backup.id);
-                    }}
-                  >
-                    삭제
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
       </section>
 
-      <section className="panel settings-panel">
-        <header className="panel-header">
-          <h2>AI 설정</h2>
-        </header>
-
-        <div className="form-grid two-col">
-          <label>
-            LLM 모델명
-            <input
-              type="text"
-              value={setting.llmModel ?? LLM_DEFAULT_MODEL}
-              onChange={(event) => {
-                void updateSetting({ llmModel: event.target.value });
-              }}
-              placeholder={LLM_DEFAULT_MODEL}
-            />
-          </label>
-
-          <label>
-            LLM API 키
-            <input
-              type="password"
-              value={setting.llmApiKey ?? ""}
-              onChange={(event) => {
-                void updateSetting({ llmApiKey: event.target.value });
-              }}
-              placeholder="API 키"
-              autoComplete="off"
-            />
-          </label>
-        </div>
-
-        <p className="description-text">LLM Endpoint(코드 고정): {LLM_CHAT_COMPLETIONS_URL}</p>
-        <p className="description-text">모델명/API Key는 입력 즉시 저장됩니다.</p>
+      <section className="settings-overview-grid" aria-label="설정 요약">
+        <article className="settings-summary-card">
+          <span>주 시작</span>
+          <strong>{setting.weekStartsOn === "mon" ? "월요일" : "일요일"}</strong>
+        </article>
+        <article className="settings-summary-card">
+          <span>시간 표시</span>
+          <strong>{setting.timeFormat === "24h" ? "24시간제" : "12시간제"}</strong>
+        </article>
+        <article className="settings-summary-card">
+          <span>알림</span>
+          <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐"}</strong>
+        </article>
+        <article className="settings-summary-card">
+          <span>백업</span>
+          <strong>{setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동"}</strong>
+        </article>
       </section>
 
-      <section className="panel">
-        <header className="panel-header">
-          <h2>일정 종류 관리</h2>
-          <small>{sortedTypes.length}개</small>
-        </header>
+      <div className="settings-main-grid">
+        <section className="settings-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">GENERAL</p>
+              <h3>기본 환경</h3>
+            </div>
+          </header>
 
-        <div className="settings-type-layout">
-          <ul className="entity-list">
-            {sortedTypes.map((type) => (
-              <li
-                key={type.id}
-                className={`entity-item ${typeForm.id === type.id ? "selected" : ""}`}
-                onClick={() => handleSelectType(type)}
-                role="button"
-                tabIndex={0}
-                aria-label={`${type.name} 종류 선택`}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    handleSelectType(type);
-                  }
+          <div className="form-grid two-col">
+            <label>
+              주 시작 요일
+              <select
+                value={setting.weekStartsOn}
+                onChange={(event) => {
+                  void updateSetting({ weekStartsOn: event.target.value as "sun" | "mon" });
                 }}
               >
-                <span className="color-dot" style={{ backgroundColor: type.color }} />
-                <strong>{type.name}</strong>
-                <small>{type.isDefault ? "기본" : "사용자"}</small>
-              </li>
-            ))}
-          </ul>
-
-          <form className="task-form" onSubmit={handleTypeSubmit}>
-            <h3>{typeForm.id ? "종류 수정" : "새 종류"}</h3>
+                <option value="mon">월요일</option>
+                <option value="sun">일요일</option>
+              </select>
+            </label>
 
             <label>
-              종류명
+              시간 표시 형식
+              <select
+                value={setting.timeFormat}
+                onChange={(event) => {
+                  void updateSetting({ timeFormat: event.target.value as "24h" | "12h" });
+                }}
+              >
+                <option value="24h">24시간제</option>
+                <option value="12h">12시간제</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="checkbox-inline settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={setting.showPastCompleted}
+              onChange={(event) => {
+                void updateSetting({ showPastCompleted: event.target.checked });
+              }}
+            />
+            지난 완료 업무를 기본으로 표시
+          </label>
+        </section>
+
+        <section className="settings-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">AI</p>
+              <h3>AI 연결</h3>
+            </div>
+          </header>
+
+          <div className="form-grid two-col">
+            <label>
+              LLM 모델명
               <input
                 type="text"
-                value={typeForm.name}
-                onChange={(event) => setTypeForm((prev) => ({ ...prev, name: event.target.value }))}
-                required
+                value={setting.llmModel ?? LLM_DEFAULT_MODEL}
+                onChange={(event) => {
+                  void updateSetting({ llmModel: event.target.value });
+                }}
+                placeholder={LLM_DEFAULT_MODEL}
               />
             </label>
 
             <label>
-              색상
-              <ColorSelector
-                value={typeForm.color}
-                onChange={(nextColor) => {
-                  setTypeForm((prev) => ({ ...prev, color: nextColor }));
+              LLM API 키
+              <input
+                type="password"
+                value={setting.llmApiKey ?? ""}
+                onChange={(event) => {
+                  void updateSetting({ llmApiKey: event.target.value });
                 }}
+                placeholder="API 키"
+                autoComplete="off"
               />
             </label>
+          </div>
 
-            <label className="checkbox-inline">
+          <div className="settings-inline-note">
+            <span>Endpoint</span>
+            <code>{LLM_CHAT_COMPLETIONS_URL}</code>
+          </div>
+          <p className="description-text">모델명과 API Key는 입력 즉시 저장됩니다.</p>
+        </section>
+
+        <section className="settings-card settings-backup-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">NOTIFY & BACKUP</p>
+              <h3>알림과 백업</h3>
+            </div>
+          </header>
+
+          <div className="settings-actions-grid">
+            <label className="checkbox-inline settings-toggle-row">
               <input
                 type="checkbox"
-                checked={typeForm.isActive}
-                onChange={(event) => setTypeForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                checked={Boolean(setting.notificationsEnabled)}
+                onChange={(event) => {
+                  void updateSetting({ notificationsEnabled: event.target.checked });
+                }}
               />
-              사용
+              일정 알림 사용
             </label>
 
-            <div className="button-row">
-              <button className="btn btn-primary" type="submit">
-                {typeForm.id ? "저장" : "생성"}
-              </button>
-
-              {typeForm.id && !typeForm.isDefault ? (
-                <button className="btn btn-danger" type="button" onClick={() => void handleTypeDelete()}>
-                  삭제
-                </button>
-              ) : null}
-
-              <button
-                className="btn btn-soft"
-                type="button"
-                onClick={() => {
-                  setTypeError("");
-                  setTypeMessage("");
-                  setTypeForm(createEmptyTypeForm());
-                  typeAutoSaveSnapshotRef.current = "";
-                  lastTypeIdRef.current = undefined;
+            <label>
+              알림 사전 시간(분)
+              <input
+                type="text"
+                inputMode="numeric"
+                value={String(setting.notifyBeforeMinutes ?? 30)}
+                onChange={(event) => {
+                  const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                  void updateSetting({ notifyBeforeMinutes: Number.isFinite(next) ? next : 0 });
                 }}
-              >
-                초기화
-              </button>
-            </div>
+              />
+            </label>
 
-            {typeMessage ? <p className="success-text">{typeMessage}</p> : null}
-            {typeError ? <p className="error-text">{typeError}</p> : null}
-          </form>
-        </div>
-      </section>
+            <label className="checkbox-inline settings-toggle-row">
+              <input
+                type="checkbox"
+                checked={Boolean(setting.autoBackupEnabled)}
+                onChange={(event) => {
+                  void updateSetting({ autoBackupEnabled: event.target.checked });
+                }}
+              />
+              자동 백업 사용
+            </label>
+
+            <label>
+              자동 백업 주기(분)
+              <input
+                type="text"
+                inputMode="numeric"
+                value={String(setting.autoBackupIntervalMinutes ?? 360)}
+                onChange={(event) => {
+                  const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                  void updateSetting({ autoBackupIntervalMinutes: Number.isFinite(next) ? next : 15 });
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="settings-backup-actions">
+            <button className="btn btn-primary" type="button" onClick={() => void handleCreateManualBackup()}>
+              지금 백업 생성
+            </button>
+            <button className="btn btn-soft" type="button" onClick={() => void refreshAutoBackups()}>
+              목록 새로고침
+            </button>
+          </div>
+
+          {backupMessage ? <p className="success-text">{backupMessage}</p> : null}
+          {backupError ? <p className="error-text">{backupError}</p> : null}
+          {message ? <p className="success-text">{message}</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
+
+          <div className="backup-list-block settings-backup-list">
+            <h3>자동 백업 목록</h3>
+            {autoBackups.length === 0 ? <p className="empty-text">저장된 자동 백업이 없습니다.</p> : null}
+
+            <ul className="backup-list">
+              {autoBackups.map((backup) => (
+                <li key={backup.id} className="backup-item">
+                  <div>
+                    <strong>{formatDateTime(backup.createdAt, setting.timeFormat)}</strong>
+                    <p className="description-text">사유: {backup.reason} / 크기: {(backup.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <div className="button-row compact">
+                    <button
+                      className="btn btn-soft"
+                      type="button"
+                      onClick={() => {
+                        void handleRestoreBackup(backup.id);
+                      }}
+                    >
+                      복원
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      type="button"
+                      onClick={() => {
+                        void handleDeleteBackup(backup.id);
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="settings-card settings-type-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">TYPES</p>
+              <h3>일정 종류</h3>
+            </div>
+            <small>{sortedTypes.length}개</small>
+          </header>
+
+          <div className="settings-type-layout">
+            <ul className="entity-list">
+              {sortedTypes.map((type) => (
+                <li
+                  key={type.id}
+                  className={`entity-item ${typeForm.id === type.id ? "selected" : ""}`}
+                  onClick={() => handleSelectType(type)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${type.name} 종류 선택`}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleSelectType(type);
+                    }
+                  }}
+                >
+                  <span className="color-dot" style={{ backgroundColor: type.color }} />
+                  <strong>{type.name}</strong>
+                  <small>{type.isDefault ? "기본" : "사용자"}</small>
+                </li>
+              ))}
+            </ul>
+
+            <form className="task-form" onSubmit={handleTypeSubmit}>
+              <h3>{typeForm.id ? "종류 수정" : "새 종류"}</h3>
+
+              <label>
+                종류명
+                <input
+                  type="text"
+                  value={typeForm.name}
+                  onChange={(event) => setTypeForm((prev) => ({ ...prev, name: event.target.value }))}
+                  required
+                />
+              </label>
+
+              <label>
+                색상
+                <ColorSelector
+                  value={typeForm.color}
+                  onChange={(nextColor) => {
+                    setTypeForm((prev) => ({ ...prev, color: nextColor }));
+                  }}
+                />
+              </label>
+
+              <label className="checkbox-inline settings-toggle-row">
+                <input
+                  type="checkbox"
+                  checked={typeForm.isActive}
+                  onChange={(event) => setTypeForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                />
+                사용
+              </label>
+
+              <div className="button-row">
+                <button className="btn btn-primary" type="submit">
+                  {typeForm.id ? "저장" : "생성"}
+                </button>
+
+                {typeForm.id && !typeForm.isDefault ? (
+                  <button className="btn btn-danger" type="button" onClick={() => void handleTypeDelete()}>
+                    삭제
+                  </button>
+                ) : null}
+
+                <button
+                  className="btn btn-soft"
+                  type="button"
+                  onClick={() => {
+                    setTypeError("");
+                    setTypeMessage("");
+                    setTypeForm(createEmptyTypeForm());
+                    typeAutoSaveSnapshotRef.current = "";
+                    lastTypeIdRef.current = undefined;
+                  }}
+                >
+                  초기화
+                </button>
+              </div>
+
+              {typeMessage ? <p className="success-text">{typeMessage}</p> : null}
+              {typeError ? <p className="error-text">{typeError}</p> : null}
+            </form>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

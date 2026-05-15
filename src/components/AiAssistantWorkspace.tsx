@@ -17,9 +17,11 @@ interface AiAssistantWorkspaceProps {
   compact?: boolean;
   showEndpointInfo?: boolean;
   directApply?: boolean;
+  hideInitialResult?: boolean;
   title?: string;
   subtitle?: string;
   placeholder?: string;
+  quickPrompts?: string[];
   className?: string;
   onApplied?: () => void;
 }
@@ -136,9 +138,11 @@ export function AiAssistantWorkspace({
   compact = false,
   showEndpointInfo = true,
   directApply = false,
+  hideInitialResult = false,
   title = "AI 일정 입력",
   subtitle = "요청, 질문, 초안 검토를 한 공간에서 처리합니다.",
   placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
+  quickPrompts = [],
   className = "",
   onApplied,
 }: AiAssistantWorkspaceProps) {
@@ -163,6 +167,7 @@ export function AiAssistantWorkspace({
   const taskTypeMap = useMemo(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = useMemo(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
+  const hasVisibleResult = Boolean(lastUserMessage || pendingProposal || lastQuestion || error || applyResult || isLoading);
 
   const conversationContext = useMemo<AgentConversationMessage[]>(() => {
     if (!lastUserMessage || !lastAssistantMessage) {
@@ -501,6 +506,9 @@ export function AiAssistantWorkspace({
     );
   }
 
+  const shouldShowResultCard = !hideInitialResult || hasVisibleResult;
+  const responseText = isLoading ? "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
+
   return (
     <section className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`}>
       <header className="panel-header ai-command-header">
@@ -523,7 +531,7 @@ export function AiAssistantWorkspace({
         </div>
       ) : null}
 
-      {endpointStatus === "error" ? (
+      {showEndpointInfo && endpointStatus === "error" ? (
         <p className="error-text" role="alert">
           {endpointStatusMessage}
         </p>
@@ -534,6 +542,23 @@ export function AiAssistantWorkspace({
           요청 입력
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={compact ? 4 : 5} placeholder={placeholder} />
         </label>
+
+        {quickPrompts.length > 0 ? (
+          <div className="ai-prompt-chip-row" aria-label="요청 예시">
+            {quickPrompts.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => {
+                  setDraft(prompt);
+                }}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="ai-action-stack">
           <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>
             {isLoading ? "분석 중" : "초안 만들기"}
@@ -551,82 +576,84 @@ export function AiAssistantWorkspace({
         </div>
       </div>
 
-      <div className="ai-result-card" aria-live="polite">
-        <div className="ai-response-block">
-          <span className="badge-pill">AI 답변</span>
-          <p>{lastAssistantMessage}</p>
-        </div>
-
-        {lastQuestion ? (
-          <div className="ai-question-block">
-            <span className="badge-pill danger">질문</span>
-            <p>{lastQuestion}</p>
+      {shouldShowResultCard ? (
+        <div className={`ai-result-card ${hasVisibleResult ? "has-output" : ""}`} aria-live="polite">
+          <div className="ai-response-block">
+            <span className="badge-pill">AI 답변</span>
+            <p>{responseText}</p>
           </div>
-        ) : null}
 
-        {pendingProposal ? (
-          <div className="proposal-block compact-review">
-            <div className="proposal-summary-row">
-              <div>
-                <span className="badge-pill">변경안</span>
-                <p className="description-text">{pendingProposal.summary}</p>
+          {lastQuestion ? (
+            <div className="ai-question-block">
+              <span className="badge-pill danger">질문</span>
+              <p>{lastQuestion}</p>
+            </div>
+          ) : null}
+
+          {pendingProposal ? (
+            <div className="proposal-block compact-review">
+              <div className="proposal-summary-row">
+                <div>
+                  <span className="badge-pill">변경안</span>
+                  <p className="description-text">{pendingProposal.summary}</p>
+                </div>
+                {hasOperations ? (
+                  <div className="button-row compact">
+                    <button
+                      className="btn btn-soft"
+                      type="button"
+                      onClick={() => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index))}
+                    >
+                      전체 선택
+                    </button>
+                    <button className="btn btn-soft" type="button" onClick={() => setSelectedOperationIndexes([])}>
+                      해제
+                    </button>
+                  </div>
+                ) : null}
               </div>
+
               {hasOperations ? (
-                <div className="button-row compact">
+                <ul className="proposal-list compact-list">{pendingProposal.operations.map(renderOperation)}</ul>
+              ) : (
+                <p className="empty-text">AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요.</p>
+              )}
+
+              {hasOperations ? (
+                <div className="button-row proposal-actions">
                   <button
-                    className="btn btn-soft"
+                    className="btn btn-primary"
                     type="button"
-                    onClick={() => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index))}
+                    disabled={isApplying || selectedOperationIndexes.length === 0}
+                    onClick={() => void handleApplyProposal()}
                   >
-                    전체 선택
+                    {isApplying
+                      ? "등록 중"
+                      : directApply
+                        ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})`
+                        : `선택 항목 반영 (${selectedOperationIndexes.length})`}
                   </button>
-                  <button className="btn btn-soft" type="button" onClick={() => setSelectedOperationIndexes([])}>
-                    해제
+                  <button
+                    className="btn btn-outline"
+                    type="button"
+                    onClick={() => {
+                      setPendingProposal(undefined);
+                      setSelectedOperationIndexes([]);
+                    }}
+                  >
+                    변경안 취소
                   </button>
                 </div>
               ) : null}
             </div>
+          ) : hideInitialResult ? null : (
+            <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
+          )}
 
-            {hasOperations ? (
-              <ul className="proposal-list compact-list">{pendingProposal.operations.map(renderOperation)}</ul>
-            ) : (
-              <p className="empty-text">AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요.</p>
-            )}
-
-            {hasOperations ? (
-              <div className="button-row proposal-actions">
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  disabled={isApplying || selectedOperationIndexes.length === 0}
-                  onClick={() => void handleApplyProposal()}
-                >
-                  {isApplying
-                    ? "등록 중"
-                    : directApply
-                      ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})`
-                      : `선택 항목 반영 (${selectedOperationIndexes.length})`}
-                </button>
-                <button
-                  className="btn btn-outline"
-                  type="button"
-                  onClick={() => {
-                    setPendingProposal(undefined);
-                    setSelectedOperationIndexes([]);
-                  }}
-                >
-                  변경안 취소
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
-        )}
-
-        {applyResult ? <p className="success-text">{applyResult}</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
-      </div>
+          {applyResult ? <p className="success-text">{applyResult}</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -29486,9 +29486,11 @@ function AiAssistantWorkspace({
   compact = false,
   showEndpointInfo = true,
   directApply = false,
+  hideInitialResult = false,
   title = "AI 일정 입력",
   subtitle = "요청, 질문, 초안 검토를 한 공간에서 처리합니다.",
   placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
+  quickPrompts = [],
   className = "",
   onApplied
 }) {
@@ -29512,6 +29514,7 @@ function AiAssistantWorkspace({
   const taskTypeMap = (0, import_react3.useMemo)(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = (0, import_react3.useMemo)(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
+  const hasVisibleResult = Boolean(lastUserMessage || pendingProposal || lastQuestion || error || applyResult || isLoading);
   const conversationContext = (0, import_react3.useMemo)(() => {
     if (!lastUserMessage || !lastAssistantMessage) {
       return [];
@@ -29801,6 +29804,8 @@ function AiAssistantWorkspace({
       ] })
     ] }) }, `proposal-${index}`);
   }
+  const shouldShowResultCard = !hideInitialResult || hasVisibleResult;
+  const responseText = isLoading ? "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`, children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header ai-command-header", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
@@ -29822,12 +29827,23 @@ function AiAssistantWorkspace({
         setting.llmApiKey ? "설정됨" : "미설정"
       ] })
     ] }) : null,
-    endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
+    showEndpointInfo && endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-request-grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "ai-input-label", children: [
         "요청 입력",
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { value: draft, onChange: (event) => setDraft(event.target.value), rows: compact ? 4 : 5, placeholder })
       ] }),
+      quickPrompts.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: quickPrompts.map((prompt) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            setDraft(prompt);
+          },
+          children: prompt
+        },
+        prompt
+      )) }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-action-stack", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-primary btn-large", type: "button", disabled: isLoading || !draft.trim(), onClick: () => void handleSend(), children: isLoading ? "분석 중" : "초안 만들기" }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
@@ -29844,10 +29860,10 @@ function AiAssistantWorkspace({
         )
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-result-card", "aria-live": "polite", children: [
+    shouldShowResultCard ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: `ai-result-card ${hasVisibleResult ? "has-output" : ""}`, "aria-live": "polite", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-response-block", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "AI 답변" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: lastAssistantMessage })
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: responseText })
       ] }),
       lastQuestion ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-question-block", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill danger", children: "질문" }),
@@ -29897,10 +29913,10 @@ function AiAssistantWorkspace({
             }
           )
         ] }) : null
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안이나 변경안이 없습니다." }),
+      ] }) : hideInitialResult ? null : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안이나 변경안이 없습니다." }),
       applyResult ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "success-text", children: applyResult }) : null,
       error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
-    ] })
+    ] }) : null
   ] });
 }
 

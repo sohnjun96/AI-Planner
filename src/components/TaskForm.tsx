@@ -323,26 +323,6 @@ export function TaskForm({
         )}
       </div>
 
-      <div className="status-toggle-block">
-        <span>상태</span>
-        <div className="status-toggle-group" role="group" aria-label="일정 상태 선택">
-          {statusOptions.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className={`status-toggle-btn ${item.value.toLowerCase()} ${form.status === item.value ? "active" : ""}`}
-              onClick={() => {
-                setForm((prev) => ({ ...prev, status: item.value }));
-              }}
-              aria-pressed={form.status === item.value}
-              aria-label={`상태를 ${item.label}로 변경`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="form-grid two-col">
         <label>
           시작 날짜
@@ -448,6 +428,26 @@ export function TaskForm({
           <span>{`수정일: ${formatDateTime(initialTask.updatedAt, timeFormat)}`}</span>
         </div>
       ) : null}
+
+      <div className="status-toggle-block task-form-status-footer">
+        <span>상태</span>
+        <div className="status-toggle-group" role="group" aria-label="일정 상태 선택">
+          {statusOptions.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={`status-toggle-btn ${item.value.toLowerCase()} ${form.status === item.value ? "active" : ""}`}
+              onClick={() => {
+                setForm((prev) => ({ ...prev, status: item.value }));
+              }}
+              aria-pressed={form.status === item.value}
+              aria-label={`상태를 ${item.label}로 변경`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <p className="success-text" aria-live="polite">
         {isEdit ? autoSaveMessage || "자동 저장 켜짐" : ""}

@@ -75,10 +75,6 @@ function formatTaskTime(task: Task, timeFormat: "24h" | "12h"): string {
   return task.endAt ? `${startTime} - ${formatTimeOnly(task.endAt, timeFormat)}` : startTime;
 }
 
-function isOverdue(task: Task): boolean {
-  return task.status !== "DONE" && new Date(task.startAt).getTime() < Date.now();
-}
-
 interface CompactTaskCardProps {
   task: Task;
   project?: Project;
@@ -150,7 +146,6 @@ export function DashboardPage() {
   const [memoError, setMemoError] = useState("");
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
-  const [isAiOpen, setIsAiOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
 
   const today = useMemo(() => new Date(), []);
@@ -192,23 +187,7 @@ export function DashboardPage() {
     }, {});
   }, [conflictMap, visibleTasks]);
 
-  const todaySummary = daySummaryByDate[todayKey] ?? EMPTY_DAY_SUMMARY;
-
-  const attention = useMemo(() => {
-    const overdue = visibleTasks.filter(isOverdue).sort(compareByStartAtAsc);
-    const conflicts = visibleTasks
-      .filter((task) => task.status !== "DONE" && (conflictMap[task.id]?.length ?? 0) > 0)
-      .sort(compareByStartAtAsc);
-    const onHold = visibleTasks.filter((task) => task.status === "ON_HOLD").sort(compareByStartAtAsc);
-    const important = visibleTasks.filter((task) => task.status !== "DONE" && task.isMajor).sort(compareByStartAtAsc);
-
-    return {
-      overdue,
-      conflicts,
-      onHold,
-      important,
-    };
-  }, [conflictMap, visibleTasks]);
+  const selectedDaySummary = daySummaryByDate[selectedDate] ?? EMPTY_DAY_SUMMARY;
 
   const editingTask = useMemo(() => {
     if (!taskModalState || taskModalState.mode !== "edit") {
@@ -221,20 +200,19 @@ export function DashboardPage() {
   const globalMemoSource = memoMap[GLOBAL_MEMO_KEY]?.content ?? "";
 
   useEffect(() => {
-    if (!activeTaskModalState && !isAiOpen) {
+    if (!activeTaskModalState) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setTaskModalState(null);
-        setIsAiOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeTaskModalState, isAiOpen]);
+  }, [activeTaskModalState]);
 
   async function handleCreateTask(input: TaskFormInput) {
     await createTask(input);
@@ -322,124 +300,130 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-workspace">
-      <section className="dashboard-topbar">
+      <section className="dashboard-topbar compact-dashboard-topbar">
         <div>
-          <p className="eyebrow">DASHBOARD</p>
+          <p className="eyebrow">TODAY</p>
           <h2>{formatFullDate(today)}</h2>
-          <p className="description-text">달력에서 흐름을 보고, AI 입력으로 바로 일정을 정리합니다.</p>
         </div>
         <div className="dashboard-hero-actions">
           <button type="button" className="btn btn-primary" onClick={() => openCreateTask(todayKey)}>
             일정 추가
           </button>
-          <button type="button" className="btn btn-soft" onClick={() => setIsAiOpen(true)}>
-            AI 크게 보기
-          </button>
-        </div>
-        <div className="dashboard-summary-row" aria-label="오늘 상태 요약">
-          <span className="summary-chip not_done">미완료 {todaySummary.pending}</span>
-          <span className="summary-chip on_hold">보류 {todaySummary.onHold}</span>
-          <span className="summary-chip done">완료 {todaySummary.done}</span>
-          <span className="summary-chip conflict">충돌 {attention.conflicts.length}</span>
         </div>
       </section>
 
       <div className="dashboard-primary-grid">
-        <section className="dashboard-card dashboard-calendar-card">
+        <section className="dashboard-card dashboard-calendar-card premium-calendar-card">
           <header className="dashboard-card-header">
             <div>
               <p className="eyebrow">CALENDAR</p>
-              <h3>월간 일정</h3>
+              <h3>일정 보드</h3>
             </div>
-            <button type="button" className="btn btn-soft" onClick={() => openCreateTask(selectedDate)}>
-              선택한 날짜에 추가
-            </button>
           </header>
-          <MonthCalendar
-            selectedDate={selectedDate}
-            weekStartsOn={setting.weekStartsOn}
-            daySummaryByDate={daySummaryByDate}
-            onSelectDate={setSelectedDate}
-            onDropTaskToDate={handleDropTaskToDate}
-            onCreateTaskAtDate={openCreateTask}
-          />
-          <div className="selected-day-panel">
-            <div>
-              <strong>{formatDateLabel(selectedDate)}</strong>
-              <span>{selectedDayTasks.length}개 일정</span>
+
+          <div className="dashboard-calendar-layout">
+            <div className="dashboard-calendar-month">
+              <MonthCalendar
+                selectedDate={selectedDate}
+                weekStartsOn={setting.weekStartsOn}
+                daySummaryByDate={daySummaryByDate}
+                onSelectDate={setSelectedDate}
+                onDropTaskToDate={handleDropTaskToDate}
+                onCreateTaskAtDate={openCreateTask}
+              />
             </div>
-            <div className="selected-day-preview">
-              {selectedDayTasks.length === 0 ? <span className="empty-inline">일정 없음</span> : null}
-              {selectedDayTasks.slice(0, 3).map((task) => (
-                <button key={task.id} type="button" onClick={() => openEditTask(task.id)}>
-                  <span>{formatTaskTime(task, setting.timeFormat)}</span>
-                  <strong>{task.title}</strong>
-                </button>
-              ))}
-            </div>
+
+            <aside className="dashboard-agenda-panel" aria-label="선택한 날짜의 일정">
+              <header>
+                <div>
+                  <p className="eyebrow">AGENDA</p>
+                  <h4>{formatDateLabel(selectedDate)}</h4>
+                </div>
+                <span>{selectedDayTasks.length}개</span>
+              </header>
+
+              <div className="agenda-stat-grid">
+                <span className="not_done">미완료 {selectedDaySummary.pending}</span>
+                <span className="on_hold">보류 {selectedDaySummary.onHold}</span>
+                <span className="done">완료 {selectedDaySummary.done}</span>
+                <span className="conflict">충돌 {selectedDaySummary.conflicts}</span>
+              </div>
+
+              <div className="agenda-timeline">
+                {selectedDayTasks.length === 0 ? (
+                  <div className="agenda-empty">
+                    <strong>이 날짜에는 일정이 없습니다.</strong>
+                    <p>달력의 날짜를 더블클릭하면 바로 일정을 추가할 수 있습니다.</p>
+                  </div>
+                ) : null}
+
+                {selectedDayTasks.map((task) => {
+                  const project = projectMap[task.projectId];
+                  const taskType = typeMap[task.taskTypeId];
+                  const hasConflict = (conflictMap[task.id]?.length ?? 0) > 0;
+
+                  return (
+                    <button
+                      key={task.id}
+                      type="button"
+                      className={`agenda-event-card ${task.status.toLowerCase()} ${hasConflict ? "conflict" : ""}`}
+                      style={{ borderLeftColor: project?.color ?? "#6b7280" }}
+                      onClick={() => openEditTask(task.id)}
+                    >
+                      <span className="agenda-event-time">{formatTaskTime(task, setting.timeFormat)}</span>
+                      <strong>{task.title}</strong>
+                      <small>
+                        {project?.name ?? "프로젝트 없음"} · {taskType?.name ?? "종류 없음"}
+                      </small>
+                      <span className="agenda-event-badges">
+                        <span className={`status-badge ${task.status.toLowerCase()}`}>{STATUS_LABELS[task.status]}</span>
+                        {task.isMajor ? <span className="major-tag">중요</span> : null}
+                        {hasConflict ? <span className="conflict-badge">충돌</span> : null}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
           </div>
         </section>
 
-        <section className="dashboard-card dashboard-ai-main-card">
-          <header className="dashboard-card-header">
-            <div>
-              <p className="eyebrow">AI INPUT</p>
-              <h3>AI로 일정 만들기</h3>
-            </div>
-          </header>
-          <AiAssistantWorkspace
-            compact
-            showEndpointInfo={false}
-            title="AI로 일정 만들기"
-            subtitle="자연어로 요청하면 일정 초안과 변경안을 제안합니다."
-            placeholder="예: 오늘 오후 4시에 회의 추가하고, 내일 오전에는 보고서 작성 시간을 잡아줘."
-            className="embedded dashboard-ai-workspace dashboard-ai-main-workspace"
-          />
-        </section>
-      </div>
+        <aside className="dashboard-side-column">
+          <section className="dashboard-card dashboard-ai-main-card">
+            <header className="dashboard-card-header">
+              <div>
+                <p className="eyebrow">AI INPUT</p>
+                <h3>AI로 일정 만들기</h3>
+                <small>요청 입력 후 초안 만들기를 누르면 아래에 결과가 표시됩니다.</small>
+              </div>
+            </header>
+            <AiAssistantWorkspace
+              compact
+              hideInitialResult
+              showEndpointInfo={false}
+              title="AI로 일정 만들기"
+              subtitle="자연어로 요청하면 일정 초안과 변경안을 제안합니다."
+              placeholder="예: 오늘 오후 4시에 회의 추가하고, 내일 오전에는 보고서 작성 시간을 잡아줘."
+              quickPrompts={[
+                "내일 오전 10시에 보고서 작성 2시간 잡아줘",
+                "오늘 남은 미완료 일정을 우선순위대로 정리해줘",
+                "이번 주 중요한 일정만 확인해서 초안 만들어줘",
+              ]}
+              className="embedded dashboard-ai-workspace dashboard-ai-main-workspace"
+            />
+          </section>
 
-      <div className="dashboard-secondary-grid">
-        <section className="dashboard-card today-task-card">
-          <header className="dashboard-card-header">
-            <div>
-              <p className="eyebrow">TODAY</p>
-              <h3>오늘 할 일</h3>
-            </div>
-            <span>{todayTasks.length}개</span>
-          </header>
-          {renderCompactTasks(todayTasks, "오늘 등록된 일정이 없습니다.")}
-        </section>
-
-        <section className="dashboard-card attention-card">
-          <header className="dashboard-card-header">
-            <div>
-              <p className="eyebrow">ATTENTION</p>
-              <h3>확인 필요</h3>
-            </div>
-          </header>
-          <div className="attention-list">
-            <button type="button" className="attention-item overdue" onClick={() => attention.overdue[0] && openEditTask(attention.overdue[0].id)}>
-              <strong>지난 일정</strong>
-              <span>{attention.overdue.length}개</span>
-            </button>
-            <button
-              type="button"
-              className="attention-item conflict"
-              onClick={() => attention.conflicts[0] && openEditTask(attention.conflicts[0].id)}
-            >
-              <strong>시간 충돌</strong>
-              <span>{attention.conflicts.length}개</span>
-            </button>
-            <button type="button" className="attention-item hold" onClick={() => attention.onHold[0] && openEditTask(attention.onHold[0].id)}>
-              <strong>보류 중</strong>
-              <span>{attention.onHold.length}개</span>
-            </button>
-            <button type="button" className="attention-item major" onClick={() => attention.important[0] && openEditTask(attention.important[0].id)}>
-              <strong>중요 일정</strong>
-              <span>{attention.important.length}개</span>
-            </button>
-          </div>
-        </section>
+          <section className="dashboard-card today-task-card">
+            <header className="dashboard-card-header">
+              <div>
+                <p className="eyebrow">TODAY</p>
+                <h3>오늘 할 일</h3>
+              </div>
+              <span>{todayTasks.length}개</span>
+            </header>
+            {renderCompactTasks(todayTasks, "오늘 등록된 일정이 없습니다.")}
+          </section>
+        </aside>
       </div>
 
       <section className="dashboard-memo-section">
@@ -454,36 +438,6 @@ export function DashboardPage() {
           onSave={handleSaveGlobalMemo}
         />
       </section>
-
-      {isAiOpen ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setIsAiOpen(false);
-          }}
-        >
-          <section
-            className="modal-card panel ai-modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="AI 일정 입력"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">AI COMMAND</p>
-                <h2>AI 일정 입력</h2>
-              </div>
-              <button type="button" className="btn btn-soft" onClick={() => setIsAiOpen(false)}>
-                닫기
-              </button>
-            </header>
-            <AiAssistantWorkspace compact showEndpointInfo={false} className="embedded" />
-          </section>
-        </div>
-      ) : null}
 
       {activeTaskModalState ? (
         <div

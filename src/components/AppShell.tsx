@@ -29,7 +29,7 @@ export function AppShell() {
 
   const commandItems = useMemo<CommandItem[]>(
     () => [
-      { id: "go-dashboard", label: "이동: 대시보드", keywords: "대시보드 홈 dashboard", run: () => navigate("/dashboard") },
+      { id: "go-dashboard", label: "이동: 대시보드", keywords: "대시보드 dashboard", run: () => navigate("/dashboard") },
       { id: "go-tasks", label: "이동: 일정", keywords: "일정 목록 tasks", run: () => navigate("/tasks") },
       { id: "go-projects", label: "이동: 프로젝트", keywords: "프로젝트 projects", run: () => navigate("/projects") },
       { id: "go-archive", label: "이동: 보관함", keywords: "보관함 archive", run: () => navigate("/archive") },
