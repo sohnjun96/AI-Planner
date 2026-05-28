@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 interface MarkdownRendererProps {
   content: string;
   emptyText?: string;
+  checklistDisabled?: boolean;
+  onChecklistToggle?: (lineIndex: number, checked: boolean) => void;
 }
 
 function isSafeUrl(url: string): boolean {
@@ -53,7 +55,12 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-export function MarkdownRenderer({ content, emptyText = "작성된 메모가 없습니다." }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  content,
+  emptyText = "작성된 메모가 없습니다.",
+  checklistDisabled = false,
+  onChecklistToggle,
+}: MarkdownRendererProps) {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const elements: ReactNode[] = [];
   let index = 0;
@@ -107,9 +114,16 @@ export function MarkdownRenderer({ content, emptyText = "작성된 메모가 없
           break;
         }
         const checked = match[1].toLowerCase() === "x";
+        const lineIndex = index;
         items.push(
-          <li key={`check-${index}`}>
-            <input type="checkbox" checked={checked} readOnly />
+          <li key={`check-${index}`} className={checked ? "checked" : ""}>
+            <input
+              type="checkbox"
+              checked={checked}
+              readOnly={!onChecklistToggle}
+              disabled={checklistDisabled}
+              onChange={(event) => onChecklistToggle?.(lineIndex, event.target.checked)}
+            />
             <span>{renderInline(match[2], `check-${index}`)}</span>
           </li>,
         );

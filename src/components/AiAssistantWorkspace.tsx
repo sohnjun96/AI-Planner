@@ -18,8 +18,11 @@ interface AiAssistantWorkspaceProps {
   showEndpointInfo?: boolean;
   directApply?: boolean;
   hideInitialResult?: boolean;
+  resultPresentation?: "inline" | "modal";
+  showRetryButton?: boolean;
   title?: string;
   subtitle?: string;
+  inputLabel?: string;
   placeholder?: string;
   quickPrompts?: string[];
   className?: string;
@@ -139,8 +142,11 @@ export function AiAssistantWorkspace({
   showEndpointInfo = true,
   directApply = false,
   hideInitialResult = false,
+  resultPresentation = "inline",
+  showRetryButton = true,
   title = "AI 일정 입력",
   subtitle = "요청, 질문, 초안 검토를 한 공간에서 처리합니다.",
+  inputLabel = "요청 입력",
   placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
   quickPrompts = [],
   className = "",
@@ -157,6 +163,7 @@ export function AiAssistantWorkspace({
   const [selectedOperationIndexes, setSelectedOperationIndexes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [applyResult, setApplyResult] = useState("");
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>("checking");
@@ -224,6 +231,9 @@ export function AiAssistantWorkspace({
     setApplyResult("");
     setLastQuestion("");
     setPendingProposal(undefined);
+    if (resultPresentation === "modal") {
+      setIsResultModalOpen(true);
+    }
     if (!messageOverride) {
       setDraft("");
     }
@@ -508,6 +518,84 @@ export function AiAssistantWorkspace({
 
   const shouldShowResultCard = !hideInitialResult || hasVisibleResult;
   const responseText = isLoading ? "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
+  const resultCard = shouldShowResultCard ? (
+    <div className={`ai-result-card ${hasVisibleResult ? "has-output" : ""}`} aria-live="polite">
+      <div className="ai-response-block">
+        <span className="badge-pill">AI 답변</span>
+        <p>{responseText}</p>
+      </div>
+
+      {lastQuestion ? (
+        <div className="ai-question-block">
+          <span className="badge-pill danger">질문</span>
+          <p>{lastQuestion}</p>
+        </div>
+      ) : null}
+
+      {pendingProposal ? (
+        <div className="proposal-block compact-review">
+          <div className="proposal-summary-row">
+            <div>
+              <span className="badge-pill">변경안</span>
+              <p className="description-text">{pendingProposal.summary}</p>
+            </div>
+            {hasOperations ? (
+              <div className="button-row compact">
+                <button
+                  className="btn btn-soft"
+                  type="button"
+                  onClick={() => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index))}
+                >
+                  전체 선택
+                </button>
+                <button className="btn btn-soft" type="button" onClick={() => setSelectedOperationIndexes([])}>
+                  해제
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {hasOperations ? (
+            <ul className="proposal-list compact-list">{pendingProposal.operations.map(renderOperation)}</ul>
+          ) : (
+            <p className="empty-text">AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요.</p>
+          )}
+
+          {hasOperations ? (
+            <div className="button-row proposal-actions">
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={isApplying || selectedOperationIndexes.length === 0}
+                onClick={() => void handleApplyProposal()}
+              >
+                {isApplying
+                  ? "등록 중"
+                  : directApply
+                    ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})`
+                    : `선택 항목 반영 (${selectedOperationIndexes.length})`}
+              </button>
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={() => {
+                  setPendingProposal(undefined);
+                  setSelectedOperationIndexes([]);
+                }}
+              >
+                변경안 취소
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : hideInitialResult ? null : (
+        <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
+      )}
+
+      {applyResult ? <p className="success-text">{applyResult}</p> : null}
+      {error ? <p className="error-text">{error}</p> : null}
+    </div>
+  ) : null;
 
   return (
     <section className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`}>
@@ -539,7 +627,7 @@ export function AiAssistantWorkspace({
 
       <div className="ai-request-grid">
         <label className="ai-input-label">
-          요청 입력
+          {inputLabel ? <span>{inputLabel}</span> : <span className="sr-only">AI 요청</span>}
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={compact ? 4 : 5} placeholder={placeholder} />
         </label>
 
@@ -563,97 +651,49 @@ export function AiAssistantWorkspace({
           <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>
             {isLoading ? "분석 중" : "초안 만들기"}
           </button>
-          <button
-            className="btn btn-outline"
-            type="button"
-            disabled={isLoading || !lastUserMessage}
-            onClick={() => {
-              void handleSend(lastUserMessage);
-            }}
-          >
-            마지막 요청 다시 실행
-          </button>
+          {showRetryButton ? (
+            <button
+              className="btn btn-outline"
+              type="button"
+              disabled={isLoading || !lastUserMessage}
+              onClick={() => {
+                void handleSend(lastUserMessage);
+              }}
+            >
+              마지막 요청 다시 실행
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {shouldShowResultCard ? (
-        <div className={`ai-result-card ${hasVisibleResult ? "has-output" : ""}`} aria-live="polite">
-          <div className="ai-response-block">
-            <span className="badge-pill">AI 답변</span>
-            <p>{responseText}</p>
-          </div>
-
-          {lastQuestion ? (
-            <div className="ai-question-block">
-              <span className="badge-pill danger">질문</span>
-              <p>{lastQuestion}</p>
-            </div>
-          ) : null}
-
-          {pendingProposal ? (
-            <div className="proposal-block compact-review">
-              <div className="proposal-summary-row">
+      {resultPresentation === "modal" ? (
+        isResultModalOpen && resultCard ? (
+          <div className="modal-backdrop ai-result-modal-backdrop" onClick={() => setIsResultModalOpen(false)}>
+            <section
+              className="modal-card panel ai-result-modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-label="AI 일정 초안"
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
+              <header className="panel-header">
                 <div>
-                  <span className="badge-pill">변경안</span>
-                  <p className="description-text">{pendingProposal.summary}</p>
+                  <p className="eyebrow">AI DRAFT</p>
+                  <h2>AI 일정 초안</h2>
                 </div>
-                {hasOperations ? (
-                  <div className="button-row compact">
-                    <button
-                      className="btn btn-soft"
-                      type="button"
-                      onClick={() => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index))}
-                    >
-                      전체 선택
-                    </button>
-                    <button className="btn btn-soft" type="button" onClick={() => setSelectedOperationIndexes([])}>
-                      해제
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
-              {hasOperations ? (
-                <ul className="proposal-list compact-list">{pendingProposal.operations.map(renderOperation)}</ul>
-              ) : (
-                <p className="empty-text">AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요.</p>
-              )}
-
-              {hasOperations ? (
-                <div className="button-row proposal-actions">
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    disabled={isApplying || selectedOperationIndexes.length === 0}
-                    onClick={() => void handleApplyProposal()}
-                  >
-                    {isApplying
-                      ? "등록 중"
-                      : directApply
-                        ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})`
-                        : `선택 항목 반영 (${selectedOperationIndexes.length})`}
-                  </button>
-                  <button
-                    className="btn btn-outline"
-                    type="button"
-                    onClick={() => {
-                      setPendingProposal(undefined);
-                      setSelectedOperationIndexes([]);
-                    }}
-                  >
-                    변경안 취소
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : hideInitialResult ? null : (
-            <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
-          )}
-
-          {applyResult ? <p className="success-text">{applyResult}</p> : null}
-          {error ? <p className="error-text">{error}</p> : null}
-        </div>
-      ) : null}
+                <button type="button" className="btn btn-soft" onClick={() => setIsResultModalOpen(false)}>
+                  닫기
+                </button>
+              </header>
+              {resultCard}
+            </section>
+          </div>
+        ) : null
+      ) : (
+        resultCard
+      )}
     </section>
   );
 }

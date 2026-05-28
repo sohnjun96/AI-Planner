@@ -283,6 +283,7 @@ export function ProjectsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectKeyword, setProjectKeyword] = useState("");
   const [taskKeyword, setTaskKeyword] = useState("");
+  const [taskTypeFilterId, setTaskTypeFilterId] = useState("all");
   const [taskModalState, setTaskModalState] = useState<ProjectTaskModalState>(null);
   const [projectSettingsModal, setProjectSettingsModal] = useState<ProjectSettingsModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
@@ -314,6 +315,7 @@ export function ProjectsPage() {
   }, [allSortedProjects, projects, selectedProjectIdFromQuery]);
 
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const sortedTaskTypes = useMemo(() => [...taskTypes].sort((a, b) => a.name.localeCompare(b.name, "ko")), [taskTypes]);
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const conflictMap = useMemo(() => buildTaskConflictMap(tasks), [tasks]);
 
@@ -361,6 +363,7 @@ export function ProjectsPage() {
     const keyword = taskKeyword.trim().toLowerCase();
     return tasks
       .filter((task) => task.projectId === selectedProject.id)
+      .filter((task) => taskTypeFilterId === "all" || task.taskTypeId === taskTypeFilterId)
       .filter((task) => {
         if (!keyword) {
           return true;
@@ -369,7 +372,7 @@ export function ProjectsPage() {
         return `${task.title} ${task.content} ${typeName}`.toLowerCase().includes(keyword);
       })
       .sort(compareByStartAtAsc);
-  }, [selectedProject, taskKeyword, tasks, typeMap]);
+  }, [selectedProject, taskKeyword, taskTypeFilterId, tasks, typeMap]);
 
   const editingTask = useMemo(() => {
     if (taskModalState?.mode !== "edit") {
@@ -453,6 +456,7 @@ export function ProjectsPage() {
   function selectProject(projectId: string) {
     setSearchParams({ projectId });
     setTaskKeyword("");
+    setTaskTypeFilterId("all");
   }
 
   return (
@@ -555,18 +559,32 @@ export function ProjectsPage() {
               <span>충돌 {projectStats[selectedProject.id]?.conflicts ?? 0}</span>
             </div>
 
-            <label className="search-field">
-              프로젝트 일정 검색
-              <input
-                type="text"
-                value={taskKeyword}
-                onChange={(event) => setTaskKeyword(event.target.value)}
-                placeholder="제목 또는 내용 검색"
-              />
-            </label>
+            <div className="project-task-filter-bar">
+              <label className="search-field">
+                프로젝트 일정 검색
+                <input
+                  type="text"
+                  value={taskKeyword}
+                  onChange={(event) => setTaskKeyword(event.target.value)}
+                  placeholder="제목 또는 내용 검색"
+                />
+              </label>
+
+              <label>
+                종류
+                <select value={taskTypeFilterId} onChange={(event) => setTaskTypeFilterId(event.target.value)}>
+                  <option value="all">전체 종류</option>
+                  {sortedTaskTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             <div className="task-stack">
-              {projectTasks.length === 0 ? <p className="empty-text">이 프로젝트에는 아직 일정이 없습니다.</p> : null}
+              {projectTasks.length === 0 ? <p className="empty-text">조건에 맞는 프로젝트 일정이 없습니다.</p> : null}
               {projectTasks.map((task) => (
                 <TaskItem
                   key={task.id}

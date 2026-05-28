@@ -32,6 +32,23 @@ export function MarkdownMemo({ content, savedMessage, errorMessage, onSave, onEd
     }
   }
 
+  async function handleToggleChecklist(lineIndex: number, checked: boolean) {
+    const lines = content.replace(/\r\n/g, "\n").split("\n");
+    const currentLine = lines[lineIndex];
+    if (!currentLine || !/^(\s*-\s+\[)([ xX])(\]\s+.+)$/.test(currentLine)) {
+      return;
+    }
+
+    lines[lineIndex] = currentLine.replace(/^(\s*-\s+\[)([ xX])(\]\s+.+)$/, `$1${checked ? "x" : " "}$3`);
+
+    setIsSaving(true);
+    try {
+      await onSave(lines.join("\n"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   if (!isEditing) {
     return (
       <section className="panel global-memo-panel">
@@ -53,7 +70,15 @@ export function MarkdownMemo({ content, savedMessage, errorMessage, onSave, onEd
             메모 수정
           </button>
         </header>
-        <MarkdownRenderer content={content} emptyText="아직 전체 메모가 없습니다. 수정 버튼을 눌러 작성하세요." />
+        <MarkdownRenderer
+          content={content}
+          emptyText="아직 전체 메모가 없습니다. 수정 버튼을 눌러 작성하세요."
+          checklistDisabled={isSaving}
+          onChecklistToggle={(lineIndex, checked) => {
+            void handleToggleChecklist(lineIndex, checked);
+          }}
+        />
+        {isSaving ? <p className="description-text">저장 중...</p> : null}
         {savedMessage ? <p className="success-text">{savedMessage}</p> : null}
         {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
       </section>

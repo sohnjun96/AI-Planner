@@ -101,6 +101,15 @@ a {
   color: inherit;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 .loading-screen,
 .popup-loading {
   min-height: 100vh;
@@ -910,6 +919,18 @@ textarea:focus-visible,
   gap: 8px;
 }
 
+.markdown-checklist input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  cursor: pointer;
+}
+
+.markdown-checklist li.checked span {
+  color: var(--body-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
 .markdown-renderer code {
   padding: 2px 5px;
   border-radius: 5px;
@@ -1567,6 +1588,35 @@ textarea:focus-visible,
   width: min(1040px, 96vw);
 }
 
+.ai-add-modal-card {
+  width: min(980px, 96vw);
+}
+
+.ai-add-workspace .ai-request-grid {
+  grid-template-columns: minmax(0, 1fr) 220px;
+}
+
+.ai-add-workspace > .panel-header {
+  display: none;
+}
+
+.ai-result-modal-card {
+  width: min(840px, 94vw);
+  gap: var(--space-lg);
+}
+
+.ai-result-modal-card .ai-result-card {
+  max-height: min(64vh, 620px);
+  overflow: auto;
+  border-color: var(--hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.ai-result-modal-card .ai-result-card::before {
+  display: none;
+}
+
 .file-upload {
   position: relative;
   overflow: hidden;
@@ -1732,6 +1782,13 @@ textarea:focus-visible,
   align-items: end;
   gap: 12px;
   min-width: min(520px, 100%);
+}
+
+.project-task-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px);
+  align-items: end;
+  gap: 12px;
 }
 
 .search-field {
@@ -2610,13 +2667,29 @@ textarea:focus-visible,
 }
 
 .calendar-legend span,
-.agenda-stat-grid span {
+.agenda-stat-grid span,
+.agenda-stat-grid button {
   display: inline-flex;
   width: fit-content;
+  border: 0;
   border-radius: var(--radius-sm);
   padding: 4px 8px;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
+}
+
+.agenda-stat-grid button {
+  cursor: pointer;
+}
+
+.agenda-stat-grid button.active {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.12);
+}
+
+.agenda-stat-grid .all {
+  background: #eef2ff;
+  color: #4338ca;
 }
 
 .calendar-legend .not_done,
@@ -2974,6 +3047,10 @@ textarea:focus-visible,
   display: none;
 }
 
+.dashboard-ai-workspace .ai-result-modal-card > .panel-header {
+  display: flex;
+}
+
 .dashboard-ai-main-workspace .ai-request-grid {
   grid-template-columns: 1fr;
   border: 1px solid var(--hairline);
@@ -2984,7 +3061,7 @@ textarea:focus-visible,
 }
 
 .dashboard-ai-main-workspace .ai-action-stack {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .dashboard-ai-main-workspace .ai-input-label textarea {
@@ -3474,6 +3551,14 @@ textarea:focus-visible,
   grid-column: 1 / -1;
 }
 
+.settings-type-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .settings-type-card .settings-type-layout {
   grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
   gap: 16px;
@@ -3493,6 +3578,21 @@ textarea:focus-visible,
   border-radius: var(--radius-lg);
   padding: 18px;
   background: var(--canvas);
+}
+
+.type-form-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.type-form-heading h3 {
+  margin: 0;
+}
+
+.type-form-heading .description-text {
+  margin: 4px 0 0;
 }
 
 @media (max-width: 1200px) {
@@ -3523,6 +3623,7 @@ textarea:focus-visible,
 
   .tasks-control-bar,
   .archive-search-bar,
+  .project-task-filter-bar,
   .advanced-filter-bar,
   .archive-filter-panel {
     grid-template-columns: 1fr;
@@ -3740,6 +3841,7 @@ textarea:focus-visible,
   }
 
   .dashboard-ai-main-workspace .ai-action-stack,
+  .ai-add-workspace .ai-request-grid,
   .compact-task-main,
   .selected-day-preview button {
     grid-template-columns: 1fr;

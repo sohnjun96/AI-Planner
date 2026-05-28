@@ -1,10 +1,10 @@
 ﻿{
   "manifest_version": 3,
-  "name": "Work Schedule Manager",
-  "description": "Full-page work schedule manager with calendar, project and task-type organization.",
+  "name": "업무 일정관리",
+  "description": "달력, 프로젝트, 일정 종류와 AI 입력으로 업무 일정을 관리하는 확장 프로그램입니다.",
   "version": "0.1.0",
   "action": {
-    "default_title": "AI Planner",
+    "default_title": "업무 일정관리 열기",
     "default_popup": "popup.html"
   },
   "permissions": ["storage", "alarms", "notifications"],

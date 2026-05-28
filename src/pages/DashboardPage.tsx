@@ -22,6 +22,8 @@ type TaskModalState =
     }
   | null;
 
+type AgendaViewMode = "priority" | "all";
+
 const EMPTY_DAY_SUMMARY: CalendarDaySummary = {
   total: 0,
   done: 0,
@@ -147,6 +149,7 @@ export function DashboardPage() {
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
+  const [agendaViewPreference, setAgendaViewPreference] = useState<{ date: string; mode: AgendaViewMode } | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const todayKey = getDateKey(today);
@@ -155,11 +158,13 @@ export function DashboardPage() {
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
     [tasks, setting.showPastCompleted],
   );
+  const calendarTasks = tasks;
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
   const memoMap = useMemo(() => Object.fromEntries(memos.map((memo) => [memo.date, memo])), [memos]);
   const conflictMap = useMemo(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
+  const calendarConflictMap = useMemo(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
 
   const todayTasks = useMemo(
     () => visibleTasks.filter((task) => getDateKey(task.startAt) === todayKey).sort(compareByStartAtAsc),
@@ -167,25 +172,34 @@ export function DashboardPage() {
   );
 
   const selectedDayTasks = useMemo(
-    () => visibleTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStartAtAsc),
-    [selectedDate, visibleTasks],
+    () => calendarTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStartAtAsc),
+    [calendarTasks, selectedDate],
   );
 
+  const selectedDayPriorityTasks = useMemo(
+    () => selectedDayTasks.filter((task) => task.status === "NOT_DONE" || task.status === "ON_HOLD"),
+    [selectedDayTasks],
+  );
+
+  const agendaViewMode = agendaViewPreference?.date === selectedDate ? agendaViewPreference.mode : "priority";
+  const hasPriorityAgendaTasks = selectedDayPriorityTasks.length > 0;
+  const agendaTasks = agendaViewMode === "all" || !hasPriorityAgendaTasks ? selectedDayTasks : selectedDayPriorityTasks;
+
   const daySummaryByDate = useMemo(() => {
-    return visibleTasks.reduce<Record<string, CalendarDaySummary>>((summaryMap, task) => {
+    return calendarTasks.reduce<Record<string, CalendarDaySummary>>((summaryMap, task) => {
       const key = getDateKey(task.startAt);
       const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, titles: [] };
       current.total += 1;
       current.done += task.status === "DONE" ? 1 : 0;
       current.pending += task.status === "NOT_DONE" ? 1 : 0;
       current.onHold += task.status === "ON_HOLD" ? 1 : 0;
-      current.conflicts += (conflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
+      current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       current.major += task.isMajor ? 1 : 0;
       current.titles.push(task.title);
       summaryMap[key] = current;
       return summaryMap;
     }, {});
-  }, [conflictMap, visibleTasks]);
+  }, [calendarConflictMap, calendarTasks]);
 
   const selectedDaySummary = daySummaryByDate[selectedDate] ?? EMPTY_DAY_SUMMARY;
 
@@ -339,10 +353,20 @@ export function DashboardPage() {
                   <p className="eyebrow">AGENDA</p>
                   <h4>{formatDateLabel(selectedDate)}</h4>
                 </div>
-                <span>{selectedDayTasks.length}개</span>
+                <span>{agendaTasks.length}/{selectedDayTasks.length}개</span>
               </header>
 
               <div className="agenda-stat-grid">
+                <button
+                  type="button"
+                  className={`all ${agendaViewMode === "all" ? "active" : ""}`}
+                  onClick={() => {
+                    setAgendaViewPreference({ date: selectedDate, mode: agendaViewMode === "all" ? "priority" : "all" });
+                  }}
+                  aria-pressed={agendaViewMode === "all"}
+                >
+                  전체 {selectedDaySummary.total}
+                </button>
                 <span className="not_done">미완료 {selectedDaySummary.pending}</span>
                 <span className="on_hold">보류 {selectedDaySummary.onHold}</span>
                 <span className="done">완료 {selectedDaySummary.done}</span>
@@ -350,17 +374,17 @@ export function DashboardPage() {
               </div>
 
               <div className="agenda-timeline">
-                {selectedDayTasks.length === 0 ? (
+                {agendaTasks.length === 0 ? (
                   <div className="agenda-empty">
                     <strong>이 날짜에는 일정이 없습니다.</strong>
                     <p>달력의 날짜를 더블클릭하면 바로 일정을 추가할 수 있습니다.</p>
                   </div>
                 ) : null}
 
-                {selectedDayTasks.map((task) => {
+                {agendaTasks.map((task) => {
                   const project = projectMap[task.projectId];
                   const taskType = typeMap[task.taskTypeId];
-                  const hasConflict = (conflictMap[task.id]?.length ?? 0) > 0;
+                  const hasConflict = (calendarConflictMap[task.id]?.length ?? 0) > 0;
 
                   return (
                     <button
@@ -394,21 +418,18 @@ export function DashboardPage() {
               <div>
                 <p className="eyebrow">AI INPUT</p>
                 <h3>AI로 일정 만들기</h3>
-                <small>요청 입력 후 초안 만들기를 누르면 아래에 결과가 표시됩니다.</small>
               </div>
             </header>
             <AiAssistantWorkspace
               compact
               hideInitialResult
+              resultPresentation="modal"
+              showRetryButton={false}
               showEndpointInfo={false}
               title="AI로 일정 만들기"
-              subtitle="자연어로 요청하면 일정 초안과 변경안을 제안합니다."
-              placeholder="예: 오늘 오후 4시에 회의 추가하고, 내일 오전에는 보고서 작성 시간을 잡아줘."
-              quickPrompts={[
-                "내일 오전 10시에 보고서 작성 2시간 잡아줘",
-                "오늘 남은 미완료 일정을 우선순위대로 정리해줘",
-                "이번 주 중요한 일정만 확인해서 초안 만들어줘",
-              ]}
+              subtitle=""
+              inputLabel=""
+              placeholder=""
               className="embedded dashboard-ai-workspace dashboard-ai-main-workspace"
             />
           </section>

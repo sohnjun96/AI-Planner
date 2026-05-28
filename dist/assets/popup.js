@@ -29487,8 +29487,11 @@ function AiAssistantWorkspace({
   showEndpointInfo = true,
   directApply = false,
   hideInitialResult = false,
+  resultPresentation = "inline",
+  showRetryButton = true,
   title = "AI 일정 입력",
   subtitle = "요청, 질문, 초안 검토를 한 공간에서 처리합니다.",
+  inputLabel = "요청 입력",
   placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
   quickPrompts = [],
   className = "",
@@ -29505,6 +29508,7 @@ function AiAssistantWorkspace({
   const [selectedOperationIndexes, setSelectedOperationIndexes] = (0, import_react3.useState)([]);
   const [isLoading, setIsLoading] = (0, import_react3.useState)(false);
   const [isApplying, setIsApplying] = (0, import_react3.useState)(false);
+  const [isResultModalOpen, setIsResultModalOpen] = (0, import_react3.useState)(false);
   const [error, setError] = (0, import_react3.useState)("");
   const [applyResult, setApplyResult] = (0, import_react3.useState)("");
   const [endpointStatus, setEndpointStatus] = (0, import_react3.useState)("checking");
@@ -29561,6 +29565,9 @@ function AiAssistantWorkspace({
     setApplyResult("");
     setLastQuestion("");
     setPendingProposal(void 0);
+    if (resultPresentation === "modal") {
+      setIsResultModalOpen(true);
+    }
     if (!messageOverride) {
       setDraft("");
     }
@@ -29806,6 +29813,63 @@ function AiAssistantWorkspace({
   }
   const shouldShowResultCard = !hideInitialResult || hasVisibleResult;
   const responseText = isLoading ? "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
+  const resultCard = shouldShowResultCard ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: `ai-result-card ${hasVisibleResult ? "has-output" : ""}`, "aria-live": "polite", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-response-block", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "AI 답변" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: responseText })
+    ] }),
+    lastQuestion ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-question-block", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill danger", children: "질문" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: lastQuestion })
+    ] }) : null,
+    pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-block compact-review", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-summary-row", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "변경안" }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: pendingProposal.summary })
+        ] }),
+        hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "button-row compact", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            "button",
+            {
+              className: "btn btn-soft",
+              type: "button",
+              onClick: () => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index)),
+              children: "전체 선택"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-soft", type: "button", onClick: () => setSelectedOperationIndexes([]), children: "해제" })
+        ] }) : null
+      ] }),
+      hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: "proposal-list compact-list", children: pendingProposal.operations.map(renderOperation) }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요." }),
+      hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "button-row proposal-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          "button",
+          {
+            className: "btn btn-primary",
+            type: "button",
+            disabled: isApplying || selectedOperationIndexes.length === 0,
+            onClick: () => void handleApplyProposal(),
+            children: isApplying ? "등록 중" : directApply ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})` : `선택 항목 반영 (${selectedOperationIndexes.length})`
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          "button",
+          {
+            className: "btn btn-outline",
+            type: "button",
+            onClick: () => {
+              setPendingProposal(void 0);
+              setSelectedOperationIndexes([]);
+            },
+            children: "변경안 취소"
+          }
+        )
+      ] }) : null
+    ] }) : hideInitialResult ? null : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안이나 변경안이 없습니다." }),
+    applyResult ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "success-text", children: applyResult }) : null,
+    error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
+  ] }) : null;
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`, children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header ai-command-header", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
@@ -29830,7 +29894,7 @@ function AiAssistantWorkspace({
     showEndpointInfo && endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-request-grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "ai-input-label", children: [
-        "요청 입력",
+        inputLabel ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: inputLabel }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "sr-only", children: "AI 요청" }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { value: draft, onChange: (event) => setDraft(event.target.value), rows: compact ? 4 : 5, placeholder })
       ] }),
       quickPrompts.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: quickPrompts.map((prompt) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
@@ -29846,7 +29910,7 @@ function AiAssistantWorkspace({
       )) }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-action-stack", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-primary btn-large", type: "button", disabled: isLoading || !draft.trim(), onClick: () => void handleSend(), children: isLoading ? "분석 중" : "초안 만들기" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        showRetryButton ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
           "button",
           {
             className: "btn btn-outline",
@@ -29857,66 +29921,31 @@ function AiAssistantWorkspace({
             },
             children: "마지막 요청 다시 실행"
           }
-        )
+        ) : null
       ] })
     ] }),
-    shouldShowResultCard ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: `ai-result-card ${hasVisibleResult ? "has-output" : ""}`, "aria-live": "polite", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-response-block", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "AI 답변" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: responseText })
-      ] }),
-      lastQuestion ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-question-block", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill danger", children: "질문" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: lastQuestion })
-      ] }) : null,
-      pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-block compact-review", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-summary-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "변경안" }),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: pendingProposal.summary })
+    resultPresentation === "modal" ? isResultModalOpen && resultCard ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "modal-backdrop ai-result-modal-backdrop", onClick: () => setIsResultModalOpen(false), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+      "section",
+      {
+        className: "modal-card panel ai-result-modal-card",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "AI 일정 초안",
+        onClick: (event) => {
+          event.stopPropagation();
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "eyebrow", children: "AI DRAFT" }),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "AI 일정 초안" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setIsResultModalOpen(false), children: "닫기" })
           ] }),
-          hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "button-row compact", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-              "button",
-              {
-                className: "btn btn-soft",
-                type: "button",
-                onClick: () => setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index)),
-                children: "전체 선택"
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-soft", type: "button", onClick: () => setSelectedOperationIndexes([]), children: "해제" })
-          ] }) : null
-        ] }),
-        hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: "proposal-list compact-list", children: pendingProposal.operations.map(renderOperation) }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "AI가 실제 일정 항목 없이 요약만 반환했습니다. 요청을 더 구체적으로 다시 입력해 주세요." }),
-        hasOperations ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "button-row proposal-actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-            "button",
-            {
-              className: "btn btn-primary",
-              type: "button",
-              disabled: isApplying || selectedOperationIndexes.length === 0,
-              onClick: () => void handleApplyProposal(),
-              children: isApplying ? "등록 중" : directApply ? `선택 항목 바로 등록 (${selectedOperationIndexes.length})` : `선택 항목 반영 (${selectedOperationIndexes.length})`
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-            "button",
-            {
-              className: "btn btn-outline",
-              type: "button",
-              onClick: () => {
-                setPendingProposal(void 0);
-                setSelectedOperationIndexes([]);
-              },
-              children: "변경안 취소"
-            }
-          )
-        ] }) : null
-      ] }) : hideInitialResult ? null : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안이나 변경안이 없습니다." }),
-      applyResult ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "success-text", children: applyResult }) : null,
-      error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
-    ] }) : null
+          resultCard
+        ]
+      }
+    ) }) : null : resultCard
   ] });
 }
 

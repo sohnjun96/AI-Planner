@@ -253,6 +253,14 @@ export function SettingsPage() {
     }
   }
 
+  function startCreateType() {
+    setTypeError("");
+    setTypeMessage("");
+    setTypeForm(createEmptyTypeForm());
+    typeAutoSaveSnapshotRef.current = "";
+    lastTypeIdRef.current = undefined;
+  }
+
   function handleSelectType(type: {
     id: string;
     name: string;
@@ -515,7 +523,12 @@ export function SettingsPage() {
               <p className="eyebrow">TYPES</p>
               <h3>일정 종류</h3>
             </div>
-            <small>{sortedTypes.length}개</small>
+            <div className="settings-type-header-actions">
+              <small>{sortedTypes.length}개</small>
+              <button className="btn btn-primary" type="button" onClick={startCreateType}>
+                새 종류 추가
+              </button>
+            </div>
           </header>
 
           <div className="settings-type-layout">
@@ -543,7 +556,14 @@ export function SettingsPage() {
             </ul>
 
             <form className="task-form" onSubmit={handleTypeSubmit}>
-              <h3>{typeForm.id ? "종류 수정" : "새 종류"}</h3>
+              <div className="type-form-heading">
+                <div>
+                  <h3>{typeForm.id ? "종류 수정" : "새 종류 추가"}</h3>
+                  <p className="description-text">
+                    {typeForm.id ? "선택한 종류는 입력 후 저장하거나 자동 저장됩니다." : "종류명과 색상을 정한 뒤 생성하세요."}
+                  </p>
+                </div>
+              </div>
 
               <label>
                 종류명
@@ -551,6 +571,7 @@ export function SettingsPage() {
                   type="text"
                   value={typeForm.name}
                   onChange={(event) => setTypeForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="예: 회의, 검토, 제출"
                   required
                 />
               </label>
@@ -576,7 +597,7 @@ export function SettingsPage() {
 
               <div className="button-row">
                 <button className="btn btn-primary" type="submit">
-                  {typeForm.id ? "저장" : "생성"}
+                  {typeForm.id ? "저장" : "종류 생성"}
                 </button>
 
                 {typeForm.id && !typeForm.isDefault ? (
@@ -588,15 +609,9 @@ export function SettingsPage() {
                 <button
                   className="btn btn-soft"
                   type="button"
-                  onClick={() => {
-                    setTypeError("");
-                    setTypeMessage("");
-                    setTypeForm(createEmptyTypeForm());
-                    typeAutoSaveSnapshotRef.current = "";
-                    lastTypeIdRef.current = undefined;
-                  }}
+                  onClick={startCreateType}
                 >
-                  초기화
+                  {typeForm.id ? "새 종류 입력" : "초기화"}
                 </button>
               </div>
 
