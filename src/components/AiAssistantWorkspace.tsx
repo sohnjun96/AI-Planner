@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { runScheduleAgent } from "../agent/scheduleAgent";
 import type {
   AgentConversationMessage,
@@ -8,7 +8,7 @@ import type {
   AgentProposal,
   AgentUpdateTaskOperation,
 } from "../agent/scheduleAgent";
-import { LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
+import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput, TaskStatus } from "../models";
 import { formatDateTime } from "../utils/date";
@@ -27,6 +27,7 @@ interface AiAssistantWorkspaceProps {
   quickPrompts?: string[];
   className?: string;
   onApplied?: () => void;
+  onRequestClose?: () => void;
 }
 
 type EndpointStatus = "checking" | "ok" | "error";
@@ -73,6 +74,16 @@ function formatOperationLabel(operation: AgentOperation, taskTitle?: string): st
   return `일정 삭제: ${taskTitle ?? operation.taskId}`;
 }
 
+function getOperationActionMeta(operation: AgentOperation): { label: string; tone: string } {
+  if (operation.action === "create_task") {
+    return { label: "추가", tone: "create" };
+  }
+  if (operation.action === "update_task") {
+    return { label: "수정", tone: "update" };
+  }
+  return { label: "삭제", tone: "delete" };
+}
+
 function toFriendlyError(error: unknown): string {
   const raw = error instanceof Error ? error.message : "AI 처리 중 오류가 발생했습니다.";
   const lower = raw.toLowerCase();
@@ -84,7 +95,7 @@ function toFriendlyError(error: unknown): string {
   return raw;
 }
 
-async function probeEndpoint(apiKey: string, model: string): Promise<void> {
+async function probeEndpoint(endpoint: string, apiKey: string, model: string): Promise<void> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -99,7 +110,7 @@ async function probeEndpoint(apiKey: string, model: string): Promise<void> {
   }, 5000);
 
   try {
-    const response = await fetch(LLM_CHAT_COMPLETIONS_URL, {
+    const response = await fetch(endpoint.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers,
       signal: controller.signal,
@@ -137,6 +148,14 @@ function describeChangeValue(key: string, value: unknown, timeFormat: "24h" | "1
   return String(value);
 }
 
+function formatOperationTimeRange(startAt: string, endAt: string | undefined, timeFormat: "24h" | "12h"): string {
+  const startText = formatDateTime(startAt, timeFormat);
+  if (!endAt) {
+    return startText;
+  }
+  return `${startText} - ${formatDateTime(endAt, timeFormat)}`;
+}
+
 export function AiAssistantWorkspace({
   compact = false,
   showEndpointInfo = true,
@@ -151,8 +170,10 @@ export function AiAssistantWorkspace({
   quickPrompts = [],
   className = "",
   onApplied,
+  onRequestClose,
 }: AiAssistantWorkspaceProps) {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [draft, setDraft] = useState("");
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastAssistantMessage, setLastAssistantMessage] = useState(
@@ -163,7 +184,6 @@ export function AiAssistantWorkspace({
   const [selectedOperationIndexes, setSelectedOperationIndexes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
-  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [applyResult, setApplyResult] = useState("");
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>("checking");
@@ -174,7 +194,7 @@ export function AiAssistantWorkspace({
   const taskTypeMap = useMemo(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = useMemo(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
-  const hasVisibleResult = Boolean(lastUserMessage || pendingProposal || lastQuestion || error || applyResult || isLoading);
+  const hasVisibleResult = Boolean(pendingProposal || lastQuestion || error || applyResult || isLoading);
 
   const conversationContext = useMemo<AgentConversationMessage[]>(() => {
     if (!lastUserMessage || !lastAssistantMessage) {
@@ -200,7 +220,7 @@ export function AiAssistantWorkspace({
     setEndpointStatus("checking");
     setEndpointStatusMessage("연결 확인 중");
 
-    void probeEndpoint(setting.llmApiKey ?? "", setting.llmModel ?? "")
+    void probeEndpoint(setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL, setting.llmApiKey ?? "", setting.llmModel ?? "")
       .then(() => {
         if (!isMounted) {
           return;
@@ -219,7 +239,17 @@ export function AiAssistantWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [setting.llmApiKey, setting.llmModel]);
+  }, [setting.llmApiKey, setting.llmEndpoint, setting.llmModel]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   async function handleSend(messageOverride?: string) {
     const userMessage = (messageOverride ?? draft).trim();
@@ -231,9 +261,6 @@ export function AiAssistantWorkspace({
     setApplyResult("");
     setLastQuestion("");
     setPendingProposal(undefined);
-    if (resultPresentation === "modal") {
-      setIsResultModalOpen(true);
-    }
     if (!messageOverride) {
       setDraft("");
     }
@@ -246,6 +273,7 @@ export function AiAssistantWorkspace({
         tasks,
         projects,
         taskTypes,
+        endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
       });
@@ -455,6 +483,7 @@ export function AiAssistantWorkspace({
 
   function renderOperation(operation: AgentOperation, index: number) {
     const isSelected = selectedOperationSet.has(index);
+    const actionMeta = getOperationActionMeta(operation);
     const toggleSelection = (checked: boolean) => {
       setSelectedOperationIndexes((prev) => {
         if (checked) {
@@ -468,16 +497,23 @@ export function AiAssistantWorkspace({
       const projectName = projectMap[operation.projectId]?.name ?? operation.projectId;
       const taskTypeName = taskTypeMap[operation.taskTypeId]?.name ?? operation.taskTypeId;
       return (
-        <li key={`proposal-${index}`} className="proposal-card">
+        <li key={`proposal-${index}`} className={`proposal-card ${actionMeta.tone} ${isSelected ? "selected" : ""}`}>
           <label className="proposal-item-toggle">
             <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
-            <span>
-              <strong>[추가] {operation.title}</strong>
-              <small>
-                {formatDateTime(operation.startAt, setting.timeFormat)}
-                {operation.endAt ? ` ~ ${formatDateTime(operation.endAt, setting.timeFormat)}` : ""}
-                {` / ${projectName} / ${taskTypeName}`}
-              </small>
+            <span className="proposal-checkmark" aria-hidden="true" />
+            <span className="proposal-card-body">
+              <span className="proposal-card-topline">
+                <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+                <span className={`status-badge ${operation.status.toLowerCase()}`}>{STATUS_LABELS[operation.status]}</span>
+                {operation.isMajor ? <span className="major-tag">중요</span> : null}
+              </span>
+              <strong>{operation.title}</strong>
+              <span className="proposal-time-chip">{formatOperationTimeRange(operation.startAt, operation.endAt, setting.timeFormat)}</span>
+              <span className="proposal-meta-grid">
+                <span>{projectName}</span>
+                <span>{taskTypeName}</span>
+              </span>
+              {operation.content ? <small>{operation.content}</small> : null}
             </span>
           </label>
         </li>
@@ -490,11 +526,15 @@ export function AiAssistantWorkspace({
         .map(([key, value]) => `${FIELD_LABELS[key] ?? key}: ${describeChangeValue(key, value, setting.timeFormat)}`)
         .join(" · ");
       return (
-        <li key={`proposal-${index}`} className="proposal-card">
+        <li key={`proposal-${index}`} className={`proposal-card ${actionMeta.tone} ${isSelected ? "selected" : ""}`}>
           <label className="proposal-item-toggle">
             <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
-            <span>
-              <strong>[수정] {taskTitle}</strong>
+            <span className="proposal-checkmark" aria-hidden="true" />
+            <span className="proposal-card-body">
+              <span className="proposal-card-topline">
+                <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+              </span>
+              <strong>{taskTitle}</strong>
               <small>{changeText || "변경 필드 없음"}</small>
             </span>
           </label>
@@ -504,11 +544,15 @@ export function AiAssistantWorkspace({
 
     const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
     return (
-      <li key={`proposal-${index}`} className="proposal-card">
+      <li key={`proposal-${index}`} className={`proposal-card ${actionMeta.tone} ${isSelected ? "selected" : ""}`}>
         <label className="proposal-item-toggle">
           <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
-          <span>
-            <strong>[삭제] {taskTitle}</strong>
+          <span className="proposal-checkmark" aria-hidden="true" />
+          <span className="proposal-card-body">
+            <span className="proposal-card-topline">
+              <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+            </span>
+            <strong>{taskTitle}</strong>
             {operation.reason ? <small>{operation.reason}</small> : null}
           </span>
         </label>
@@ -518,13 +562,9 @@ export function AiAssistantWorkspace({
 
   const shouldShowResultCard = !hideInitialResult || hasVisibleResult;
   const responseText = isLoading ? "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
+  const operationCount = pendingProposal?.operations.length ?? 0;
   const resultCard = shouldShowResultCard ? (
     <div className={`ai-result-card ${hasVisibleResult ? "has-output" : ""}`} aria-live="polite">
-      <div className="ai-response-block">
-        <span className="badge-pill">AI 답변</span>
-        <p>{responseText}</p>
-      </div>
-
       {lastQuestion ? (
         <div className="ai-question-block">
           <span className="badge-pill danger">질문</span>
@@ -536,8 +576,12 @@ export function AiAssistantWorkspace({
         <div className="proposal-block compact-review">
           <div className="proposal-summary-row">
             <div>
-              <span className="badge-pill">변경안</span>
+              <span className="badge-pill">일정 초안</span>
               <p className="description-text">{pendingProposal.summary}</p>
+            </div>
+            <div className="proposal-count-card" aria-label="선택한 초안 수">
+              <strong>{selectedOperationIndexes.length}</strong>
+              <span>/ {operationCount} 선택</span>
             </div>
             {hasOperations ? (
               <div className="button-row compact">
@@ -588,6 +632,8 @@ export function AiAssistantWorkspace({
             </div>
           ) : null}
         </div>
+      ) : isLoading ? (
+        <p className="description-text">{responseText}</p>
       ) : hideInitialResult ? null : (
         <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
       )}
@@ -612,7 +658,7 @@ export function AiAssistantWorkspace({
 
       {showEndpointInfo ? (
         <div className="ai-endpoint-block">
-          <p className="description-text">Endpoint: {LLM_CHAT_COMPLETIONS_URL}</p>
+          <p className="description-text">Endpoint: {setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL}</p>
           <p className="description-text">
             모델: {setting.llmModel ?? "(미설정)"} / API Key: {setting.llmApiKey ? "설정됨" : "미설정"}
           </p>
@@ -625,10 +671,34 @@ export function AiAssistantWorkspace({
         </p>
       ) : null}
 
+      {resultPresentation === "modal" ? resultCard : null}
+
       <div className="ai-request-grid">
         <label className="ai-input-label">
           {inputLabel ? <span>{inputLabel}</span> : <span className="sr-only">AI 요청</span>}
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={compact ? 4 : 5} placeholder={placeholder} />
+          <textarea
+            ref={textareaRef}
+            autoFocus
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onRequestClose?.();
+                return;
+              }
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                return;
+              }
+              event.preventDefault();
+              if (!isLoading && draft.trim()) {
+                void handleSend();
+              }
+            }}
+            rows={compact ? 4 : 5}
+            placeholder={placeholder}
+          />
         </label>
 
         {quickPrompts.length > 0 ? (
@@ -666,34 +736,7 @@ export function AiAssistantWorkspace({
         </div>
       </div>
 
-      {resultPresentation === "modal" ? (
-        isResultModalOpen && resultCard ? (
-          <div className="modal-backdrop ai-result-modal-backdrop" onClick={() => setIsResultModalOpen(false)}>
-            <section
-              className="modal-card panel ai-result-modal-card"
-              role="dialog"
-              aria-modal="true"
-              aria-label="AI 일정 초안"
-              onClick={(event) => {
-                event.stopPropagation();
-              }}
-            >
-              <header className="panel-header">
-                <div>
-                  <p className="eyebrow">AI DRAFT</p>
-                  <h2>AI 일정 초안</h2>
-                </div>
-                <button type="button" className="btn btn-soft" onClick={() => setIsResultModalOpen(false)}>
-                  닫기
-                </button>
-              </header>
-              {resultCard}
-            </section>
-          </div>
-        ) : null
-      ) : (
-        resultCard
-      )}
+      {resultPresentation !== "modal" ? resultCard : null}
     </section>
   );
 }

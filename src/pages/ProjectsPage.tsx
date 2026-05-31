@@ -45,6 +45,8 @@ type ProjectSettingsModalState =
     }
   | null;
 
+type ProjectOverviewFilter = "all" | "active" | "done" | "week";
+
 const PROJECT_FORM_AUTOSAVE_DELAY_MS = 700;
 
 function createEmptyProjectForm(): ProjectFormState {
@@ -284,6 +286,7 @@ export function ProjectsPage() {
   const [projectKeyword, setProjectKeyword] = useState("");
   const [taskKeyword, setTaskKeyword] = useState("");
   const [taskTypeFilterId, setTaskTypeFilterId] = useState("all");
+  const [overviewFilter, setOverviewFilter] = useState<ProjectOverviewFilter>("active");
   const [taskModalState, setTaskModalState] = useState<ProjectTaskModalState>(null);
   const [projectSettingsModal, setProjectSettingsModal] = useState<ProjectSettingsModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
@@ -361,8 +364,26 @@ export function ProjectsPage() {
     }
 
     const keyword = taskKeyword.trim().toLowerCase();
+    const todayKey = getDateKey(new Date());
+    const weekEndKey = getDateKey(addDays(new Date(), 7));
     return tasks
       .filter((task) => task.projectId === selectedProject.id)
+      .filter((task) => {
+        if (overviewFilter === "all") {
+          return true;
+        }
+
+        if (overviewFilter === "active") {
+          return task.status !== "DONE";
+        }
+
+        if (overviewFilter === "done") {
+          return task.status === "DONE";
+        }
+
+        const taskKey = getDateKey(task.startAt);
+        return taskKey >= todayKey && taskKey <= weekEndKey;
+      })
       .filter((task) => taskTypeFilterId === "all" || task.taskTypeId === taskTypeFilterId)
       .filter((task) => {
         if (!keyword) {
@@ -372,7 +393,7 @@ export function ProjectsPage() {
         return `${task.title} ${task.content} ${typeName}`.toLowerCase().includes(keyword);
       })
       .sort(compareByStartAtAsc);
-  }, [selectedProject, taskKeyword, taskTypeFilterId, tasks, typeMap]);
+  }, [overviewFilter, selectedProject, taskKeyword, taskTypeFilterId, tasks, typeMap]);
 
   const editingTask = useMemo(() => {
     if (taskModalState?.mode !== "edit") {
@@ -457,6 +478,7 @@ export function ProjectsPage() {
     setSearchParams({ projectId });
     setTaskKeyword("");
     setTaskTypeFilterId("all");
+    setOverviewFilter("active");
   }
 
   return (
@@ -551,6 +573,41 @@ export function ProjectsPage() {
                 </button>
               </div>
             </header>
+
+            <div className="overview-stat-row overview-filter-row">
+              <button
+                type="button"
+                className={`overview-stat-button all ${overviewFilter === "all" ? "active" : ""}`}
+                onClick={() => setOverviewFilter("all")}
+                aria-pressed={overviewFilter === "all"}
+              >
+                전체 {projectStats[selectedProject.id]?.total ?? 0}
+              </button>
+              <button
+                type="button"
+                className={`overview-stat-button active-filter ${overviewFilter === "active" ? "active" : ""}`}
+                onClick={() => setOverviewFilter("active")}
+                aria-pressed={overviewFilter === "active"}
+              >
+                진행 {projectStats[selectedProject.id]?.active ?? 0}
+              </button>
+              <button
+                type="button"
+                className={`overview-stat-button done-filter ${overviewFilter === "done" ? "active" : ""}`}
+                onClick={() => setOverviewFilter("done")}
+                aria-pressed={overviewFilter === "done"}
+              >
+                완료 {projectStats[selectedProject.id]?.done ?? 0}
+              </button>
+              <button
+                type="button"
+                className={`overview-stat-button week-filter ${overviewFilter === "week" ? "active" : ""}`}
+                onClick={() => setOverviewFilter("week")}
+                aria-pressed={overviewFilter === "week"}
+              >
+                이번주 {projectStats[selectedProject.id]?.week ?? 0}
+              </button>
+            </div>
 
             <div className="overview-stat-row">
               <span>진행 {projectStats[selectedProject.id]?.active ?? 0}</span>

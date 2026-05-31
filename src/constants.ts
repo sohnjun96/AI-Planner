@@ -3,8 +3,7 @@
 export const SETTINGS_ID = "default";
 export const DEFAULT_PROJECT_ID = "project-general";
 
-// LLM endpoint is intentionally fixed in code for intranet deployment.
-export const LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
+export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
 export const LLM_DEFAULT_MODEL = "gpt-4o-mini";
 
 export const DEFAULT_NOTIFY_BEFORE_MINUTES = 30;
@@ -143,6 +142,7 @@ export const DEFAULT_SETTING: AppSetting = {
   showPastCompleted: false,
   weekStartsOn: "mon",
   timeFormat: "24h",
+  llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   llmApiKey: "",
   llmModel: LLM_DEFAULT_MODEL,
   notificationsEnabled: true,

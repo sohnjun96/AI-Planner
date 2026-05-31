@@ -52,6 +52,7 @@ export interface AppSetting {
   showPastCompleted: boolean;
   weekStartsOn: "sun" | "mon";
   timeFormat: "24h" | "12h";
+  llmEndpoint?: string;
   llmApiKey?: string;
   llmModel?: string;
   notificationsEnabled?: boolean;

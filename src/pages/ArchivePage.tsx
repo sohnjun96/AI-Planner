@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
-import type { Task, TaskFormInput } from "../models";
+import type { Task } from "../models";
 import { formatDateTime, getDateKey } from "../utils/date";
 
 interface ArchiveFilters {
@@ -11,19 +11,6 @@ interface ArchiveFilters {
   fromDate: string;
   toDate: string;
   majorOnly: boolean;
-}
-
-function toTaskInput(task: Task): TaskFormInput {
-  return {
-    title: task.title,
-    content: task.content,
-    taskTypeId: task.taskTypeId,
-    projectId: task.projectId,
-    status: task.status,
-    startAt: task.startAt,
-    endAt: task.endAt,
-    isMajor: task.isMajor,
-  };
 }
 
 function formatMonthLabel(value: string): string {
@@ -39,6 +26,15 @@ function formatDateOnly(value: string): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(value));
+}
+
+function formatElapsedDays(value: string, currentTime: number): string {
+  const diffMs = currentTime - new Date(value).getTime();
+  const days = Math.max(0, Math.floor(diffMs / 86_400_000));
+  if (days === 0) {
+    return "오늘";
+  }
+  return `${days}일 전`;
 }
 
 function groupByMonth(tasks: Task[]) {
@@ -70,11 +66,9 @@ function countActiveFilters(filters: ArchiveFilters): number {
 }
 
 export function ArchivePage() {
-  const { tasks, projects, taskTypes, setting, updateTask } = useAppData();
+  const { tasks, projects, taskTypes, setting } = useAppData();
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
   const [filters, setFilters] = useState<ArchiveFilters>({
     keyword: "",
     projectId: "",
@@ -144,12 +138,12 @@ export function ArchivePage() {
     });
   }, [allArchivedTasks, filters, projectMap, typeMap]);
 
-  const selectedTaskSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
-  const selectedTasks = useMemo(() => archivedTasks.filter((task) => selectedTaskSet.has(task.id)), [archivedTasks, selectedTaskSet]);
   const groupedTasks = useMemo(() => groupByMonth(archivedTasks), [archivedTasks]);
   const activeFilterCount = countActiveFilters(filters);
   const importantArchivedCount = allArchivedTasks.filter((task) => task.isMajor).length;
   const latestCompletedTask = allArchivedTasks[0];
+  const thisMonthKey = getDateKey(new Date()).slice(0, 7);
+  const thisMonthCount = allArchivedTasks.filter((task) => getDateKey(task.startAt).slice(0, 7) === thisMonthKey).length;
 
   function resetFilters() {
     setFilters({
@@ -160,45 +154,6 @@ export function ArchivePage() {
       toDate: "",
       majorOnly: false,
     });
-    setSelectedTaskIds([]);
-  }
-
-  function toggleTaskSelection(taskId: string, checked: boolean) {
-    setSelectedTaskIds((prev) => {
-      if (checked) {
-        return prev.includes(taskId) ? prev : [...prev, taskId];
-      }
-      return prev.filter((id) => id !== taskId);
-    });
-  }
-
-  function selectAllFilteredTasks() {
-    setSelectedTaskIds(archivedTasks.map((task) => task.id));
-  }
-
-  async function restoreTask(task: Task) {
-    await updateTask(task.id, {
-      ...toTaskInput(task),
-      status: "NOT_DONE",
-    });
-    setSelectedTaskIds((prev) => prev.filter((id) => id !== task.id));
-    setMessage(`"${task.title}" 일정을 복원했습니다.`);
-  }
-
-  async function restoreSelectedTasks() {
-    if (selectedTasks.length === 0) {
-      return;
-    }
-
-    for (const task of selectedTasks) {
-      await updateTask(task.id, {
-        ...toTaskInput(task),
-        status: "NOT_DONE",
-      });
-    }
-
-    setMessage(`선택한 일정 ${selectedTasks.length}개를 복원했습니다.`);
-    setSelectedTaskIds([]);
   }
 
   return (
@@ -206,14 +161,11 @@ export function ArchivePage() {
       <header className="archive-hero">
         <div className="archive-hero-copy">
           <p className="eyebrow">ARCHIVE</p>
-          <h2>완료 기록 보관함</h2>
+          <h2>지난 완료 일정</h2>
           <p className="description-text">
-            완료된 과거 일정을 한곳에 모아두고, 필요할 때 검색하거나 다시 미완료 일정으로 복원합니다.
+            완료된 과거 일정을 월별로 훑어보고, 프로젝트와 종류 기준으로 필요한 기록을 빠르게 찾습니다.
           </p>
           <div className="archive-hero-actions">
-            <button type="button" className="btn btn-primary" onClick={() => void restoreSelectedTasks()} disabled={selectedTasks.length === 0}>
-              선택 일정 복원
-            </button>
             <button type="button" className="btn btn-outline" onClick={() => setShowFilters((prev) => !prev)}>
               상세 필터
             </button>
@@ -222,7 +174,7 @@ export function ArchivePage() {
 
         <div className="archive-mockup-card" aria-label="보관함 요약">
           <div className="archive-mockup-top">
-            <span>Done archive</span>
+            <span>완료 기록</span>
             <strong>{allArchivedTasks.length}</strong>
           </div>
           <div className="archive-mockup-row sky">
@@ -230,31 +182,31 @@ export function ArchivePage() {
             <strong>{archivedTasks.length}개</strong>
           </div>
           <div className="archive-mockup-row mint">
-            <span>중요 완료</span>
-            <strong>{importantArchivedCount}개</strong>
+            <span>이번 달</span>
+            <strong>{thisMonthCount}개</strong>
           </div>
           <div className="archive-mockup-row lavender">
-            <span>선택됨</span>
-            <strong>{selectedTasks.length}개</strong>
+            <span>중요 완료</span>
+            <strong>{importantArchivedCount}개</strong>
           </div>
         </div>
       </header>
 
       <section className="archive-insight-grid" aria-label="보관함 지표">
         <article className="archive-insight-card yellow">
-          <span>전체 보관</span>
+          <span>전체 완료</span>
           <strong>{allArchivedTasks.length}개</strong>
           <p>완료되었고 예정 시간이 지난 일정</p>
         </article>
         <article className="archive-insight-card peach">
           <span>현재 결과</span>
           <strong>{archivedTasks.length}개</strong>
-          <p>{activeFilterCount > 0 ? `필터 ${activeFilterCount}개 적용 중` : "전체 보관함을 보고 있음"}</p>
+          <p>{activeFilterCount > 0 ? `필터 ${activeFilterCount}개 적용 중` : "전체 기록을 보고 있음"}</p>
         </article>
         <article className="archive-insight-card mint">
           <span>최근 완료</span>
           <strong>{latestCompletedTask ? formatDateOnly(latestCompletedTask.completedAt ?? latestCompletedTask.startAt) : "-"}</strong>
-          <p>{latestCompletedTask?.title ?? "아직 보관된 일정이 없음"}</p>
+          <p>{latestCompletedTask?.title ?? "아직 지난 완료 일정이 없음"}</p>
         </article>
       </section>
 
@@ -271,11 +223,8 @@ export function ArchivePage() {
         <button type="button" className="btn btn-outline" onClick={() => setShowFilters((prev) => !prev)}>
           필터 {activeFilterCount > 0 ? activeFilterCount : ""}
         </button>
-        <button type="button" className="btn btn-soft" onClick={selectAllFilteredTasks} disabled={archivedTasks.length === 0}>
-          전체 선택
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => void restoreSelectedTasks()} disabled={selectedTasks.length === 0}>
-          선택 복원
+        <button type="button" className="btn btn-soft" onClick={resetFilters}>
+          필터 초기화
         </button>
       </section>
 
@@ -338,13 +287,11 @@ export function ArchivePage() {
         </section>
       ) : null}
 
-      {message ? <p className="success-text archive-message">{message}</p> : null}
-
-      <section className="archive-list" aria-label="보관된 일정">
+      <section className="archive-list" aria-label="지난 완료 일정">
         {groupedTasks.length === 0 ? (
           <div className="empty-state archive-empty-state">
             <span className="badge-pill">ARCHIVE</span>
-            <h3>보관된 일정이 없습니다.</h3>
+            <h3>지난 완료 일정이 없습니다.</h3>
             <p>완료 상태이면서 예정 시간이 지난 일정이 이곳에 표시됩니다. 필터를 적용했다면 조건을 초기화해 보세요.</p>
           </div>
         ) : null}
@@ -366,14 +313,6 @@ export function ArchivePage() {
 
                 return (
                   <article key={task.id} className="archive-task-card">
-                    <label className="archive-select">
-                      <input
-                        type="checkbox"
-                        checked={selectedTaskSet.has(task.id)}
-                        onChange={(event) => toggleTaskSelection(task.id, event.target.checked)}
-                        aria-label={`${task.title} 선택`}
-                      />
-                    </label>
                     <div className="archive-task-main">
                       <div className="archive-task-title-row">
                         <strong>{task.title}</strong>
@@ -396,9 +335,7 @@ export function ArchivePage() {
                     </div>
                     <div className="archive-task-actions">
                       <span className="status-badge done">{STATUS_LABELS.DONE}</span>
-                      <button type="button" className="btn btn-outline" onClick={() => void restoreTask(task)}>
-                        복원
-                      </button>
+                      <span className="archive-elapsed-tag">{formatElapsedDays(task.startAt, currentTime)}</span>
                     </div>
                   </article>
                 );

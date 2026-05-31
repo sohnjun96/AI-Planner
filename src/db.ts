@@ -56,6 +56,7 @@ export async function bootstrapDatabase(): Promise<void> {
   }
 
   if (
+    setting.llmEndpoint === undefined ||
     setting.llmApiKey === undefined ||
     setting.llmModel === undefined ||
     setting.notificationsEnabled === undefined ||
@@ -65,6 +66,7 @@ export async function bootstrapDatabase(): Promise<void> {
   ) {
     await db.settings.put({
       ...setting,
+      llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
       llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
       llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
       notificationsEnabled: setting.notificationsEnabled ?? DEFAULT_SETTING.notificationsEnabled,

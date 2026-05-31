@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorSelector } from "../components/ColorSelector";
-import { LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL, pickRandomPresetColor } from "../constants";
+import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL, pickRandomPresetColor } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { formatDateTime } from "../utils/date";
 
@@ -76,6 +76,7 @@ export function SettingsPage() {
   const [error, setError] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const [backupError, setBackupError] = useState("");
+  const [isBackupListOpen, setIsBackupListOpen] = useState(false);
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -88,6 +89,22 @@ export function SettingsPage() {
   useEffect(() => {
     void refreshAutoBackups();
   }, [refreshAutoBackups]);
+
+  useEffect(() => {
+    if (!isBackupListOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsBackupListOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isBackupListOpen]);
 
   useEffect(() => {
     if (!typeForm.id) {
@@ -253,6 +270,11 @@ export function SettingsPage() {
     }
   }
 
+  function openBackupList() {
+    setIsBackupListOpen(true);
+    void refreshAutoBackups();
+  }
+
   function startCreateType() {
     setTypeError("");
     setTypeMessage("");
@@ -376,6 +398,20 @@ export function SettingsPage() {
 
           <div className="form-grid two-col">
             <label>
+              Endpoint 주소
+              <input
+                type="url"
+                value={setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL}
+                onChange={(event) => {
+                  void updateSetting({ llmEndpoint: event.target.value });
+                }}
+                placeholder={DEFAULT_LLM_CHAT_COMPLETIONS_URL}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+
+            <label>
               LLM 모델명
               <input
                 type="text"
@@ -401,11 +437,7 @@ export function SettingsPage() {
             </label>
           </div>
 
-          <div className="settings-inline-note">
-            <span>Endpoint</span>
-            <code>{LLM_CHAT_COMPLETIONS_URL}</code>
-          </div>
-          <p className="description-text">모델명과 API Key는 입력 즉시 저장됩니다.</p>
+          <p className="description-text">Endpoint, 모델명, API Key는 입력 즉시 저장됩니다.</p>
         </section>
 
         <section className="settings-card settings-backup-card">
@@ -470,8 +502,8 @@ export function SettingsPage() {
             <button className="btn btn-primary" type="button" onClick={() => void handleCreateManualBackup()}>
               지금 백업 생성
             </button>
-            <button className="btn btn-soft" type="button" onClick={() => void refreshAutoBackups()}>
-              목록 새로고침
+            <button className="btn btn-soft" type="button" onClick={openBackupList}>
+              자동 백업 목록 보기
             </button>
           </div>
 
@@ -480,40 +512,18 @@ export function SettingsPage() {
           {message ? <p className="success-text">{message}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
 
-          <div className="backup-list-block settings-backup-list">
-            <h3>자동 백업 목록</h3>
-            {autoBackups.length === 0 ? <p className="empty-text">저장된 자동 백업이 없습니다.</p> : null}
-
-            <ul className="backup-list">
-              {autoBackups.map((backup) => (
-                <li key={backup.id} className="backup-item">
-                  <div>
-                    <strong>{formatDateTime(backup.createdAt, setting.timeFormat)}</strong>
-                    <p className="description-text">사유: {backup.reason} / 크기: {(backup.size / 1024).toFixed(1)} KB</p>
-                  </div>
-                  <div className="button-row compact">
-                    <button
-                      className="btn btn-soft"
-                      type="button"
-                      onClick={() => {
-                        void handleRestoreBackup(backup.id);
-                      }}
-                    >
-                      복원
-                    </button>
-                    <button
-                      className="btn btn-danger"
-                      type="button"
-                      onClick={() => {
-                        void handleDeleteBackup(backup.id);
-                      }}
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          <div className="settings-backup-list-summary">
+            <div>
+              <strong>자동 백업 목록</strong>
+              <p className="description-text">
+                {autoBackups.length > 0
+                  ? `저장된 백업 ${autoBackups.length}개. 목록 보기에서 복원하거나 삭제할 수 있습니다.`
+                  : "저장된 자동 백업이 없습니다."}
+              </p>
+            </div>
+            <button className="btn btn-outline" type="button" onClick={openBackupList}>
+              목록 보기
+            </button>
           </div>
         </section>
 
@@ -621,6 +631,73 @@ export function SettingsPage() {
           </div>
         </section>
       </div>
+
+      {isBackupListOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsBackupListOpen(false)}>
+          <section
+            className="modal-card panel settings-backup-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="자동 백업 목록"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <header className="panel-header">
+              <div>
+                <p className="eyebrow">BACKUPS</p>
+                <h2>자동 백업 목록</h2>
+                <small>필요한 백업을 선택해 복원하거나 오래된 백업을 삭제하세요.</small>
+              </div>
+              <div className="button-row compact">
+                <button className="btn btn-soft" type="button" onClick={() => void refreshAutoBackups()}>
+                  새로고침
+                </button>
+                <button className="btn btn-soft" type="button" onClick={() => setIsBackupListOpen(false)}>
+                  닫기
+                </button>
+              </div>
+            </header>
+
+            {autoBackups.length === 0 ? (
+              <div className="empty-state compact">
+                <p>저장된 자동 백업이 없습니다.</p>
+              </div>
+            ) : (
+              <ul className="backup-list settings-backup-modal-list">
+                {autoBackups.map((backup) => (
+                  <li key={backup.id} className="backup-item">
+                    <div>
+                      <strong>{formatDateTime(backup.createdAt, setting.timeFormat)}</strong>
+                      <p className="description-text">사유: {backup.reason} / 크기: {(backup.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <div className="button-row compact">
+                      <button
+                        className="btn btn-soft"
+                        type="button"
+                        onClick={() => {
+                          void handleRestoreBackup(backup.id);
+                        }}
+                      >
+                        복원
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        type="button"
+                        onClick={() => {
+                          void handleDeleteBackup(backup.id);
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

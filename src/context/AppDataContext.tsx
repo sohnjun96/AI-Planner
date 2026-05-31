@@ -68,6 +68,7 @@ interface AppDataContextValue {
         | "showPastCompleted"
         | "weekStartsOn"
         | "timeFormat"
+        | "llmEndpoint"
         | "llmApiKey"
         | "llmModel"
         | "notificationsEnabled"
@@ -216,6 +217,7 @@ function normalizeSetting(setting: AppSetting): AppSetting {
     notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES,
     autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
     autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
+    llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
     llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
     llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
   };
@@ -616,6 +618,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           | "showPastCompleted"
           | "weekStartsOn"
           | "timeFormat"
+          | "llmEndpoint"
           | "llmApiKey"
           | "llmModel"
           | "notificationsEnabled"

@@ -77,6 +77,7 @@ export interface RunScheduleAgentInput {
   tasks: Task[];
   projects: Project[];
   taskTypes: TaskType[];
+  endpoint?: string;
   apiKey: string;
   model?: string;
 }
@@ -186,7 +187,10 @@ Hard output rules:
 11. For repeated schedules, create one create_task operation per occurrence unless the repeat rule is unclear.
 12. If the user asks for multiple schedules, return multiple operations in the same operations array.
 13. Do not invent taskId values. For update_task or delete_task, use search_tasks or get_task first when the exact taskId is not already known.
-14. Prefer active project and task type ids when the user did not specify them.
+14. If the user asks to delete an existing schedule by title, time, date, project, or status, use search_tasks first and narrow candidates with keyword/date/projectId/status.
+15. Only return delete_task when one specific existing task is identified.
+16. If multiple tasks still match a delete request, ask one short Korean clarification question instead of guessing.
+17. Prefer active project and task type ids when the user did not specify them.
 
 Operation schemas:
 create_task requires:
@@ -222,7 +226,7 @@ delete_task requires:
 Allowed tools:
 - list_projects: {}
 - list_task_types: {}
-- search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE", "limit"?: number }
+- search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE", "date"?: "YYYY-MM-DD", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "limit"?: number }
 - get_task: { "taskId": string }
 - current_datetime: {}
 
@@ -260,6 +264,45 @@ Example tool response:
   "proposal": {
     "summary": "기존 일정 조회가 필요합니다.",
     "operations": []
+  }
+}
+
+Example delete lookup response:
+{
+  "assistantMessage": "삭제할 기존 일정을 먼저 찾겠습니다.",
+  "needsUserInput": false,
+  "userQuestion": "",
+  "toolCalls": [
+    {
+      "tool": "search_tasks",
+      "args": {
+        "keyword": "팀 미팅",
+        "date": "2026-02-11",
+        "limit": 10
+      }
+    }
+  ],
+  "proposal": {
+    "summary": "삭제 대상을 찾는 중입니다.",
+    "operations": []
+  }
+}
+
+Example delete final response:
+{
+  "assistantMessage": "삭제 초안을 준비했습니다. 확인 후 반영해 주세요.",
+  "needsUserInput": false,
+  "userQuestion": "",
+  "toolCalls": [],
+  "proposal": {
+    "summary": "기존 일정 1건 삭제 초안입니다.",
+    "operations": [
+      {
+        "action": "delete_task",
+        "taskId": "task-123",
+        "reason": "사용자 요청으로 삭제"
+      }
+    ]
   }
 }
 
@@ -435,6 +478,32 @@ function normalizeDateTime(value: unknown, fallbackTime: string): string {
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+}
+
+function normalizeSearchDate(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const match = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
+  if (!match) {
+    return "";
+  }
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
+function getTaskDateKey(task: Task): string {
+  const parsed = new Date(task.startAt);
+  if (Number.isNaN(parsed.getTime())) {
+    return task.startAt.slice(0, 10);
+  }
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function resolveEntityId(rawValue: unknown, items: Array<{ id: string; name: string }>, fallbackId?: string): string {
@@ -740,7 +809,9 @@ function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[]
             startAt: task.startAt,
             endAt: task.endAt,
             taskTypeId: task.taskTypeId,
+            taskTypeName: taskTypes.find((item) => item.id === task.taskTypeId)?.name ?? "",
             projectId: task.projectId,
+            projectName: projects.find((item) => item.id === task.projectId)?.name ?? "",
             isMajor: task.isMajor,
             updatedAt: task.updatedAt,
           }
@@ -748,7 +819,18 @@ function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[]
     };
   }
 
-  const keyword = typeof call.args.keyword === "string" ? call.args.keyword.trim().toLowerCase() : "";
+  const keywordSource =
+    typeof call.args.keyword === "string"
+      ? call.args.keyword
+      : typeof call.args.title === "string"
+        ? call.args.title
+        : typeof call.args.taskTitle === "string"
+          ? call.args.taskTitle
+          : "";
+  const keyword = keywordSource.trim().toLowerCase();
+  const date = normalizeSearchDate(call.args.date);
+  const startDate = normalizeSearchDate(call.args.startDate);
+  const endDate = normalizeSearchDate(call.args.endDate);
   const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
   const status = normalizeTaskStatus(call.args.status);
   const limitRaw = typeof call.args.limit === "number" ? call.args.limit : 20;
@@ -757,10 +839,20 @@ function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[]
   const taskTypeMap = Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType]));
   const filtered = tasks
     .filter((task) => {
+      const taskDateKey = getTaskDateKey(task);
       if (projectId && task.projectId !== projectId) {
         return false;
       }
       if (status && task.status !== status) {
+        return false;
+      }
+      if (date && taskDateKey !== date) {
+        return false;
+      }
+      if (startDate && taskDateKey < startDate) {
+        return false;
+      }
+      if (endDate && taskDateKey > endDate) {
         return false;
       }
       if (!keyword) {
@@ -776,6 +868,7 @@ function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[]
     .map((task) => ({
       id: task.id,
       title: task.title,
+      content: task.content,
       status: task.status,
       startAt: task.startAt,
       endAt: task.endAt,
@@ -829,6 +922,7 @@ export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<Ru
     const messages = buildPromptMessages(input, accumulatedToolResults);
     const raw = await requestLlmResponse({
       messages,
+      endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
     });

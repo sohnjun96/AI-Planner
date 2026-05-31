@@ -1,4 +1,4 @@
-import { LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL } from "../constants";
+import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL } from "../constants";
 
 export interface LlmChatMessage {
   role: "system" | "user" | "assistant";
@@ -55,6 +55,7 @@ function readTextContent(content: unknown): string {
 export async function requestLlmResponse(params: {
   messages: LlmChatMessage[];
   apiKey: string;
+  endpoint?: string;
   model?: string;
 }): Promise<string> {
   const headers: Record<string, string> = {
@@ -65,7 +66,7 @@ export async function requestLlmResponse(params: {
     headers.Authorization = `Bearer ${params.apiKey.trim()}`;
   }
 
-  const response = await fetch(LLM_CHAT_COMPLETIONS_URL, {
+  const response = await fetch(params.endpoint?.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers,
     body: JSON.stringify({

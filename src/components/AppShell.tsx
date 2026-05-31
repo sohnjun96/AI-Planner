@@ -5,7 +5,6 @@ import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
-  { to: "/tasks", label: "일정" },
   { to: "/projects", label: "프로젝트" },
   { to: "/archive", label: "보관함" },
   { to: "/settings", label: "설정" },
@@ -17,12 +16,29 @@ export function AppShell() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsAiAddOpen(false);
+        return;
+      }
+
+      const target = event.target;
+      const isEditableTarget =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+
+      if (isEditableTarget) {
+        return;
+      }
+
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setIsAiAddOpen(true);
       }
-      if (event.key === "Escape") {
-        setIsAiAddOpen(false);
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setIsAiAddOpen(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -73,7 +89,7 @@ export function AppShell() {
             onClick={() => {
               setIsAiAddOpen(true);
             }}
-            aria-label="AI 일정 추가, 단축키 Ctrl+Shift+N"
+            aria-label="AI 일정 추가, 단축키 A 또는 Ctrl+Shift+N"
           >
             AI 일정 추가
           </button>
@@ -126,6 +142,7 @@ export function AppShell() {
               placeholder="예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가"
               className="embedded ai-add-workspace"
               onApplied={() => setIsAiAddOpen(false)}
+              onRequestClose={() => setIsAiAddOpen(false)}
             />
           </section>
         </div>
