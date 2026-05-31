@@ -302,6 +302,16 @@ export function DashboardPage() {
     () => calendarListGroups.reduce((sum, group) => sum + getSchedulePriorityTasks(group.tasks, scheduleViewMode).length, 0),
     [calendarListGroups, scheduleViewMode],
   );
+  const visibleCalendarListGroups = useMemo(
+    () =>
+      calendarListGroups.filter((group) => {
+        if (scheduleViewMode === "all") {
+          return true;
+        }
+        return getSchedulePriorityTasks(group.tasks, scheduleViewMode).length > 0;
+      }),
+    [calendarListGroups, scheduleViewMode],
+  );
 
   const daySummaryByDate = useMemo(() => {
     return calendarTasks.reduce<Record<string, CalendarDaySummary>>((summaryMap, task) => {
@@ -699,12 +709,12 @@ export function DashboardPage() {
                 <span>{listVisibleTaskCount}/{calendarTasks.length}개</span>
               </header>
               {renderScheduleStatGrid(listViewSummary)}
-              {calendarListGroups.length === 0 ? (
+              {visibleCalendarListGroups.length === 0 ? (
                 <div className="empty-state compact">
                   <p>등록된 일정이 없습니다.</p>
                 </div>
               ) : null}
-              {calendarListGroups.map((group) => {
+              {visibleCalendarListGroups.map((group) => {
                 const visibleGroupTasks = getSchedulePriorityTasks(group.tasks, scheduleViewMode);
                 return (
                   <section key={group.dateKey} className="task-date-group dashboard-list-date-group">

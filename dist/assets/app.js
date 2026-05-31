@@ -34540,6 +34540,15 @@ function DashboardPage() {
     () => calendarListGroups.reduce((sum, group) => sum + getSchedulePriorityTasks(group.tasks, scheduleViewMode).length, 0),
     [calendarListGroups, scheduleViewMode]
   );
+  const visibleCalendarListGroups = (0, import_react9.useMemo)(
+    () => calendarListGroups.filter((group) => {
+      if (scheduleViewMode === "all") {
+        return true;
+      }
+      return getSchedulePriorityTasks(group.tasks, scheduleViewMode).length > 0;
+    }),
+    [calendarListGroups, scheduleViewMode]
+  );
   const daySummaryByDate = (0, import_react9.useMemo)(() => {
     return calendarTasks.reduce((summaryMap, task) => {
       const key = getDateKey(task.startAt);
@@ -34936,8 +34945,8 @@ function DashboardPage() {
             ] })
           ] }),
           renderScheduleStatGrid(listViewSummary),
-          calendarListGroups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "empty-state compact", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "등록된 일정이 없습니다." }) }) : null,
-          calendarListGroups.map((group) => {
+          visibleCalendarListGroups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "empty-state compact", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "등록된 일정이 없습니다." }) }) : null,
+          visibleCalendarListGroups.map((group) => {
             const visibleGroupTasks = getSchedulePriorityTasks(group.tasks, scheduleViewMode);
             return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "task-date-group dashboard-list-date-group", children: [
               /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { children: [
