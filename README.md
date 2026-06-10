@@ -1,86 +1,97 @@
-﻿# AI Planner
+# AI Planner
 
-업무 일정을 관리하기 위한 **풀페이지 크롬 확장프로그램**입니다.
-달력/일정/프로젝트 관리를 기본으로 제공하고, 대시보드 상단의 AI 도우미를 통해 자연어로 일정 추가/수정/삭제 제안을 받을 수 있습니다.
+AI Planner is a full-page Chrome extension for calendar-based work planning. It centers the dashboard, calendar, AI-assisted schedule creation, project tracking, archive browsing, and local-first data storage in one interface.
 
-## 주요 기능
-- 대시보드 중심 UI
-- 월간 달력, 날짜별 일정, 주요 일정, 전체 메모
-- 대시보드 상단 AI 도우미(변경안 제시 후 최종 확인 반영)
-- 일정 자동 저장 + 저장/취소 버튼 동시 제공
-- 반복 일정 생성(매일/매주/매월 + 횟수)
-- 일정 충돌 감지(폼 경고 + 목록/카드 표시)
-- 상태 빠른 변경(미완료/보류/완료)
-- 프로젝트/종류별 색상 구분
-- 프로젝트 관리(설명 + 해당 프로젝트 일정 관리)
-- 지난 업무 탭 필터
-- 되돌리기(Undo)
-- 빠른 일정 추가 모달(`Ctrl+Shift+N`)
-- 크롬 알림(시작 전 N분)
-- 자동 백업/복원 + 수동 백업 생성
+## Current product shape
+- Full-page app: clicking the extension opens `index.html#/dashboard`
+- Main tabs: `대시보드`, `프로젝트`, `보관함`, `설정`
+- Dashboard calendar views: `목록`, `주간`, `월간`
+- AI schedule modal: natural-language create, update, delete proposals with explicit apply confirmation
+- Local storage: IndexedDB via Dexie
+- Build output: `dist`
 
-## 페이지 구성
-- `대시보드`: AI 도우미, 달력, 날짜별 일정, 주요 일정, 전체 메모
-- `일정 관리`: 정렬 중심 일정 목록 + 편집 폼
-- `프로젝트 관리`: 프로젝트 CRUD + 프로젝트별 일정 관리
-- `지난 업무`: 완료+지난 일정 모아보기(필터)
-- `설정`: 일반 설정, AI 설정, 알림/백업, 종류 관리
+## Core features
+- Dashboard-first planning with a large month calendar and per-day agenda
+- Collapsible top summary for `오늘 일정` and `제출 일정`
+- AI schedule modal with keyboard flow
+- Right-click context menu on calendar days
+- Right-click context menu on task cards
+- Project management with status and type-based filtering
+- Archive view for completed past schedules
+- Global memo with checklist support
+- Undo for the latest change
+- Notification and backup settings
 
-## 설치 방법(사용자)
-`dist` 폴더만 있으면 설치해 사용할 수 있습니다.
+## AI workflow
+1. Open `AI 일정 추가` from the top bar, shortcut, or calendar day context menu.
+2. Enter a natural-language request.
+3. Review the generated operations.
+4. Apply the selected operations.
 
-1. 크롬에서 `chrome://extensions` 열기
-2. 우측 상단 `개발자 모드` 켜기
-3. `압축해제된 확장 프로그램을 로드합니다` 클릭
-4. `dist` 폴더 선택
+Supported AI actions:
+- Create schedules
+- Update schedules
+- Delete schedules
 
-## 개발/빌드 방법(개발자)
+Current UX details:
+- `A` or `Ctrl+Shift+N` opens the AI modal
+- `Esc` closes the AI modal
+- When a proposal is ready, `Enter` applies the selected draft
+- When the modal is opened with a prefilled request, the textarea is focused and the cursor moves to the end
+
+## Context menus
+Calendar day context menu:
+- `AI 일정 추가`
+- `일정 직접 추가`
+- `해당 날짜 보기`
+
+Task card context menu:
+- `완료하기` or `보류하기`
+- `수정`
+- `AI로 수정`
+- `복제`
+- `삭제`
+
+## Settings
+The settings page stores values immediately, including:
+- `LLM Endpoint`
+- `LLM Model`
+- `LLM API Key`
+- Week start day
+- Time format
+- Notifications
+- Automatic backups
+- Task types
+
+## Install
+Load the built extension from `dist`.
+
+1. Open `chrome://extensions`
+2. Enable `개발자 모드`
+3. Click `압축해제된 확장 프로그램을 로드합니다`
+4. Select `dist`
+
+## Development
+Run commands inside `source`.
+
 ```bash
 npm install
-npm run lint
 npm run build
 ```
 
-빌드 산출물은 `dist` 폴더에 생성됩니다.
+For local development:
 
-## AI 도우미 동작 방식
-1. 사용자 자연어 요청 입력
-2. 에이전트가 필요 시 프로젝트/종류/일정을 조회
-3. 변경안(JSON 기반 operations) 생성
-4. 사용자 최종 확인 후 반영
+```bash
+npm run dev
+```
 
-추가 기능:
-- 제안 항목 `부분 선택 반영`
-- 엔드포인트 상태 표시(정상/확인 중/오류)
-- 마지막 요청 재시도
-
-## LLM 설정
-설정 페이지에서 아래 항목을 입력하면 즉시 저장됩니다.
-- `LLM 모델명`
-- `LLM API Key`
-
-LLM Endpoint는 코드에 고정되어 있습니다.
-- `src/constants.ts`의 `LLM_CHAT_COMPLETIONS_URL`
-- 기본값: `http://127.0.0.1:3000/api/chat/completions`
-
-## 데이터 저장/백업
-- 로컬 저장소: IndexedDB(Dexie)
-- JSON 내보내기/가져오기 지원
-- 자동 백업 저장소(주기 백업), 목록에서 복원/삭제 가능
-
-## 알림
-- 크롬 `alarms` + `notifications` 사용
-- 시작 전 알림 분(minute) 설정 가능
-- 완료된 일정은 알림 대상에서 제외
-
-## 내부망/오프라인 사용
-- 일반 일정 관리 기능: 오프라인 동작
-- AI 도우미: 내부망에서 접근 가능한 LLM 서버 필요
-
-## 기술 스택
-- React + TypeScript + Vite
-- Dexie(IndexedDB)
+## Stack
+- React
+- TypeScript
+- Vite
+- Dexie
 - Chrome Extension Manifest V3
 
-## 참고 문서
-- `docs/EXTENSION_ARCHITECTURE.md`
+## Notes
+- General schedule management works offline
+- AI features require access to a reachable LLM endpoint

@@ -10,9 +10,14 @@ const NAV_ITEMS = [
   { to: "/settings", label: "설정" },
 ];
 
+type AiScheduleOpenDetail = {
+  initialDraft?: string;
+};
+
 export function AppShell() {
   const { canUndo, undoLastChange, undoDescription } = useAppData();
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
+  const [aiInitialDraft, setAiInitialDraft] = useState("");
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -34,16 +39,31 @@ export function AppShell() {
 
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
+        setAiInitialDraft("");
         setIsAiAddOpen(true);
       }
       if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
+        setAiInitialDraft("");
         setIsAiAddOpen(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenAiSchedule = (event: Event) => {
+      const detail = (event as CustomEvent<AiScheduleOpenDetail>).detail;
+      setAiInitialDraft(detail?.initialDraft ?? "");
+      setIsAiAddOpen(true);
+    };
+
+    window.addEventListener("ai-planner:open-ai-schedule", handleOpenAiSchedule);
+    return () => {
+      window.removeEventListener("ai-planner:open-ai-schedule", handleOpenAiSchedule);
     };
   }, []);
 
@@ -87,6 +107,7 @@ export function AppShell() {
             type="button"
             className="btn btn-primary"
             onClick={() => {
+              setAiInitialDraft("");
               setIsAiAddOpen(true);
             }}
             aria-label="AI 일정 추가, 단축키 A 또는 Ctrl+Shift+N"
@@ -141,6 +162,7 @@ export function AppShell() {
               subtitle="원하는 일정을 자연어로 입력하면 초안을 만들고 선택 항목을 바로 반영할 수 있습니다."
               placeholder="예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가"
               className="embedded ai-add-workspace"
+              initialDraft={aiInitialDraft}
               onApplied={() => setIsAiAddOpen(false)}
               onRequestClose={() => setIsAiAddOpen(false)}
             />

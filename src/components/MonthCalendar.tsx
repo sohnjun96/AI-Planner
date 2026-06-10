@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import { addDays, addMonths, getDateKey, getMonthGridStart, startOfMonth } from "../utils/date";
 
 export interface CalendarDaySummary {
@@ -18,6 +18,7 @@ interface MonthCalendarProps {
   onSelectDate: (date: string) => void;
   onDropTaskToDate?: (taskId: string, dateKey: string) => Promise<void> | void;
   onCreateTaskAtDate?: (dateKey: string) => void;
+  onDayContextMenu?: (event: MouseEvent<HTMLElement>, dateKey: string) => void;
 }
 
 const EMPTY_SUMMARY: CalendarDaySummary = {
@@ -72,6 +73,7 @@ export function MonthCalendar({
   onSelectDate,
   onDropTaskToDate,
   onCreateTaskAtDate,
+  onDayContextMenu,
 }: MonthCalendarProps) {
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date(selectedDate)));
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
@@ -244,6 +246,15 @@ export function MonthCalendar({
                 dragOverDateKey === key ? "drag-target" : ""
               }`}
               onClick={() => selectDate(date)}
+              onContextMenu={(event) => {
+                if (!onDayContextMenu) {
+                  return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                selectDate(date);
+                onDayContextMenu(event, key);
+              }}
               onDoubleClick={() => {
                 onCreateTaskAtDate?.(key);
               }}

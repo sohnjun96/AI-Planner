@@ -26,6 +26,7 @@ interface AiAssistantWorkspaceProps {
   placeholder?: string;
   quickPrompts?: string[];
   className?: string;
+  initialDraft?: string;
   onApplied?: () => void;
   onRequestClose?: () => void;
 }
@@ -156,6 +157,16 @@ function formatOperationTimeRange(startAt: string, endAt: string | undefined, ti
   return `${startText} - ${formatDateTime(endAt, timeFormat)}`;
 }
 
+function focusTextareaAtEnd(textarea: HTMLTextAreaElement | null, value?: string) {
+  if (!textarea) {
+    return;
+  }
+
+  const cursor = value?.length ?? textarea.value.length;
+  textarea.focus();
+  textarea.setSelectionRange(cursor, cursor);
+}
+
 export function AiAssistantWorkspace({
   compact = false,
   showEndpointInfo = true,
@@ -169,12 +180,13 @@ export function AiAssistantWorkspace({
   placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
   quickPrompts = [],
   className = "",
+  initialDraft = "",
   onApplied,
   onRequestClose,
 }: AiAssistantWorkspaceProps) {
   const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft);
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastAssistantMessage, setLastAssistantMessage] = useState(
     "일정 요청을 입력하면 AI가 필요한 질문과 초안, 변경안을 정리해서 보여줍니다.",
@@ -195,6 +207,9 @@ export function AiAssistantWorkspace({
   const selectedOperationSet = useMemo(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
   const hasVisibleResult = Boolean(pendingProposal || lastQuestion || error || applyResult || isLoading);
+  const canApplyProposalWithEnter = Boolean(
+    pendingProposal && hasOperations && selectedOperationIndexes.length > 0 && !isApplying,
+  );
 
   const conversationContext = useMemo<AgentConversationMessage[]>(() => {
     if (!lastUserMessage || !lastAssistantMessage) {
@@ -243,13 +258,38 @@ export function AiAssistantWorkspace({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      textareaRef.current?.focus();
+      focusTextareaAtEnd(textareaRef.current);
     });
 
     return () => {
       window.cancelAnimationFrame(frame);
     };
   }, []);
+
+  useEffect(() => {
+    setDraft(initialDraft);
+    const frame = window.requestAnimationFrame(() => {
+      focusTextareaAtEnd(textareaRef.current, initialDraft);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [initialDraft]);
+
+  useEffect(() => {
+    if (!pendingProposal) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      focusTextareaAtEnd(textareaRef.current);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [pendingProposal]);
 
   async function handleSend(messageOverride?: string) {
     const userMessage = (messageOverride ?? draft).trim();
@@ -692,6 +732,10 @@ export function AiAssistantWorkspace({
                 return;
               }
               event.preventDefault();
+              if (canApplyProposalWithEnter) {
+                void handleApplyProposal();
+                return;
+              }
               if (!isLoading && draft.trim()) {
                 void handleSend();
               }

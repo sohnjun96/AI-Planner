@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDaySummary } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
@@ -24,6 +25,20 @@ type TaskModalState =
   | null;
 
 type AgendaViewMode = "priority" | "all";
+
+type DashboardContextMenu =
+  | {
+      kind: "date";
+      x: number;
+      y: number;
+      dateKey: string;
+    }
+  | {
+      kind: "task";
+      x: number;
+      y: number;
+      taskId: string;
+    };
 
 const EMPTY_DAY_SUMMARY: CalendarDaySummary = {
   total: 0,
@@ -63,6 +78,15 @@ function formatDateLabel(dateKey: string): string {
     day: "numeric",
     weekday: "short",
   }).format(new Date(dateKey));
+}
+
+function formatContextDateLabel(dateKey: string): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(new Date(`${dateKey}T00:00:00`));
 }
 
 function formatDayLabel(date: Date): string {
@@ -178,6 +202,7 @@ interface CompactTaskCardProps {
   hasConflict: boolean;
   onClick: () => void;
   onStatusChange: (status: TaskStatus) => void;
+  onContextMenu?: (event: MouseEvent<HTMLElement>, task: Task) => void;
 }
 
 function CompactTaskCard({
@@ -188,12 +213,16 @@ function CompactTaskCard({
   hasConflict,
   onClick,
   onStatusChange,
+  onContextMenu,
 }: CompactTaskCardProps) {
   return (
     <article
       className={`compact-task-card ${task.status.toLowerCase()} ${hasConflict ? "has-conflict" : ""}`}
       style={{ borderLeftColor: project?.color ?? "#64748b" }}
       draggable
+      onContextMenu={(event) => {
+        onContextMenu?.(event, task);
+      }}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("application/x-task-id", task.id);
@@ -246,6 +275,7 @@ export function DashboardPage() {
   const [isTopbarExpanded, setIsTopbarExpanded] = useState(false);
   const [agendaViewPreference, setAgendaViewPreference] = useState<{ date: string; mode: AgendaViewMode } | null>(null);
   const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("priority");
+  const [contextMenu, setContextMenu] = useState<DashboardContextMenu | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const todayKey = getDateKey(today);
@@ -280,6 +310,10 @@ export function DashboardPage() {
   const agendaViewMode = agendaViewPreference?.date === selectedDate ? agendaViewPreference.mode : "priority";
   const agendaTasks = getPriorityTasks(selectedDayTasks, agendaViewMode);
   const calendarListGroups = useMemo(() => groupTasksByDate(calendarTasks), [calendarTasks]);
+  const upcomingCalendarListGroups = useMemo(
+    () => calendarListGroups.filter((group) => group.dateKey >= todayKey),
+    [calendarListGroups, todayKey],
+  );
   const weekStart = useMemo(() => getWeekStart(selectedDate, setting.weekStartsOn), [selectedDate, setting.weekStartsOn]);
   const weekDays = useMemo(
     () =>
@@ -299,18 +333,22 @@ export function DashboardPage() {
     [scheduleViewMode, weekDays],
   );
   const listVisibleTaskCount = useMemo(
-    () => calendarListGroups.reduce((sum, group) => sum + getSchedulePriorityTasks(group.tasks, scheduleViewMode).length, 0),
-    [calendarListGroups, scheduleViewMode],
+    () => upcomingCalendarListGroups.reduce((sum, group) => sum + getSchedulePriorityTasks(group.tasks, scheduleViewMode).length, 0),
+    [scheduleViewMode, upcomingCalendarListGroups],
   );
   const visibleCalendarListGroups = useMemo(
     () =>
-      calendarListGroups.filter((group) => {
+      upcomingCalendarListGroups.filter((group) => {
         if (scheduleViewMode === "all") {
           return true;
         }
         return getSchedulePriorityTasks(group.tasks, scheduleViewMode).length > 0;
       }),
-    [calendarListGroups, scheduleViewMode],
+    [scheduleViewMode, upcomingCalendarListGroups],
+  );
+  const listViewSourceTasks = useMemo(
+    () => upcomingCalendarListGroups.flatMap((group) => group.tasks),
+    [upcomingCalendarListGroups],
   );
 
   const daySummaryByDate = useMemo(() => {
@@ -332,7 +370,7 @@ export function DashboardPage() {
   const selectedDaySummary = daySummaryByDate[selectedDate] ?? EMPTY_DAY_SUMMARY;
   const weekViewSourceTasks = useMemo(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = useMemo(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
-  const listViewSummary = useMemo(() => summarizeTasks(calendarTasks, calendarConflictMap), [calendarConflictMap, calendarTasks]);
+  const listViewSummary = useMemo(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
 
   const editingTask = useMemo(() => {
     if (!taskModalState || taskModalState.mode !== "edit") {
@@ -340,6 +378,12 @@ export function DashboardPage() {
     }
     return tasks.find((task) => task.id === taskModalState.taskId);
   }, [taskModalState, tasks]);
+  const contextTask = useMemo(() => {
+    if (!contextMenu || contextMenu.kind !== "task") {
+      return undefined;
+    }
+    return tasks.find((task) => task.id === contextMenu.taskId);
+  }, [contextMenu, tasks]);
 
   const activeTaskModalState: TaskModalState = taskModalState?.mode === "edit" && !editingTask ? null : taskModalState;
   const globalMemoSource = memoMap[GLOBAL_MEMO_KEY]?.content ?? "";
@@ -420,6 +464,141 @@ export function DashboardPage() {
     });
   }
 
+  function openAiSchedule(initialDraft: string) {
+    window.dispatchEvent(
+      new CustomEvent("ai-planner:open-ai-schedule", {
+        detail: { initialDraft },
+      }),
+    );
+  }
+
+  function openDateContextMenu(event: MouseEvent<HTMLElement>, dateKey: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      kind: "date",
+      x: event.clientX,
+      y: event.clientY,
+      dateKey,
+    });
+  }
+
+  function openTaskContextMenu(event: MouseEvent<HTMLElement>, task: Task) {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      kind: "task",
+      x: event.clientX,
+      y: event.clientY,
+      taskId: task.id,
+    });
+  }
+
+  function duplicateTask(task: Task) {
+    void createTask({
+      ...toTaskInput(task),
+      title: `${task.title} 복사본`,
+    });
+  }
+
+  function deleteTaskFromContextMenu(task: Task) {
+    if (!window.confirm(`"${task.title}" 일정을 삭제할까요?`)) {
+      return;
+    }
+    void removeTask(task.id);
+  }
+
+  function getContextMenuTitle(): string | undefined {
+    if (!contextMenu) {
+      return undefined;
+    }
+    if (contextMenu.kind === "date") {
+      return formatContextDateLabel(contextMenu.dateKey);
+    }
+    return contextTask?.title;
+  }
+
+  function getContextMenuItems(): ContextMenuItem[] {
+    if (!contextMenu) {
+      return [];
+    }
+
+    if (contextMenu.kind === "date") {
+      const dateLabel = formatContextDateLabel(contextMenu.dateKey);
+      return [
+        {
+          id: "ai-create-date-task",
+          label: "AI 일정 추가",
+          description: "이 날짜를 기준으로 초안 만들기",
+          tone: "primary",
+          onSelect: () => openAiSchedule(`${dateLabel} 일정으로 `),
+        },
+        {
+          id: "create-date-task",
+          label: "일정 직접 추가",
+          description: "날짜가 미리 선택된 입력폼 열기",
+          onSelect: () => openCreateTask(contextMenu.dateKey),
+        },
+        {
+          id: "select-date",
+          label: "해당 날짜 보기",
+          description: "Agenda를 이 날짜로 이동",
+          onSelect: () => {
+            setSelectedDate(contextMenu.dateKey);
+            setCalendarViewMode("MONTH");
+          },
+        },
+      ];
+    }
+
+    if (!contextTask) {
+      return [];
+    }
+
+    const nextStatus: TaskStatus = contextTask.status === "DONE" ? "ON_HOLD" : "DONE";
+    const statusLabel = contextTask.status === "DONE" ? "보류하기" : "완료하기";
+    const dateLabel = formatContextDateLabel(getDateKey(contextTask.startAt));
+    const timeLabel = formatTaskTime(contextTask, setting.timeFormat);
+
+    return [
+      {
+        id: "toggle-task-status",
+        label: statusLabel,
+        description: contextTask.status === "DONE" ? "완료된 일정을 보류로 변경" : "일정을 완료로 변경",
+        tone: "primary",
+        onSelect: () => changeTaskStatus(contextTask, nextStatus),
+      },
+      {
+        id: "edit-task",
+        label: "수정",
+        description: "일정 수정 모달 열기",
+        onSelect: () => openEditTask(contextTask.id),
+      },
+      {
+        id: "ai-edit-task",
+        label: "AI로 수정",
+        description: "이 일정을 기준으로 수정 요청",
+        onSelect: () =>
+          openAiSchedule(
+            `다음 기존 일정을 수정해줘.\n- 날짜: ${dateLabel}\n- 시간: ${timeLabel}\n- 제목: ${contextTask.title}\n- 상태: ${STATUS_LABELS[contextTask.status]}\n\n수정 요청: `,
+          ),
+      },
+      {
+        id: "duplicate-task",
+        label: "복제",
+        description: "같은 내용의 새 일정 만들기",
+        onSelect: () => duplicateTask(contextTask),
+      },
+      {
+        id: "delete-task",
+        label: "삭제",
+        description: "확인 후 일정 삭제",
+        tone: "danger",
+        onSelect: () => deleteTaskFromContextMenu(contextTask),
+      },
+    ];
+  }
+
   function toggleTaskCompletion(task: Task, checked: boolean) {
     changeTaskStatus(task, checked ? "DONE" : "NOT_DONE");
   }
@@ -441,6 +620,7 @@ export function DashboardPage() {
             hasConflict={(conflictMap[task.id]?.length ?? 0) > 0}
             onClick={() => openEditTask(task.id)}
             onStatusChange={(status) => changeTaskStatus(task, status)}
+            onContextMenu={openTaskContextMenu}
           />
         ))}
       </div>
@@ -504,6 +684,7 @@ export function DashboardPage() {
             hasConflict={(calendarConflictMap[task.id]?.length ?? 0) > 0}
             onClick={() => openEditTask(task.id)}
             onStatusChange={(status) => changeTaskStatus(task, status)}
+            onContextMenu={openTaskContextMenu}
           />
         ))}
       </div>
@@ -599,6 +780,7 @@ export function DashboardPage() {
                   onSelectDate={setSelectedDate}
                   onDropTaskToDate={handleDropTaskToDate}
                   onCreateTaskAtDate={openCreateTask}
+                  onDayContextMenu={openDateContextMenu}
                 />
               </div>
 
@@ -648,6 +830,7 @@ export function DashboardPage() {
                         className={`agenda-event-card ${task.status.toLowerCase()} ${hasConflict ? "conflict" : ""}`}
                         style={{ borderLeftColor: project?.color ?? "#6b7280" }}
                         onClick={() => openEditTask(task.id)}
+                        onContextMenu={(event) => openTaskContextMenu(event, task)}
                       >
                         <span className="agenda-event-time">{formatTaskTime(task, setting.timeFormat)}</span>
                         <strong>{task.title}</strong>
@@ -706,7 +889,7 @@ export function DashboardPage() {
                   <p className="eyebrow">LIST</p>
                   <h3>전체 일정 목록</h3>
                 </div>
-                <span>{listVisibleTaskCount}/{calendarTasks.length}개</span>
+                <span>{listVisibleTaskCount}/{listViewSourceTasks.length}개</span>
               </header>
               {renderScheduleStatGrid(listViewSummary)}
               {visibleCalendarListGroups.length === 0 ? (
@@ -756,6 +939,16 @@ export function DashboardPage() {
           onSave={handleSaveGlobalMemo}
         />
       </section>
+
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          title={getContextMenuTitle()}
+          items={getContextMenuItems()}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
 
       {activeTaskModalState ? (
         <div
