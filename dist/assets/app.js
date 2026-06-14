@@ -32077,6 +32077,7 @@ function executeToolCall(call, tasks, projects, taskTypes) {
       result: projects.map((project) => ({
         id: project.id,
         name: project.name,
+        description: project.description ?? "",
         isActive: project.isActive
       }))
     };
@@ -32121,6 +32122,7 @@ function executeToolCall(call, tasks, projects, taskTypes) {
         taskTypeName: taskTypes.find((item) => item.id === task.taskTypeId)?.name ?? "",
         projectId: task.projectId,
         projectName: projects.find((item) => item.id === task.projectId)?.name ?? "",
+        projectDescription: projects.find((item) => item.id === task.projectId)?.description ?? "",
         isMajor: task.isMajor,
         updatedAt: task.updatedAt
       } : { message: "일정을 찾지 못했습니다." }
@@ -32158,8 +32160,9 @@ function executeToolCall(call, tasks, projects, taskTypes) {
       return true;
     }
     const projectName = projectMap[task.projectId]?.name ?? "";
+    const projectDescription = projectMap[task.projectId]?.description ?? "";
     const taskTypeName = taskTypeMap[task.taskTypeId]?.name ?? "";
-    const haystack = `${task.title} ${task.content} ${projectName} ${taskTypeName}`.toLowerCase();
+    const haystack = `${task.title} ${task.content} ${projectName} ${projectDescription} ${taskTypeName}`.toLowerCase();
     return haystack.includes(keyword);
   }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, limit).map((task) => ({
     id: task.id,
@@ -32170,6 +32173,7 @@ function executeToolCall(call, tasks, projects, taskTypes) {
     endAt: task.endAt,
     projectId: task.projectId,
     projectName: projectMap[task.projectId]?.name ?? "",
+    projectDescription: projectMap[task.projectId]?.description ?? "",
     taskTypeId: task.taskTypeId,
     taskTypeName: taskTypeMap[task.taskTypeId]?.name ?? "",
     isMajor: task.isMajor,
@@ -32192,6 +32196,7 @@ function buildPromptMessages(input, toolResults) {
       projectList: input.projects.map((project) => ({
         id: project.id,
         name: project.name,
+        description: project.description ?? "",
         isActive: project.isActive
       })),
       taskTypeList: input.taskTypes.map((taskType) => ({
