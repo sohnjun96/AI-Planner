@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie";
-import { DEFAULT_PROJECT, DEFAULT_SETTING, DEFAULT_TASK_TYPES, SETTINGS_ID } from "./constants";
+import { DEFAULT_PROJECTS, DEFAULT_SETTING, DEFAULT_TASK_TYPES, SETTINGS_ID } from "./constants";
 import type { AppSetting, Memo, Project, Task, TaskType } from "./models";
 import { toIsoNow } from "./utils/date";
 
@@ -27,23 +27,35 @@ export const db = new ScheduleDB();
 export async function bootstrapDatabase(): Promise<void> {
   const now = toIsoNow();
 
-  const taskTypeCount = await db.taskTypes.count();
-  if (taskTypeCount === 0) {
-    const seeded = DEFAULT_TASK_TYPES.map((type) => ({
+  const existingTaskTypes = await db.taskTypes.toArray();
+  const existingTaskTypeNames = new Set(existingTaskTypes.map((type) => type.name.trim().toLowerCase()));
+  const existingTaskTypeIds = new Set(existingTaskTypes.map((type) => type.id));
+  const missingTaskTypes = DEFAULT_TASK_TYPES.filter(
+    (type) => !existingTaskTypeIds.has(type.id) && !existingTaskTypeNames.has(type.name.trim().toLowerCase()),
+  );
+  if (missingTaskTypes.length > 0) {
+    const highestOrder = existingTaskTypes.reduce((max, type) => Math.max(max, type.order), 0);
+    const seeded = missingTaskTypes.map((type, index) => ({
       ...type,
+      order: existingTaskTypes.length === 0 ? type.order : highestOrder + index + 1,
       createdAt: now,
       updatedAt: now,
     }));
     await db.taskTypes.bulkAdd(seeded);
   }
 
-  const projectCount = await db.projects.count();
-  if (projectCount === 0) {
-    await db.projects.add({
-      ...DEFAULT_PROJECT,
+  const existingProjects = await db.projects.toArray();
+  const existingProjectNames = new Set(existingProjects.map((project) => project.name.trim().toLowerCase()));
+  const existingProjectIds = new Set(existingProjects.map((project) => project.id));
+  const missingProjects = DEFAULT_PROJECTS.filter(
+    (project) => !existingProjectIds.has(project.id) && !existingProjectNames.has(project.name.trim().toLowerCase()),
+  );
+  if (missingProjects.length > 0) {
+    await db.projects.bulkAdd(missingProjects.map((project) => ({
+      ...project,
       createdAt: now,
       updatedAt: now,
-    });
+    })));
   }
 
   const setting = await db.settings.get(SETTINGS_ID);

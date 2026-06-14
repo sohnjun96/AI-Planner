@@ -47,6 +47,7 @@ const EMPTY_DAY_SUMMARY: CalendarDaySummary = {
   onHold: 0,
   conflicts: 0,
   major: 0,
+  lunch: 0,
   titles: [],
 };
 
@@ -134,6 +135,19 @@ function isSubmissionTaskType(task: Task, typeMap: Record<string, TaskType | und
     return false;
   }
   return taskType.name.trim().toLowerCase() === "제출";
+}
+
+const LUNCH_TASK_KEYWORDS = ["점심", "중식", "lunch"];
+
+function isLunchTask(
+  task: Task,
+  typeMap: Record<string, TaskType | undefined>,
+  projectMap: Record<string, Project | undefined>,
+): boolean {
+  const taskTypeName = typeMap[task.taskTypeId]?.name ?? "";
+  const projectName = projectMap[task.projectId]?.name ?? "";
+  const source = `${task.title} ${task.content} ${taskTypeName} ${projectName}`.toLowerCase();
+  return LUNCH_TASK_KEYWORDS.some((keyword) => source.includes(keyword));
 }
 
 function getPriorityTasks(tasks: Task[], mode: AgendaViewMode): Task[] {
@@ -361,11 +375,12 @@ export function DashboardPage() {
       current.onHold += task.status === "ON_HOLD" ? 1 : 0;
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       current.major += task.isMajor ? 1 : 0;
+      current.lunch += isLunchTask(task, typeMap, projectMap) ? 1 : 0;
       current.titles.push(task.title);
       summaryMap[key] = current;
       return summaryMap;
     }, {});
-  }, [calendarConflictMap, calendarTasks]);
+  }, [calendarConflictMap, calendarTasks, projectMap, typeMap]);
 
   const selectedDaySummary = daySummaryByDate[selectedDate] ?? EMPTY_DAY_SUMMARY;
   const weekViewSourceTasks = useMemo(() => weekDays.flatMap((day) => day.tasks), [weekDays]);

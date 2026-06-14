@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { ColorSelector } from "../components/ColorSelector";
 import { TaskForm } from "../components/TaskForm";
 import { TaskItem } from "../components/TaskItem";
-import { DEFAULT_PROJECT_ID, pickRandomPresetColor } from "../constants";
+import { DEFAULT_PROJECT_IDS, pickRandomPresetColor } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Project, Task, TaskFormInput, TaskStatus } from "../models";
 import { addDays, compareByStartAtAsc, getDateKey } from "../utils/date";
@@ -266,7 +266,7 @@ function ProjectEditorPanel({ initialProject, createMode, onSaveProject, onDelet
               onClick={() => {
                 void handleDelete();
               }}
-              disabled={form.id === DEFAULT_PROJECT_ID}
+              disabled={DEFAULT_PROJECT_IDS.includes(form.id)}
             >
               삭제
             </button>

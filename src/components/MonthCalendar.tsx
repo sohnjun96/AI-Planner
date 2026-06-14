@@ -8,6 +8,7 @@ export interface CalendarDaySummary {
   onHold: number;
   conflicts: number;
   major: number;
+  lunch: number;
   titles: string[];
 }
 
@@ -28,6 +29,7 @@ const EMPTY_SUMMARY: CalendarDaySummary = {
   onHold: 0,
   conflicts: 0,
   major: 0,
+  lunch: 0,
   titles: [],
 };
 
@@ -230,6 +232,7 @@ export function MonthCalendar({
             summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
             summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
             summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
+            summary.lunch > 0 ? `점심 ${summary.lunch}건` : "",
             summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
             "Enter로 선택, 더블클릭으로 일정 추가",
           ]
@@ -331,6 +334,7 @@ export function MonthCalendar({
               </div>
 
               <div className="calendar-indicators">
+                {summary.lunch > 0 ? <span className="calendar-indicator lunch">점심{summary.lunch > 1 ? ` ${summary.lunch}` : ""}</span> : null}
                 {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
                 {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
                 {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}

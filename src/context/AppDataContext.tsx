@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import {
   DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   DEFAULT_NOTIFY_BEFORE_MINUTES,
-  DEFAULT_PROJECT_ID,
+  DEFAULT_PROJECT_IDS,
   DEFAULT_SETTING,
   SETTINGS_ID,
 } from "../constants";
@@ -533,7 +533,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteProject = useCallback(async (id: string) => {
-    if (id === DEFAULT_PROJECT_ID) {
+    if (DEFAULT_PROJECT_IDS.includes(id)) {
       throw new Error("기본 프로젝트는 삭제할 수 없습니다.");
     }
     const taskCount = await db.tasks.where("projectId").equals(id).count();

@@ -30529,6 +30529,7 @@ var fr = typeof FinalizationRegistry !== "undefined" && new FinalizationRegistry
 // src/constants.ts
 var SETTINGS_ID = "default";
 var DEFAULT_PROJECT_ID = "project-general";
+var LUNCH_PROJECT_ID = "project-lunch";
 var DEFAULT_LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
 var LLM_DEFAULT_MODEL = "gpt-4o-mini";
 var DEFAULT_NOTIFY_BEFORE_MINUTES = 30;
@@ -30574,12 +30575,32 @@ var RECURRENCE_LABELS = {
 };
 var DEFAULT_TASK_TYPES = [
   {
-    id: "type-write",
-    name: "작성",
+    id: "type-meeting",
+    name: "회의",
     color: "#2563eb",
     isDefault: true,
     isActive: true,
     order: 1,
+    createdAt: "",
+    updatedAt: ""
+  },
+  {
+    id: "type-meal",
+    name: "식사",
+    color: "#0e7490",
+    isDefault: true,
+    isActive: true,
+    order: 2,
+    createdAt: "",
+    updatedAt: ""
+  },
+  {
+    id: "type-write",
+    name: "작성",
+    color: "#3b82f6",
+    isDefault: true,
+    isActive: true,
+    order: 3,
     createdAt: "",
     updatedAt: ""
   },
@@ -30589,7 +30610,7 @@ var DEFAULT_TASK_TYPES = [
     color: "#dc2626",
     isDefault: true,
     isActive: true,
-    order: 2,
+    order: 4,
     createdAt: "",
     updatedAt: ""
   },
@@ -30599,7 +30620,7 @@ var DEFAULT_TASK_TYPES = [
     color: "#0f766e",
     isDefault: true,
     isActive: true,
-    order: 3,
+    order: 5,
     createdAt: "",
     updatedAt: ""
   },
@@ -30609,7 +30630,7 @@ var DEFAULT_TASK_TYPES = [
     color: "#f59e0b",
     isDefault: true,
     isActive: true,
-    order: 4,
+    order: 6,
     createdAt: "",
     updatedAt: ""
   },
@@ -30619,7 +30640,7 @@ var DEFAULT_TASK_TYPES = [
     color: "#7c3aed",
     isDefault: true,
     isActive: true,
-    order: 5,
+    order: 7,
     createdAt: "",
     updatedAt: ""
   },
@@ -30629,7 +30650,7 @@ var DEFAULT_TASK_TYPES = [
     color: "#0ea5e9",
     isDefault: true,
     isActive: true,
-    order: 6,
+    order: 8,
     createdAt: "",
     updatedAt: ""
   },
@@ -30639,7 +30660,7 @@ var DEFAULT_TASK_TYPES = [
     color: "#6b7280",
     isDefault: true,
     isActive: true,
-    order: 7,
+    order: 9,
     createdAt: "",
     updatedAt: ""
   }
@@ -30653,6 +30674,19 @@ var DEFAULT_PROJECT = {
   createdAt: "",
   updatedAt: ""
 };
+var DEFAULT_PROJECTS = [
+  DEFAULT_PROJECT,
+  {
+    id: LUNCH_PROJECT_ID,
+    name: "점심 약속",
+    color: "#0e7490",
+    description: "점심 식사와 식사 약속을 관리하는 기본 프로젝트",
+    isActive: true,
+    createdAt: "",
+    updatedAt: ""
+  }
+];
+var DEFAULT_PROJECT_IDS = DEFAULT_PROJECTS.map((project) => project.id);
 var DEFAULT_SETTING = {
   id: SETTINGS_ID,
   showPastCompleted: false,
@@ -30774,22 +30808,34 @@ var ScheduleDB = class extends import_wrapper_default {
 var db = new ScheduleDB();
 async function bootstrapDatabase() {
   const now = toIsoNow();
-  const taskTypeCount = await db.taskTypes.count();
-  if (taskTypeCount === 0) {
-    const seeded = DEFAULT_TASK_TYPES.map((type) => ({
+  const existingTaskTypes = await db.taskTypes.toArray();
+  const existingTaskTypeNames = new Set(existingTaskTypes.map((type) => type.name.trim().toLowerCase()));
+  const existingTaskTypeIds = new Set(existingTaskTypes.map((type) => type.id));
+  const missingTaskTypes = DEFAULT_TASK_TYPES.filter(
+    (type) => !existingTaskTypeIds.has(type.id) && !existingTaskTypeNames.has(type.name.trim().toLowerCase())
+  );
+  if (missingTaskTypes.length > 0) {
+    const highestOrder = existingTaskTypes.reduce((max, type) => Math.max(max, type.order), 0);
+    const seeded = missingTaskTypes.map((type, index) => ({
       ...type,
+      order: existingTaskTypes.length === 0 ? type.order : highestOrder + index + 1,
       createdAt: now,
       updatedAt: now
     }));
     await db.taskTypes.bulkAdd(seeded);
   }
-  const projectCount = await db.projects.count();
-  if (projectCount === 0) {
-    await db.projects.add({
-      ...DEFAULT_PROJECT,
+  const existingProjects = await db.projects.toArray();
+  const existingProjectNames = new Set(existingProjects.map((project) => project.name.trim().toLowerCase()));
+  const existingProjectIds = new Set(existingProjects.map((project) => project.id));
+  const missingProjects = DEFAULT_PROJECTS.filter(
+    (project) => !existingProjectIds.has(project.id) && !existingProjectNames.has(project.name.trim().toLowerCase())
+  );
+  if (missingProjects.length > 0) {
+    await db.projects.bulkAdd(missingProjects.map((project) => ({
+      ...project,
       createdAt: now,
       updatedAt: now
-    });
+    })));
   }
   const setting = await db.settings.get(SETTINGS_ID);
   if (!setting) {
@@ -31140,7 +31186,7 @@ function AppDataProvider({ children }) {
     });
   }, []);
   const deleteProject = (0, import_react2.useCallback)(async (id) => {
-    if (id === DEFAULT_PROJECT_ID) {
+    if (DEFAULT_PROJECT_IDS.includes(id)) {
       throw new Error("기본 프로젝트는 삭제할 수 없습니다.");
     }
     const taskCount = await db.tasks.where("projectId").equals(id).count();
@@ -33670,6 +33716,7 @@ var EMPTY_SUMMARY = {
   onHold: 0,
   conflicts: 0,
   major: 0,
+  lunch: 0,
   titles: []
 };
 var WEEK_LABELS = {
@@ -33864,6 +33911,7 @@ function MonthCalendar({
         summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
         summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
         summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
+        summary.lunch > 0 ? `점심 ${summary.lunch}건` : "",
         summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
         "Enter로 선택, 더블클릭으로 일정 추가"
       ].filter(Boolean).join(", ");
@@ -33953,6 +34001,10 @@ function MonthCalendar({
               ] }) : null
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-indicators", children: [
+              summary.lunch > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator lunch", children: [
+                "점심",
+                summary.lunch > 1 ? ` ${summary.lunch}` : ""
+              ] }) : null,
               summary.pending > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator pending", children: [
                 "미완료 ",
                 summary.pending
@@ -34450,6 +34502,7 @@ var EMPTY_DAY_SUMMARY = {
   onHold: 0,
   conflicts: 0,
   major: 0,
+  lunch: 0,
   titles: []
 };
 function toTaskInput2(task) {
@@ -34527,6 +34580,13 @@ function isSubmissionTaskType(task, typeMap) {
     return false;
   }
   return taskType.name.trim().toLowerCase() === "제출";
+}
+var LUNCH_TASK_KEYWORDS = ["점심", "중식", "lunch"];
+function isLunchTask(task, typeMap, projectMap) {
+  const taskTypeName = typeMap[task.taskTypeId]?.name ?? "";
+  const projectName = projectMap[task.projectId]?.name ?? "";
+  const source = `${task.title} ${task.content} ${taskTypeName} ${projectName}`.toLowerCase();
+  return LUNCH_TASK_KEYWORDS.some((keyword) => source.includes(keyword));
 }
 function getPriorityTasks(tasks, mode) {
   if (mode === "all") {
@@ -34718,11 +34778,12 @@ function DashboardPage() {
       current.onHold += task.status === "ON_HOLD" ? 1 : 0;
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       current.major += task.isMajor ? 1 : 0;
+      current.lunch += isLunchTask(task, typeMap, projectMap) ? 1 : 0;
       current.titles.push(task.title);
       summaryMap[key] = current;
       return summaryMap;
     }, {});
-  }, [calendarConflictMap, calendarTasks]);
+  }, [calendarConflictMap, calendarTasks, projectMap, typeMap]);
   const selectedDaySummary = daySummaryByDate[selectedDate] ?? EMPTY_DAY_SUMMARY;
   const weekViewSourceTasks = (0, import_react10.useMemo)(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = (0, import_react10.useMemo)(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
@@ -35748,7 +35809,7 @@ function ProjectEditorPanel({ initialProject, createMode, onSaveProject, onDelet
             onClick: () => {
               void handleDelete();
             },
-            disabled: form.id === DEFAULT_PROJECT_ID,
+            disabled: DEFAULT_PROJECT_IDS.includes(form.id),
             children: "삭제"
           }
         ) : null

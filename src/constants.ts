@@ -2,6 +2,7 @@
 
 export const SETTINGS_ID = "default";
 export const DEFAULT_PROJECT_ID = "project-general";
+export const LUNCH_PROJECT_ID = "project-lunch";
 
 export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
 export const LLM_DEFAULT_MODEL = "gpt-4o-mini";
@@ -56,12 +57,32 @@ export const RECURRENCE_LABELS: Record<RecurrencePattern, string> = {
 
 export const DEFAULT_TASK_TYPES: TaskType[] = [
   {
-    id: "type-write",
-    name: "작성",
+    id: "type-meeting",
+    name: "회의",
     color: "#2563eb",
     isDefault: true,
     isActive: true,
     order: 1,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "type-meal",
+    name: "식사",
+    color: "#0e7490",
+    isDefault: true,
+    isActive: true,
+    order: 2,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "type-write",
+    name: "작성",
+    color: "#3b82f6",
+    isDefault: true,
+    isActive: true,
+    order: 3,
     createdAt: "",
     updatedAt: "",
   },
@@ -71,7 +92,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
     color: "#dc2626",
     isDefault: true,
     isActive: true,
-    order: 2,
+    order: 4,
     createdAt: "",
     updatedAt: "",
   },
@@ -81,7 +102,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
     color: "#0f766e",
     isDefault: true,
     isActive: true,
-    order: 3,
+    order: 5,
     createdAt: "",
     updatedAt: "",
   },
@@ -91,7 +112,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
     color: "#f59e0b",
     isDefault: true,
     isActive: true,
-    order: 4,
+    order: 6,
     createdAt: "",
     updatedAt: "",
   },
@@ -101,7 +122,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
     color: "#7c3aed",
     isDefault: true,
     isActive: true,
-    order: 5,
+    order: 7,
     createdAt: "",
     updatedAt: "",
   },
@@ -111,7 +132,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
     color: "#0ea5e9",
     isDefault: true,
     isActive: true,
-    order: 6,
+    order: 8,
     createdAt: "",
     updatedAt: "",
   },
@@ -121,7 +142,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
     color: "#6b7280",
     isDefault: true,
     isActive: true,
-    order: 7,
+    order: 9,
     createdAt: "",
     updatedAt: "",
   },
@@ -136,6 +157,21 @@ export const DEFAULT_PROJECT: Project = {
   createdAt: "",
   updatedAt: "",
 };
+
+export const DEFAULT_PROJECTS: Project[] = [
+  DEFAULT_PROJECT,
+  {
+    id: LUNCH_PROJECT_ID,
+    name: "점심 약속",
+    color: "#0e7490",
+    description: "점심 식사와 식사 약속을 관리하는 기본 프로젝트",
+    isActive: true,
+    createdAt: "",
+    updatedAt: "",
+  },
+];
+
+export const DEFAULT_PROJECT_IDS = DEFAULT_PROJECTS.map((project) => project.id);
 
 export const DEFAULT_SETTING: AppSetting = {
   id: SETTINGS_ID,

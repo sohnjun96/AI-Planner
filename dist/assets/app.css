@@ -759,6 +759,11 @@ textarea:focus-visible,
   background: #fff7ed;
   color: #b45309;
 }
+.calendar-indicator.lunch {
+  border-color: rgba(14, 116, 144, 0.24);
+  background: #ecfeff;
+  color: #0e7490;
+}
 .calendar-indicator.major,
 .calendar-indicator.conflict {
   color: var(--danger);
