@@ -59,7 +59,46 @@ export interface AppSetting {
   notifyBeforeMinutes?: number;
   autoBackupEnabled?: boolean;
   autoBackupIntervalMinutes?: number;
+  aiContextMaxLength?: number;
   updatedAt: string;
+}
+
+export type UserContextRuleCategory = "time" | "classification" | "preference";
+export type UserContextRuleSource = "default" | "user" | "ai";
+
+export interface UserContextRule {
+  id: string;
+  category: UserContextRuleCategory;
+  label: string;
+  trigger: string[];
+  projectId?: string;
+  taskTypeId?: string;
+  defaultTime?: string;
+  isMajor?: boolean;
+  note?: string;
+  source: UserContextRuleSource;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserContext {
+  id: string;
+  markdown: string;
+  rules: UserContextRule[];
+  updatedAt: string;
+}
+
+export interface UserContextSuggestion {
+  category: UserContextRuleCategory;
+  label?: string;
+  trigger: string[];
+  projectId?: string;
+  taskTypeId?: string;
+  defaultTime?: string;
+  isMajor?: boolean;
+  note?: string;
+  reason?: string;
 }
 
 export interface TaskFormInput {

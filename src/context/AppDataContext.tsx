@@ -2,11 +2,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
+  DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   DEFAULT_NOTIFY_BEFORE_MINUTES,
   DEFAULT_PROJECT_IDS,
   DEFAULT_SETTING,
+  DEFAULT_USER_CONTEXT,
+  MAX_AI_CONTEXT_MAX_LENGTH,
+  MIN_AI_CONTEXT_MAX_LENGTH,
   SETTINGS_ID,
+  USER_CONTEXT_ID,
 } from "../constants";
 import { bootstrapDatabase, db } from "../db";
 import type {
@@ -17,6 +22,8 @@ import type {
   Task,
   TaskFormInput,
   TaskType,
+  UserContext,
+  UserContextSuggestion,
 } from "../models";
 import { toIsoNow } from "../utils/date";
 
@@ -48,6 +55,7 @@ interface AppDataContextValue {
   taskTypes: TaskType[];
   memos: Memo[];
   setting: AppSetting;
+  userContext: UserContext;
   isReady: boolean;
   canUndo: boolean;
   undoDescription?: string;
@@ -75,9 +83,13 @@ interface AppDataContextValue {
         | "notifyBeforeMinutes"
         | "autoBackupEnabled"
         | "autoBackupIntervalMinutes"
+        | "aiContextMaxLength"
       >
     >,
   ) => Promise<void>;
+  updateUserContextMarkdown: (markdown: string) => Promise<void>;
+  resetUserContext: () => Promise<void>;
+  acceptUserContextSuggestion: (suggestion: UserContextSuggestion) => Promise<void>;
   exportData: () => Promise<string>;
   importData: (raw: string) => Promise<void>;
   createAutoBackup: (reason?: string) => Promise<void>;
@@ -196,6 +208,7 @@ function validateImportPayload(payload: unknown): payload is {
   taskTypes: TaskType[];
   memos: Memo[];
   settings: AppSetting[];
+  userContexts?: UserContext[];
 } {
   if (!payload || typeof payload !== "object") {
     return false;
@@ -206,8 +219,16 @@ function validateImportPayload(payload: unknown): payload is {
     Array.isArray(candidate.projects) &&
     Array.isArray(candidate.taskTypes) &&
     Array.isArray(candidate.memos) &&
-    Array.isArray(candidate.settings)
+    Array.isArray(candidate.settings) &&
+    (candidate.userContexts === undefined || Array.isArray(candidate.userContexts))
   );
+}
+
+function clampAiContextMaxLength(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  }
+  return Math.max(MIN_AI_CONTEXT_MAX_LENGTH, Math.min(MAX_AI_CONTEXT_MAX_LENGTH, Math.floor(value ?? DEFAULT_AI_CONTEXT_MAX_LENGTH)));
 }
 
 function normalizeSetting(setting: AppSetting): AppSetting {
@@ -220,7 +241,44 @@ function normalizeSetting(setting: AppSetting): AppSetting {
     llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
     llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
     llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
+    aiContextMaxLength: clampAiContextMaxLength(setting.aiContextMaxLength),
   };
+}
+
+function normalizeUserContext(context: UserContext | undefined): UserContext {
+  if (!context) {
+    return DEFAULT_USER_CONTEXT;
+  }
+  return {
+    id: context.id || USER_CONTEXT_ID,
+    markdown: typeof context.markdown === "string" ? context.markdown : DEFAULT_USER_CONTEXT.markdown,
+    rules: Array.isArray(context.rules) ? context.rules : DEFAULT_USER_CONTEXT.rules,
+    updatedAt: context.updatedAt || DEFAULT_USER_CONTEXT.updatedAt,
+  };
+}
+
+function compactText(value: string, maxLength = 80): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxLength - 1)}…`;
+}
+
+function buildUserContextSuggestionLine(
+  suggestion: UserContextSuggestion,
+  projectName: string | undefined,
+  taskTypeName: string | undefined,
+): string {
+  const parts = [
+    suggestion.trigger.length > 0 ? `"${suggestion.trigger.join(", ")}"` : suggestion.label ?? "새 규칙",
+    suggestion.defaultTime ? `기본 시간 ${suggestion.defaultTime}` : "",
+    projectName ? `프로젝트 ${projectName}` : "",
+    taskTypeName ? `종류 ${taskTypeName}` : "",
+    suggestion.isMajor ? "중요 표시" : "",
+    suggestion.note ? compactText(suggestion.note, 90) : "",
+  ].filter(Boolean);
+  return `- ${parts.join(" / ")}`;
 }
 
 function getChromeStorageLocal(): {
@@ -350,8 +408,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const taskTypes = useLiveQuery(() => db.taskTypes.orderBy("order").toArray(), [], []);
   const memos = useLiveQuery(() => db.memos.toArray(), [], []);
   const rawSetting = useLiveQuery(() => db.settings.get(SETTINGS_ID), [], undefined);
+  const rawUserContext = useLiveQuery(() => db.userContexts.get(USER_CONTEXT_ID), [], undefined);
 
   const setting = useMemo(() => normalizeSetting(rawSetting ?? DEFAULT_SETTING), [rawSetting]);
+  const userContext = useMemo(() => normalizeUserContext(rawUserContext), [rawUserContext]);
 
   const pushUndo = useCallback((entry: UndoEntry) => {
     setUndoStack((prev) => {
@@ -625,6 +685,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           | "notifyBeforeMinutes"
           | "autoBackupEnabled"
           | "autoBackupIntervalMinutes"
+          | "aiContextMaxLength"
         >
       >,
     ) => {
@@ -640,6 +701,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           patch.autoBackupIntervalMinutes !== undefined
             ? Math.max(15, Math.min(24 * 60, Math.floor(patch.autoBackupIntervalMinutes)))
             : current.autoBackupIntervalMinutes,
+        aiContextMaxLength:
+          patch.aiContextMaxLength !== undefined
+            ? clampAiContextMaxLength(patch.aiContextMaxLength)
+            : current.aiContextMaxLength,
         id: SETTINGS_ID,
         updatedAt: toIsoNow(),
       });
@@ -647,15 +712,92 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const updateUserContextMarkdown = useCallback(async (markdown: string) => {
+    const now = toIsoNow();
+    const current = normalizeUserContext((await db.userContexts.get(USER_CONTEXT_ID)) ?? DEFAULT_USER_CONTEXT);
+    await db.userContexts.put({
+      ...current,
+      id: USER_CONTEXT_ID,
+      markdown,
+      updatedAt: now,
+    });
+  }, []);
+
+  const resetUserContext = useCallback(async () => {
+    const now = toIsoNow();
+    await db.userContexts.put({
+      ...DEFAULT_USER_CONTEXT,
+      rules: DEFAULT_USER_CONTEXT.rules.map((rule) => ({
+        ...rule,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      updatedAt: now,
+    });
+  }, []);
+
+  const acceptUserContextSuggestion = useCallback(async (suggestion: UserContextSuggestion) => {
+    const now = toIsoNow();
+    const current = normalizeUserContext((await db.userContexts.get(USER_CONTEXT_ID)) ?? DEFAULT_USER_CONTEXT);
+    const projectName = suggestion.projectId ? (await db.projects.get(suggestion.projectId))?.name : undefined;
+    const taskTypeName = suggestion.taskTypeId ? (await db.taskTypes.get(suggestion.taskTypeId))?.name : undefined;
+    const line = buildUserContextSuggestionLine(suggestion, projectName, taskTypeName);
+    const alreadyExists = current.markdown.includes(line);
+    const nextMarkdown = alreadyExists
+      ? current.markdown
+      : `${current.markdown.trim()}\n\n## AI가 학습한 규칙\n${line}\n`;
+    const normalizedTrigger = suggestion.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|");
+    const hasDuplicateRule = current.rules.some((rule) => (
+      rule.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|") === normalizedTrigger &&
+      (rule.defaultTime ?? "") === (suggestion.defaultTime ?? "") &&
+      (rule.projectId ?? "") === (suggestion.projectId ?? "") &&
+      (rule.taskTypeId ?? "") === (suggestion.taskTypeId ?? "") &&
+      Boolean(rule.isMajor) === Boolean(suggestion.isMajor)
+    ));
+    const nextRule = {
+      id: getId("context-rule"),
+      category: suggestion.category,
+      label: suggestion.label?.trim() || suggestion.trigger.join(", ") || "AI 제안 규칙",
+      trigger: suggestion.trigger.map((item) => item.trim()).filter(Boolean).slice(0, 8),
+      projectId: suggestion.projectId,
+      taskTypeId: suggestion.taskTypeId,
+      defaultTime: suggestion.defaultTime,
+      isMajor: suggestion.isMajor,
+      note: suggestion.note?.trim() || suggestion.reason?.trim(),
+      source: "ai" as const,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const defaultRules = current.rules.filter((rule) => rule.source === "default");
+    const customRules = current.rules.filter((rule) => rule.source !== "default");
+    const nextRules = hasDuplicateRule
+      ? current.rules
+      : [
+          ...defaultRules,
+          ...customRules.slice(Math.max(0, customRules.length - Math.max(0, 30 - defaultRules.length - 1))),
+          nextRule,
+        ];
+
+    await db.userContexts.put({
+      ...current,
+      id: USER_CONTEXT_ID,
+      markdown: nextMarkdown,
+      rules: nextRules,
+      updatedAt: now,
+    });
+  }, []);
+
   const exportData = useCallback(async () => {
     const data = {
       exportedAt: toIsoNow(),
-      version: 1,
+      version: 2,
       tasks: await db.tasks.toArray(),
       projects: await db.projects.toArray(),
       taskTypes: await db.taskTypes.toArray(),
       memos: await db.memos.toArray(),
       settings: await db.settings.toArray(),
+      userContexts: await db.userContexts.toArray(),
     };
     return JSON.stringify(data, null, 2);
   }, []);
@@ -672,12 +814,13 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       throw new Error("가져오기 데이터 형식이 맞지 않습니다.");
     }
 
-    await db.transaction("rw", [db.tasks, db.projects, db.taskTypes, db.memos, db.settings], async () => {
+    await db.transaction("rw", [db.tasks, db.projects, db.taskTypes, db.memos, db.settings, db.userContexts], async () => {
       await db.tasks.clear();
       await db.projects.clear();
       await db.taskTypes.clear();
       await db.memos.clear();
       await db.settings.clear();
+      await db.userContexts.clear();
 
       if (parsed.tasks.length > 0) {
         await db.tasks.bulkAdd(parsed.tasks);
@@ -693,6 +836,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       }
       if (parsed.settings.length > 0) {
         await db.settings.bulkAdd(parsed.settings.map(normalizeSetting));
+      }
+      if (parsed.userContexts && parsed.userContexts.length > 0) {
+        await db.userContexts.bulkAdd(parsed.userContexts.map(normalizeUserContext));
       }
     });
 
@@ -792,6 +938,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       taskTypes,
       memos,
       setting,
+      userContext,
       isReady,
       canUndo: undoStack.length > 0,
       undoDescription: undoStack[undoStack.length - 1]?.description,
@@ -806,6 +953,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       deleteTaskType,
       saveMemo,
       updateSetting,
+      updateUserContextMarkdown,
+      resetUserContext,
+      acceptUserContextSuggestion,
       exportData,
       importData,
       createAutoBackup,
@@ -819,6 +969,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       taskTypes,
       memos,
       setting,
+      userContext,
       isReady,
       undoStack,
       autoBackups,
@@ -832,6 +983,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       deleteTaskType,
       saveMemo,
       updateSetting,
+      updateUserContextMarkdown,
+      resetUserContext,
+      acceptUserContextSuggestion,
       exportData,
       importData,
       createAutoBackup,

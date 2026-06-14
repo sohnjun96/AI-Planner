@@ -1715,6 +1715,50 @@ textarea:focus-visible,
   justify-content: flex-end;
 }
 
+.context-suggestion-block {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(14, 116, 144, 0.16);
+  border-radius: 18px;
+  padding: 16px;
+  background: linear-gradient(180deg, #ecfeff, #ffffff);
+}
+
+.context-suggestion-block > div {
+  display: grid;
+  gap: 6px;
+}
+
+.context-suggestion-block strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.context-suggestion-list {
+  display: grid;
+  gap: 10px;
+}
+
+.context-suggestion-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(14, 116, 144, 0.12);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.context-suggestion-list p,
+.context-suggestion-list small {
+  margin: 4px 0 0;
+  color: var(--body-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .proposal-selection-actions,
 .proposal-review-footer {
   flex-wrap: wrap;
@@ -4216,6 +4260,27 @@ textarea:focus-visible,
 
 .settings-backup-card {
   grid-column: 1 / -1;
+}
+
+.settings-context-card {
+  grid-column: 1 / -1;
+}
+
+.settings-context-card .user-context-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-context-card textarea {
+  min-height: 260px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.58;
+  resize: vertical;
+}
+
+.settings-context-card .settings-inline-note {
+  background: #f8fafc;
 }
 
 .settings-backup-card .settings-actions-grid {

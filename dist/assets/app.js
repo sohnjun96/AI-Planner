@@ -30528,12 +30528,16 @@ var fr = typeof FinalizationRegistry !== "undefined" && new FinalizationRegistry
 
 // src/constants.ts
 var SETTINGS_ID = "default";
+var USER_CONTEXT_ID = "user-context";
 var DEFAULT_PROJECT_ID = "project-general";
 var LUNCH_PROJECT_ID = "project-lunch";
 var DEFAULT_LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
 var LLM_DEFAULT_MODEL = "gpt-4o-mini";
 var DEFAULT_NOTIFY_BEFORE_MINUTES = 30;
 var DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES = 360;
+var DEFAULT_AI_CONTEXT_MAX_LENGTH = 2e3;
+var MIN_AI_CONTEXT_MAX_LENGTH = 500;
+var MAX_AI_CONTEXT_MAX_LENGTH = 8e3;
 var COLOR_PRESETS = [
   "#ef4444",
   "#f97316",
@@ -30687,6 +30691,68 @@ var DEFAULT_PROJECTS = [
   }
 ];
 var DEFAULT_PROJECT_IDS = DEFAULT_PROJECTS.map((project) => project.id);
+var DEFAULT_USER_CONTEXT_MARKDOWN = `# User Context
+
+## 기본 시간 규칙
+- 점심 일정은 시간이 없으면 11:30으로 설정한다.
+- 제출 일정은 시간이 없으면 18:00으로 설정한다.
+
+## 기본 분류 규칙
+- 점심, 식사, 밥, lunch가 포함되면 프로젝트는 점심 약속, 종류는 식사로 설정한다.
+- 제출, 마감, 과제가 포함되면 종류는 제출로 설정한다.
+- 회의, 미팅이 포함되면 종류는 회의로 설정한다.
+
+## 선호 규칙
+- 제출 또는 마감 일정은 중요 일정으로 표시한다.
+`;
+var DEFAULT_USER_CONTEXT = {
+  id: USER_CONTEXT_ID,
+  markdown: DEFAULT_USER_CONTEXT_MARKDOWN,
+  rules: [
+    {
+      id: "context-lunch-default",
+      category: "classification",
+      label: "점심 기본 분류",
+      trigger: ["점심", "식사", "밥", "lunch"],
+      projectId: LUNCH_PROJECT_ID,
+      taskTypeId: "type-meal",
+      defaultTime: "11:30",
+      isMajor: false,
+      note: "점심 일정은 기본 프로젝트와 식사 종류로 정리합니다.",
+      source: "default",
+      isActive: true,
+      createdAt: "",
+      updatedAt: ""
+    },
+    {
+      id: "context-submit-default",
+      category: "time",
+      label: "제출 기본 시간",
+      trigger: ["제출", "마감", "과제"],
+      taskTypeId: "type-submit",
+      defaultTime: "18:00",
+      isMajor: true,
+      note: "시간 없는 제출 일정은 18:00까지로 잡고 중요 일정으로 표시합니다.",
+      source: "default",
+      isActive: true,
+      createdAt: "",
+      updatedAt: ""
+    },
+    {
+      id: "context-meeting-default",
+      category: "classification",
+      label: "회의 기본 종류",
+      trigger: ["회의", "미팅"],
+      taskTypeId: "type-meeting",
+      note: "회의성 일정은 기본적으로 회의 종류로 분류합니다.",
+      source: "default",
+      isActive: true,
+      createdAt: "",
+      updatedAt: ""
+    }
+  ],
+  updatedAt: ""
+};
 var DEFAULT_SETTING = {
   id: SETTINGS_ID,
   showPastCompleted: false,
@@ -30699,6 +30765,7 @@ var DEFAULT_SETTING = {
   notifyBeforeMinutes: DEFAULT_NOTIFY_BEFORE_MINUTES,
   autoBackupEnabled: true,
   autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
+  aiContextMaxLength: DEFAULT_AI_CONTEXT_MAX_LENGTH,
   updatedAt: ""
 };
 
@@ -30794,6 +30861,7 @@ var ScheduleDB = class extends import_wrapper_default {
   taskTypes;
   memos;
   settings;
+  userContexts;
   constructor() {
     super("schedule-manager-db");
     this.version(1).stores({
@@ -30802,6 +30870,14 @@ var ScheduleDB = class extends import_wrapper_default {
       taskTypes: "id, name, isDefault, isActive, order, updatedAt",
       memos: "id, date, updatedAt",
       settings: "id, updatedAt"
+    });
+    this.version(2).stores({
+      tasks: "id, startAt, status, projectId, taskTypeId, isMajor, updatedAt",
+      projects: "id, name, isActive, updatedAt",
+      taskTypes: "id, name, isDefault, isActive, order, updatedAt",
+      memos: "id, date, updatedAt",
+      settings: "id, updatedAt",
+      userContexts: "id, updatedAt"
     });
   }
 };
@@ -30822,7 +30898,7 @@ async function bootstrapDatabase() {
       createdAt: now,
       updatedAt: now
     }));
-    await db.taskTypes.bulkAdd(seeded);
+    await db.taskTypes.bulkPut(seeded);
   }
   const existingProjects = await db.projects.toArray();
   const existingProjectNames = new Set(existingProjects.map((project) => project.name.trim().toLowerCase()));
@@ -30831,7 +30907,7 @@ async function bootstrapDatabase() {
     (project) => !existingProjectIds.has(project.id) && !existingProjectNames.has(project.name.trim().toLowerCase())
   );
   if (missingProjects.length > 0) {
-    await db.projects.bulkAdd(missingProjects.map((project) => ({
+    await db.projects.bulkPut(missingProjects.map((project) => ({
       ...project,
       createdAt: now,
       updatedAt: now
@@ -30839,13 +30915,12 @@ async function bootstrapDatabase() {
   }
   const setting = await db.settings.get(SETTINGS_ID);
   if (!setting) {
-    await db.settings.add({
+    await db.settings.put({
       ...DEFAULT_SETTING,
       updatedAt: now
     });
-    return;
   }
-  if (setting.llmEndpoint === void 0 || setting.llmApiKey === void 0 || setting.llmModel === void 0 || setting.notificationsEnabled === void 0 || setting.notifyBeforeMinutes === void 0 || setting.autoBackupEnabled === void 0 || setting.autoBackupIntervalMinutes === void 0) {
+  if (setting && (setting.llmEndpoint === void 0 || setting.llmApiKey === void 0 || setting.llmModel === void 0 || setting.notificationsEnabled === void 0 || setting.notifyBeforeMinutes === void 0 || setting.autoBackupEnabled === void 0 || setting.autoBackupIntervalMinutes === void 0 || setting.aiContextMaxLength === void 0)) {
     await db.settings.put({
       ...setting,
       llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
@@ -30855,6 +30930,19 @@ async function bootstrapDatabase() {
       notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_SETTING.notifyBeforeMinutes,
       autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
       autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_SETTING.autoBackupIntervalMinutes,
+      aiContextMaxLength: setting.aiContextMaxLength ?? DEFAULT_SETTING.aiContextMaxLength,
+      updatedAt: now
+    });
+  }
+  const userContext = await db.userContexts.get(USER_CONTEXT_ID);
+  if (!userContext) {
+    await db.userContexts.put({
+      ...DEFAULT_USER_CONTEXT,
+      rules: DEFAULT_USER_CONTEXT.rules.map((rule) => ({
+        ...rule,
+        createdAt: now,
+        updatedAt: now
+      })),
       updatedAt: now
     });
   }
@@ -30938,7 +31026,13 @@ function validateImportPayload(payload) {
     return false;
   }
   const candidate = payload;
-  return Array.isArray(candidate.tasks) && Array.isArray(candidate.projects) && Array.isArray(candidate.taskTypes) && Array.isArray(candidate.memos) && Array.isArray(candidate.settings);
+  return Array.isArray(candidate.tasks) && Array.isArray(candidate.projects) && Array.isArray(candidate.taskTypes) && Array.isArray(candidate.memos) && Array.isArray(candidate.settings) && (candidate.userContexts === void 0 || Array.isArray(candidate.userContexts));
+}
+function clampAiContextMaxLength(value) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  }
+  return Math.max(MIN_AI_CONTEXT_MAX_LENGTH, Math.min(MAX_AI_CONTEXT_MAX_LENGTH, Math.floor(value ?? DEFAULT_AI_CONTEXT_MAX_LENGTH)));
 }
 function normalizeSetting(setting) {
   return {
@@ -30949,8 +31043,38 @@ function normalizeSetting(setting) {
     autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
     llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
     llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
-    llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel
+    llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
+    aiContextMaxLength: clampAiContextMaxLength(setting.aiContextMaxLength)
   };
+}
+function normalizeUserContext(context) {
+  if (!context) {
+    return DEFAULT_USER_CONTEXT;
+  }
+  return {
+    id: context.id || USER_CONTEXT_ID,
+    markdown: typeof context.markdown === "string" ? context.markdown : DEFAULT_USER_CONTEXT.markdown,
+    rules: Array.isArray(context.rules) ? context.rules : DEFAULT_USER_CONTEXT.rules,
+    updatedAt: context.updatedAt || DEFAULT_USER_CONTEXT.updatedAt
+  };
+}
+function compactText(value, maxLength = 80) {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxLength - 1)}…`;
+}
+function buildUserContextSuggestionLine(suggestion, projectName, taskTypeName) {
+  const parts = [
+    suggestion.trigger.length > 0 ? `"${suggestion.trigger.join(", ")}"` : suggestion.label ?? "새 규칙",
+    suggestion.defaultTime ? `기본 시간 ${suggestion.defaultTime}` : "",
+    projectName ? `프로젝트 ${projectName}` : "",
+    taskTypeName ? `종류 ${taskTypeName}` : "",
+    suggestion.isMajor ? "중요 표시" : "",
+    suggestion.note ? compactText(suggestion.note, 90) : ""
+  ].filter(Boolean);
+  return `- ${parts.join(" / ")}`;
 }
 function getChromeStorageLocal() {
   const maybeChrome = globalThis.chrome;
@@ -31034,7 +31158,9 @@ function AppDataProvider({ children }) {
   const taskTypes = useLiveQuery(() => db.taskTypes.orderBy("order").toArray(), [], []);
   const memos = useLiveQuery(() => db.memos.toArray(), [], []);
   const rawSetting = useLiveQuery(() => db.settings.get(SETTINGS_ID), [], void 0);
+  const rawUserContext = useLiveQuery(() => db.userContexts.get(USER_CONTEXT_ID), [], void 0);
   const setting = (0, import_react2.useMemo)(() => normalizeSetting(rawSetting ?? DEFAULT_SETTING), [rawSetting]);
+  const userContext = (0, import_react2.useMemo)(() => normalizeUserContext(rawUserContext), [rawUserContext]);
   const pushUndo = (0, import_react2.useCallback)((entry) => {
     setUndoStack((prev) => {
       const merged = [...prev];
@@ -31263,21 +31389,89 @@ function AppDataProvider({ children }) {
         ...patch,
         notifyBeforeMinutes: patch.notifyBeforeMinutes !== void 0 ? Math.max(0, Math.min(24 * 60, Math.floor(patch.notifyBeforeMinutes))) : current.notifyBeforeMinutes,
         autoBackupIntervalMinutes: patch.autoBackupIntervalMinutes !== void 0 ? Math.max(15, Math.min(24 * 60, Math.floor(patch.autoBackupIntervalMinutes))) : current.autoBackupIntervalMinutes,
+        aiContextMaxLength: patch.aiContextMaxLength !== void 0 ? clampAiContextMaxLength(patch.aiContextMaxLength) : current.aiContextMaxLength,
         id: SETTINGS_ID,
         updatedAt: toIsoNow()
       });
     },
     []
   );
+  const updateUserContextMarkdown = (0, import_react2.useCallback)(async (markdown) => {
+    const now = toIsoNow();
+    const current = normalizeUserContext(await db.userContexts.get(USER_CONTEXT_ID) ?? DEFAULT_USER_CONTEXT);
+    await db.userContexts.put({
+      ...current,
+      id: USER_CONTEXT_ID,
+      markdown,
+      updatedAt: now
+    });
+  }, []);
+  const resetUserContext = (0, import_react2.useCallback)(async () => {
+    const now = toIsoNow();
+    await db.userContexts.put({
+      ...DEFAULT_USER_CONTEXT,
+      rules: DEFAULT_USER_CONTEXT.rules.map((rule) => ({
+        ...rule,
+        createdAt: now,
+        updatedAt: now
+      })),
+      updatedAt: now
+    });
+  }, []);
+  const acceptUserContextSuggestion = (0, import_react2.useCallback)(async (suggestion) => {
+    const now = toIsoNow();
+    const current = normalizeUserContext(await db.userContexts.get(USER_CONTEXT_ID) ?? DEFAULT_USER_CONTEXT);
+    const projectName = suggestion.projectId ? (await db.projects.get(suggestion.projectId))?.name : void 0;
+    const taskTypeName = suggestion.taskTypeId ? (await db.taskTypes.get(suggestion.taskTypeId))?.name : void 0;
+    const line = buildUserContextSuggestionLine(suggestion, projectName, taskTypeName);
+    const alreadyExists = current.markdown.includes(line);
+    const nextMarkdown = alreadyExists ? current.markdown : `${current.markdown.trim()}
+
+## AI가 학습한 규칙
+${line}
+`;
+    const normalizedTrigger = suggestion.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|");
+    const hasDuplicateRule = current.rules.some((rule) => rule.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|") === normalizedTrigger && (rule.defaultTime ?? "") === (suggestion.defaultTime ?? "") && (rule.projectId ?? "") === (suggestion.projectId ?? "") && (rule.taskTypeId ?? "") === (suggestion.taskTypeId ?? "") && Boolean(rule.isMajor) === Boolean(suggestion.isMajor));
+    const nextRule = {
+      id: getId("context-rule"),
+      category: suggestion.category,
+      label: suggestion.label?.trim() || suggestion.trigger.join(", ") || "AI 제안 규칙",
+      trigger: suggestion.trigger.map((item) => item.trim()).filter(Boolean).slice(0, 8),
+      projectId: suggestion.projectId,
+      taskTypeId: suggestion.taskTypeId,
+      defaultTime: suggestion.defaultTime,
+      isMajor: suggestion.isMajor,
+      note: suggestion.note?.trim() || suggestion.reason?.trim(),
+      source: "ai",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now
+    };
+    const defaultRules = current.rules.filter((rule) => rule.source === "default");
+    const customRules = current.rules.filter((rule) => rule.source !== "default");
+    const nextRules = hasDuplicateRule ? current.rules : [
+      ...defaultRules,
+      ...customRules.slice(Math.max(0, customRules.length - Math.max(0, 30 - defaultRules.length - 1))),
+      nextRule
+    ];
+    await db.userContexts.put({
+      ...current,
+      id: USER_CONTEXT_ID,
+      markdown: nextMarkdown,
+      rules: nextRules,
+      updatedAt: now
+    });
+  }, []);
   const exportData = (0, import_react2.useCallback)(async () => {
     const data2 = {
       exportedAt: toIsoNow(),
-      version: 1,
+      version: 2,
       tasks: await db.tasks.toArray(),
       projects: await db.projects.toArray(),
       taskTypes: await db.taskTypes.toArray(),
       memos: await db.memos.toArray(),
-      settings: await db.settings.toArray()
+      settings: await db.settings.toArray(),
+      userContexts: await db.userContexts.toArray()
     };
     return JSON.stringify(data2, null, 2);
   }, []);
@@ -31291,12 +31485,13 @@ function AppDataProvider({ children }) {
     if (!validateImportPayload(parsed)) {
       throw new Error("가져오기 데이터 형식이 맞지 않습니다.");
     }
-    await db.transaction("rw", [db.tasks, db.projects, db.taskTypes, db.memos, db.settings], async () => {
+    await db.transaction("rw", [db.tasks, db.projects, db.taskTypes, db.memos, db.settings, db.userContexts], async () => {
       await db.tasks.clear();
       await db.projects.clear();
       await db.taskTypes.clear();
       await db.memos.clear();
       await db.settings.clear();
+      await db.userContexts.clear();
       if (parsed.tasks.length > 0) {
         await db.tasks.bulkAdd(parsed.tasks);
       }
@@ -31311,6 +31506,9 @@ function AppDataProvider({ children }) {
       }
       if (parsed.settings.length > 0) {
         await db.settings.bulkAdd(parsed.settings.map(normalizeSetting));
+      }
+      if (parsed.userContexts && parsed.userContexts.length > 0) {
+        await db.userContexts.bulkAdd(parsed.userContexts.map(normalizeUserContext));
       }
     });
     setUndoStack([]);
@@ -31395,6 +31593,7 @@ function AppDataProvider({ children }) {
       taskTypes,
       memos,
       setting,
+      userContext,
       isReady,
       canUndo: undoStack.length > 0,
       undoDescription: undoStack[undoStack.length - 1]?.description,
@@ -31409,6 +31608,9 @@ function AppDataProvider({ children }) {
       deleteTaskType,
       saveMemo,
       updateSetting,
+      updateUserContextMarkdown,
+      resetUserContext,
+      acceptUserContextSuggestion,
       exportData,
       importData,
       createAutoBackup,
@@ -31422,6 +31624,7 @@ function AppDataProvider({ children }) {
       taskTypes,
       memos,
       setting,
+      userContext,
       isReady,
       undoStack,
       autoBackups,
@@ -31435,6 +31638,9 @@ function AppDataProvider({ children }) {
       deleteTaskType,
       saveMemo,
       updateSetting,
+      updateUserContextMarkdown,
+      resetUserContext,
+      acceptUserContextSuggestion,
       exportData,
       importData,
       createAutoBackup,
@@ -31578,6 +31784,7 @@ Required root schema:
   "needsUserInput": false,
   "userQuestion": "",
   "toolCalls": [],
+  "contextSuggestions": [],
   "proposal": {
     "summary": "short Korean summary",
     "operations": []
@@ -31602,6 +31809,8 @@ Hard output rules:
 15. Only return delete_task when one specific existing task is identified.
 16. If multiple tasks still match a delete request, ask one short Korean clarification question instead of guessing.
 17. Prefer active project and task type ids when the user did not specify them.
+18. Use userPayload.userContextMarkdown as reusable personal defaults. Current user input overrides it when more specific.
+19. If the request reveals a reusable scheduling preference, return it in contextSuggestions. Keep suggestions general, concise, and useful for future requests.
 
 Operation schemas:
 create_task requires:
@@ -31632,6 +31841,19 @@ delete_task requires:
   "action": "delete_task",
   "taskId": "existing task id",
   "reason": "optional Korean reason"
+}
+
+contextSuggestions item schema:
+{
+  "category": "time" | "classification" | "preference",
+  "label": "short Korean label",
+  "trigger": ["keyword"],
+  "defaultTime": "HH:mm optional",
+  "projectId": "known project id optional",
+  "taskTypeId": "known task type id optional",
+  "isMajor": true,
+  "note": "short Korean note",
+  "reason": "why this is reusable"
 }
 
 Allowed tools:
@@ -31821,6 +32043,52 @@ function getPreferredItemId(items, fallbackId) {
 }
 function normalizeLookupValue(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+function truncateText(value, maxLength) {
+  const normalizedMax = Number.isFinite(maxLength) ? Math.max(0, Math.floor(maxLength)) : DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  if (value.length <= normalizedMax) {
+    return value;
+  }
+  return value.slice(0, normalizedMax);
+}
+function pickFirstStringArray(record, keys) {
+  for (const key of keys) {
+    const candidate = record[key];
+    if (Array.isArray(candidate)) {
+      return candidate.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean).slice(0, 8);
+    }
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.split(/[,，]/).map((item) => item.trim()).filter(Boolean).slice(0, 8);
+    }
+  }
+  return [];
+}
+function normalizeContextCategory(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "time" || normalized === "시간") {
+    return "time";
+  }
+  if (normalized === "classification" || normalized === "category" || normalized === "분류") {
+    return "classification";
+  }
+  if (normalized === "preference" || normalized === "선호" || normalized === "규칙") {
+    return "preference";
+  }
+  return void 0;
+}
+function normalizeDefaultTime(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  const match = trimmed.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!match) {
+    return void 0;
+  }
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 function pickFirstString(record, keys) {
   for (const key of keys) {
@@ -32114,6 +32382,67 @@ function buildSummaryOnlyProposal(value, fallbackSummary) {
     operations: []
   };
 }
+function parseContextSuggestion(value, options = {}) {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  if (!isRecord(normalizedValue)) {
+    return null;
+  }
+  const trigger = pickFirstStringArray(normalizedValue, ["trigger", "triggers", "keywords", "keyword"]);
+  const defaultTime = normalizeDefaultTime(normalizedValue.defaultTime ?? normalizedValue.default_time ?? normalizedValue.time);
+  const projectId = resolveEntityId(
+    pickFirstString(normalizedValue, PROJECT_KEYS),
+    options.projects ?? [],
+    void 0
+  );
+  const taskTypeId = resolveEntityId(
+    pickFirstString(normalizedValue, TASK_TYPE_KEYS),
+    options.taskTypes ?? [],
+    void 0
+  );
+  const isMajor = typeof normalizedValue.isMajor === "boolean" ? normalizedValue.isMajor : typeof normalizedValue.is_major === "boolean" ? normalizedValue.is_major : typeof normalizedValue.important === "boolean" ? normalizedValue.important : void 0;
+  const note = pickFirstString(normalizedValue, ["note", "description", "memo"]);
+  const reason = pickFirstString(normalizedValue, ["reason", "why"]);
+  const category = normalizeContextCategory(normalizedValue.category) ?? (defaultTime ? "time" : projectId || taskTypeId ? "classification" : "preference");
+  if (trigger.length === 0 || !defaultTime && !projectId && !taskTypeId && isMajor === void 0 && !note) {
+    return null;
+  }
+  return {
+    category,
+    label: pickFirstString(normalizedValue, ["label", "title", "name"]) || void 0,
+    trigger,
+    projectId: projectId || void 0,
+    taskTypeId: taskTypeId || void 0,
+    defaultTime,
+    isMajor,
+    note: note || void 0,
+    reason: reason || void 0
+  };
+}
+function parseContextSuggestions(value, options = {}) {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  const source = Array.isArray(normalizedValue) ? normalizedValue : isRecord(normalizedValue) ? [normalizedValue] : [];
+  const seen = /* @__PURE__ */ new Set();
+  const suggestions = [];
+  for (const item of source) {
+    const suggestion = parseContextSuggestion(item, options);
+    if (!suggestion) {
+      continue;
+    }
+    const key = JSON.stringify({
+      trigger: suggestion.trigger.map((entry) => entry.toLowerCase()).sort(),
+      defaultTime: suggestion.defaultTime ?? "",
+      projectId: suggestion.projectId ?? "",
+      taskTypeId: suggestion.taskTypeId ?? "",
+      isMajor: suggestion.isMajor ?? ""
+    });
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    suggestions.push(suggestion);
+  }
+  return suggestions.slice(0, 5);
+}
 function executeToolCall(call, tasks, projects, taskTypes) {
   if (call.tool === "list_projects") {
     return {
@@ -32233,10 +32562,23 @@ function executeToolCall(call, tasks, projects, taskTypes) {
   };
 }
 function buildPromptMessages(input, toolResults) {
+  const userContextMaxLength = input.userContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  const userContextMarkdown = truncateText(input.userContext?.markdown ?? "", userContextMaxLength);
   const userPayload = {
     now: toIsoNow(),
     conversation: input.conversation.slice(-8),
     userRequest: input.userMessage,
+    userContextMarkdown,
+    userContextRules: (input.userContext?.rules ?? []).filter((rule) => rule.isActive).slice(0, 20).map((rule) => ({
+      category: rule.category,
+      label: rule.label,
+      trigger: rule.trigger,
+      projectId: rule.projectId ?? "",
+      taskTypeId: rule.taskTypeId ?? "",
+      defaultTime: rule.defaultTime ?? "",
+      isMajor: rule.isMajor ?? false,
+      note: rule.note ?? ""
+    })),
     knownChoices: {
       status: ["NOT_DONE", "ON_HOLD", "DONE"],
       projectList: input.projects.map((project) => ({
@@ -32286,13 +32628,19 @@ async function runScheduleAgent(input) {
       fallbackSummary: typeof payload.summary === "string" ? payload.summary : typeof payload.assistantMessage === "string" ? payload.assistantMessage : void 0
     };
     const proposal = parseProposal(payload.proposal, proposalOptions) ?? buildSummaryOnlyProposal(payload.proposal, proposalOptions.fallbackSummary) ?? parseProposal(payload, proposalOptions);
+    const proposalContextSuggestions = isRecord(payload.proposal) ? parseContextSuggestions(payload.proposal.contextSuggestions, proposalOptions) : [];
+    const contextSuggestions = [
+      ...parseContextSuggestions(payload.contextSuggestions, proposalOptions),
+      ...proposalContextSuggestions
+    ].slice(0, 5);
     const assistantMessage = typeof payload.assistantMessage === "string" && payload.assistantMessage.trim() ? payload.assistantMessage : proposal ? "요청 내용을 바탕으로 변경안을 준비했습니다. 내용을 확인해 주세요." : "요청 내용을 해석했습니다.";
     const question = typeof payload.userQuestion === "string" ? payload.userQuestion : void 0;
     return {
       assistantMessage,
       needsUserInput: Boolean(payload.needsUserInput),
       question,
-      proposal
+      proposal,
+      contextSuggestions
     };
   }
   throw new Error("LLM이 도구 호출만 반복하여 최종 제안을 만들지 못했습니다.");
@@ -32434,7 +32782,7 @@ function AiAssistantWorkspace({
   onApplied,
   onRequestClose
 }) {
-  const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
+  const { tasks, projects, taskTypes, setting, userContext, createTask, updateTask, removeTask, acceptUserContextSuggestion } = useAppData();
   const textareaRef = (0, import_react3.useRef)(null);
   const [draft, setDraft] = (0, import_react3.useState)(initialDraft);
   const [lastUserMessage, setLastUserMessage] = (0, import_react3.useState)("");
@@ -32443,6 +32791,7 @@ function AiAssistantWorkspace({
   );
   const [lastQuestion, setLastQuestion] = (0, import_react3.useState)("");
   const [pendingProposal, setPendingProposal] = (0, import_react3.useState)(void 0);
+  const [pendingContextSuggestions, setPendingContextSuggestions] = (0, import_react3.useState)([]);
   const [selectedOperationIndexes, setSelectedOperationIndexes] = (0, import_react3.useState)([]);
   const [isLoading, setIsLoading] = (0, import_react3.useState)(false);
   const [isApplying, setIsApplying] = (0, import_react3.useState)(false);
@@ -32455,7 +32804,7 @@ function AiAssistantWorkspace({
   const taskTypeMap = (0, import_react3.useMemo)(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = (0, import_react3.useMemo)(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
-  const hasVisibleResult = Boolean(pendingProposal || lastQuestion || error || applyResult || isLoading);
+  const hasVisibleResult = Boolean(pendingProposal || pendingContextSuggestions.length > 0 || lastQuestion || error || applyResult || isLoading);
   const canApplyProposalWithEnter = Boolean(
     pendingProposal && hasOperations && selectedOperationIndexes.length > 0 && !isApplying
   );
@@ -32533,6 +32882,7 @@ function AiAssistantWorkspace({
     setApplyResult("");
     setLastQuestion("");
     setPendingProposal(void 0);
+    setPendingContextSuggestions([]);
     if (!messageOverride) {
       setDraft("");
     }
@@ -32544,6 +32894,8 @@ function AiAssistantWorkspace({
         tasks,
         projects,
         taskTypes,
+        userContext,
+        userContextMaxLength: setting.aiContextMaxLength,
         endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel
@@ -32552,6 +32904,7 @@ function AiAssistantWorkspace({
       setLastAssistantMessage(result.assistantMessage);
       setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
+      setPendingContextSuggestions(result.contextSuggestions);
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
@@ -32559,6 +32912,7 @@ function AiAssistantWorkspace({
       setError(message);
       setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
       setLastQuestion("");
+      setPendingContextSuggestions([]);
       setEndpointStatus("error");
       setEndpointStatusMessage(message);
     } finally {
@@ -32723,6 +33077,26 @@ function AiAssistantWorkspace({
     setIsApplying(false);
     onApplied?.();
   }
+  async function handleAcceptContextSuggestion(suggestion, index) {
+    try {
+      await acceptUserContextSuggestion(suggestion);
+      setPendingContextSuggestions((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+      setApplyResult("user.md에 새 규칙을 저장했습니다.");
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
+    }
+  }
+  function describeContextSuggestion(suggestion) {
+    const projectName = suggestion.projectId ? projectMap[suggestion.projectId]?.name ?? suggestion.projectId : "";
+    const taskTypeName = suggestion.taskTypeId ? taskTypeMap[suggestion.taskTypeId]?.name ?? suggestion.taskTypeId : "";
+    return [
+      suggestion.trigger.length > 0 ? `키워드 ${suggestion.trigger.join(", ")}` : "",
+      suggestion.defaultTime ? `기본 시간 ${suggestion.defaultTime}` : "",
+      projectName ? `프로젝트 ${projectName}` : "",
+      taskTypeName ? `종류 ${taskTypeName}` : "",
+      suggestion.isMajor ? "중요 표시" : ""
+    ].filter(Boolean).join(" / ");
+  }
   function renderOperation(operation, index) {
     const isSelected = selectedOperationSet.has(index);
     const actionMeta = getOperationActionMeta(operation);
@@ -32841,6 +33215,31 @@ function AiAssistantWorkspace({
         )
       ] }) : null
     ] }) : isLoading ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: responseText }) : hideInitialResult ? null : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안이나 변경안이 없습니다." }),
+    pendingContextSuggestions.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "context-suggestion-block", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "user.md" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "AI가 학습한 규칙" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: "반복해서 쓸 수 있는 일정 해석 규칙만 저장하세요." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: "context-suggestion-list", children: pendingContextSuggestions.map((suggestion, index) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("li", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: suggestion.label ?? suggestion.trigger.join(", ") }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: describeContextSuggestion(suggestion) }),
+          suggestion.reason || suggestion.note ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: suggestion.reason ?? suggestion.note }) : null
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          "button",
+          {
+            className: "btn btn-soft",
+            type: "button",
+            onClick: () => {
+              void handleAcceptContextSuggestion(suggestion, index);
+            },
+            children: "규칙 저장"
+          }
+        )
+      ] }, `${suggestion.category}-${suggestion.trigger.join("-")}-${index}`)) })
+    ] }) : null,
     applyResult ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "success-text", children: applyResult }) : null,
     error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
   ] }) : null;
@@ -36298,6 +36697,9 @@ function SettingsPage() {
     updateSetting,
     exportData,
     importData,
+    userContext,
+    updateUserContextMarkdown,
+    resetUserContext,
     taskTypes,
     upsertTaskType,
     deleteTaskType,
@@ -36312,12 +36714,22 @@ function SettingsPage() {
   const [backupMessage, setBackupMessage] = (0, import_react12.useState)("");
   const [backupError, setBackupError] = (0, import_react12.useState)("");
   const [isBackupListOpen, setIsBackupListOpen] = (0, import_react12.useState)(false);
+  const [userContextDraft, setUserContextDraft] = (0, import_react12.useState)("");
+  const [userContextMessage, setUserContextMessage] = (0, import_react12.useState)("");
+  const [userContextError, setUserContextError] = (0, import_react12.useState)("");
   const [typeForm, setTypeForm] = (0, import_react12.useState)(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = (0, import_react12.useState)("");
   const [typeError, setTypeError] = (0, import_react12.useState)("");
   const typeAutoSaveSnapshotRef = (0, import_react12.useRef)("");
   const lastTypeIdRef = (0, import_react12.useRef)(void 0);
   const sortedTypes = (0, import_react12.useMemo)(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
+  const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
+  (0, import_react12.useEffect)(() => {
+    setUserContextDraft(userContext.markdown);
+    setUserContextMessage("");
+    setUserContextError("");
+  }, [userContext.markdown, userContext.updatedAt]);
   (0, import_react12.useEffect)(() => {
     void refreshAutoBackups();
   }, [refreshAutoBackups]);
@@ -36435,6 +36847,30 @@ function SettingsPage() {
       setBackupError(backupDeleteError instanceof Error ? backupDeleteError.message : "백업 삭제에 실패했습니다.");
     }
   }
+  async function handleSaveUserContext() {
+    setUserContextError("");
+    setUserContextMessage("");
+    try {
+      await updateUserContextMarkdown(userContextDraft.slice(0, aiContextMaxLength));
+      setUserContextMessage("user.md를 저장했습니다.");
+    } catch (contextSaveError) {
+      setUserContextError(contextSaveError instanceof Error ? contextSaveError.message : "user.md 저장에 실패했습니다.");
+    }
+  }
+  async function handleResetUserContext() {
+    const shouldReset = window.confirm("user.md를 기본값으로 되돌릴까요?");
+    if (!shouldReset) {
+      return;
+    }
+    setUserContextError("");
+    setUserContextMessage("");
+    try {
+      await resetUserContext();
+      setUserContextMessage("user.md 기본값을 복원했습니다.");
+    } catch (contextResetError) {
+      setUserContextError(contextResetError instanceof Error ? contextResetError.message : "user.md 초기화에 실패했습니다.");
+    }
+  }
   async function handleTypeSubmit(event) {
     event.preventDefault();
     setTypeError("");
@@ -36526,6 +36962,15 @@ function SettingsPage() {
       /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("article", { className: "settings-summary-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "백업" }),
         /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { children: setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("article", { className: "settings-summary-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "AI 컨텍스트" }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("strong", { children: [
+          userContextUsedLength,
+          " / ",
+          aiContextMaxLength,
+          "자"
+        ] })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "settings-main-grid", children: [
@@ -36635,6 +37080,68 @@ function SettingsPage() {
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "description-text", children: "Endpoint, 모델명, API Key는 입력 즉시 저장됩니다." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "settings-card settings-context-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "settings-card-header", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "eyebrow", children: "USER CONTEXT" }),
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { children: "user.md" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("small", { children: [
+            userContextUsedLength,
+            " / ",
+            aiContextMaxLength,
+            "자"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "form-grid two-col", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { children: [
+            "AI 컨텍스트 최대 길이",
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+              "input",
+              {
+                type: "text",
+                inputMode: "numeric",
+                value: String(aiContextMaxLength),
+                onChange: (event) => {
+                  const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                  void updateSetting({ aiContextMaxLength: Number.isFinite(next) ? next : DEFAULT_AI_CONTEXT_MAX_LENGTH });
+                }
+              }
+            )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { children: [
+            "권장 범위",
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+              "input",
+              {
+                type: "text",
+                value: `${MIN_AI_CONTEXT_MAX_LENGTH} - ${MAX_AI_CONTEXT_MAX_LENGTH}자`,
+                readOnly: true
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "user-context-editor", children: [
+          "사용자 컨텍스트",
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+            "textarea",
+            {
+              value: userContextDraft,
+              maxLength: aiContextMaxLength,
+              onChange: (event) => setUserContextDraft(event.target.value),
+              rows: 12,
+              spellCheck: false
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "settings-inline-note", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "AI 일정 추가 시 이 내용이 개인 규칙으로 전달됩니다. 현재 입력이 더 구체적이면 현재 입력을 우선합니다." }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "button-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "btn btn-primary", type: "button", onClick: () => void handleSaveUserContext(), children: "user.md 저장" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "btn btn-soft", type: "button", onClick: () => void handleResetUserContext(), children: "기본값 복원" })
+        ] }),
+        userContextMessage ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "success-text", children: userContextMessage }) : null,
+        userContextError ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "error-text", children: userContextError }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "settings-card settings-backup-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("header", { className: "settings-card-header", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [

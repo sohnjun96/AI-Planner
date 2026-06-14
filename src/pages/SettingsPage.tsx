@@ -1,6 +1,13 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorSelector } from "../components/ColorSelector";
-import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL, pickRandomPresetColor } from "../constants";
+import {
+  DEFAULT_AI_CONTEXT_MAX_LENGTH,
+  DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  LLM_DEFAULT_MODEL,
+  MAX_AI_CONTEXT_MAX_LENGTH,
+  MIN_AI_CONTEXT_MAX_LENGTH,
+  pickRandomPresetColor,
+} from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { formatDateTime } from "../utils/date";
 
@@ -62,6 +69,9 @@ export function SettingsPage() {
     updateSetting,
     exportData,
     importData,
+    userContext,
+    updateUserContextMarkdown,
+    resetUserContext,
     taskTypes,
     upsertTaskType,
     deleteTaskType,
@@ -77,6 +87,9 @@ export function SettingsPage() {
   const [backupMessage, setBackupMessage] = useState("");
   const [backupError, setBackupError] = useState("");
   const [isBackupListOpen, setIsBackupListOpen] = useState(false);
+  const [userContextDraft, setUserContextDraft] = useState("");
+  const [userContextMessage, setUserContextMessage] = useState("");
+  const [userContextError, setUserContextError] = useState("");
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -85,6 +98,14 @@ export function SettingsPage() {
   const lastTypeIdRef = useRef<string | undefined>(undefined);
 
   const sortedTypes = useMemo(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
+  const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
+
+  useEffect(() => {
+    setUserContextDraft(userContext.markdown);
+    setUserContextMessage("");
+    setUserContextError("");
+  }, [userContext.markdown, userContext.updatedAt]);
 
   useEffect(() => {
     void refreshAutoBackups();
@@ -225,6 +246,35 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSaveUserContext() {
+    setUserContextError("");
+    setUserContextMessage("");
+
+    try {
+      await updateUserContextMarkdown(userContextDraft.slice(0, aiContextMaxLength));
+      setUserContextMessage("user.md를 저장했습니다.");
+    } catch (contextSaveError) {
+      setUserContextError(contextSaveError instanceof Error ? contextSaveError.message : "user.md 저장에 실패했습니다.");
+    }
+  }
+
+  async function handleResetUserContext() {
+    const shouldReset = window.confirm("user.md를 기본값으로 되돌릴까요?");
+    if (!shouldReset) {
+      return;
+    }
+
+    setUserContextError("");
+    setUserContextMessage("");
+
+    try {
+      await resetUserContext();
+      setUserContextMessage("user.md 기본값을 복원했습니다.");
+    } catch (contextResetError) {
+      setUserContextError(contextResetError instanceof Error ? contextResetError.message : "user.md 초기화에 실패했습니다.");
+    }
+  }
+
   async function handleTypeSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTypeError("");
@@ -337,6 +387,10 @@ export function SettingsPage() {
           <span>백업</span>
           <strong>{setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동"}</strong>
         </article>
+        <article className="settings-summary-card">
+          <span>AI 컨텍스트</span>
+          <strong>{userContextUsedLength} / {aiContextMaxLength}자</strong>
+        </article>
       </section>
 
       <div className="settings-main-grid">
@@ -438,6 +492,67 @@ export function SettingsPage() {
           </div>
 
           <p className="description-text">Endpoint, 모델명, API Key는 입력 즉시 저장됩니다.</p>
+        </section>
+
+        <section className="settings-card settings-context-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">USER CONTEXT</p>
+              <h3>user.md</h3>
+            </div>
+            <small>{userContextUsedLength} / {aiContextMaxLength}자</small>
+          </header>
+
+          <div className="form-grid two-col">
+            <label>
+              AI 컨텍스트 최대 길이
+              <input
+                type="text"
+                inputMode="numeric"
+                value={String(aiContextMaxLength)}
+                onChange={(event) => {
+                  const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                  void updateSetting({ aiContextMaxLength: Number.isFinite(next) ? next : DEFAULT_AI_CONTEXT_MAX_LENGTH });
+                }}
+              />
+            </label>
+
+            <label>
+              권장 범위
+              <input
+                type="text"
+                value={`${MIN_AI_CONTEXT_MAX_LENGTH} - ${MAX_AI_CONTEXT_MAX_LENGTH}자`}
+                readOnly
+              />
+            </label>
+          </div>
+
+          <label className="user-context-editor">
+            사용자 컨텍스트
+            <textarea
+              value={userContextDraft}
+              maxLength={aiContextMaxLength}
+              onChange={(event) => setUserContextDraft(event.target.value)}
+              rows={12}
+              spellCheck={false}
+            />
+          </label>
+
+          <div className="settings-inline-note">
+            <span>AI 일정 추가 시 이 내용이 개인 규칙으로 전달됩니다. 현재 입력이 더 구체적이면 현재 입력을 우선합니다.</span>
+          </div>
+
+          <div className="button-row">
+            <button className="btn btn-primary" type="button" onClick={() => void handleSaveUserContext()}>
+              user.md 저장
+            </button>
+            <button className="btn btn-soft" type="button" onClick={() => void handleResetUserContext()}>
+              기본값 복원
+            </button>
+          </div>
+
+          {userContextMessage ? <p className="success-text">{userContextMessage}</p> : null}
+          {userContextError ? <p className="error-text">{userContextError}</p> : null}
         </section>
 
         <section className="settings-card settings-backup-card">

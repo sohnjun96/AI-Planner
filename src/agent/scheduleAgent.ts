@@ -1,5 +1,5 @@
-import { DEFAULT_PROJECT_ID, DEFAULT_TASK_TYPES } from "../constants";
-import type { Project, Task, TaskStatus, TaskType } from "../models";
+import { DEFAULT_AI_CONTEXT_MAX_LENGTH, DEFAULT_PROJECT_ID, DEFAULT_TASK_TYPES } from "../constants";
+import type { Project, Task, TaskStatus, TaskType, UserContext, UserContextRuleCategory, UserContextSuggestion } from "../models";
 import { toIsoNow } from "../utils/date";
 import { requestLlmResponse, type LlmChatMessage } from "./llmClient";
 
@@ -16,6 +16,7 @@ interface AgentModelPayload {
   userQuestion?: unknown;
   toolCalls?: unknown;
   proposal?: unknown;
+  contextSuggestions?: unknown;
   summary?: unknown;
 }
 
@@ -64,6 +65,8 @@ export interface AgentProposal {
   operations: AgentOperation[];
 }
 
+export type AgentContextSuggestion = UserContextSuggestion;
+
 interface ToolExecutionResult {
   tool: AgentToolName;
   args: Record<string, unknown>;
@@ -77,6 +80,8 @@ export interface RunScheduleAgentInput {
   tasks: Task[];
   projects: Project[];
   taskTypes: TaskType[];
+  userContext?: UserContext;
+  userContextMaxLength?: number;
   endpoint?: string;
   apiKey: string;
   model?: string;
@@ -87,6 +92,7 @@ export interface RunScheduleAgentResult {
   needsUserInput: boolean;
   question?: string;
   proposal?: AgentProposal;
+  contextSuggestions: AgentContextSuggestion[];
 }
 
 interface ParseOptions {
@@ -167,6 +173,7 @@ Required root schema:
   "needsUserInput": false,
   "userQuestion": "",
   "toolCalls": [],
+  "contextSuggestions": [],
   "proposal": {
     "summary": "short Korean summary",
     "operations": []
@@ -191,6 +198,8 @@ Hard output rules:
 15. Only return delete_task when one specific existing task is identified.
 16. If multiple tasks still match a delete request, ask one short Korean clarification question instead of guessing.
 17. Prefer active project and task type ids when the user did not specify them.
+18. Use userPayload.userContextMarkdown as reusable personal defaults. Current user input overrides it when more specific.
+19. If the request reveals a reusable scheduling preference, return it in contextSuggestions. Keep suggestions general, concise, and useful for future requests.
 
 Operation schemas:
 create_task requires:
@@ -221,6 +230,19 @@ delete_task requires:
   "action": "delete_task",
   "taskId": "existing task id",
   "reason": "optional Korean reason"
+}
+
+contextSuggestions item schema:
+{
+  "category": "time" | "classification" | "preference",
+  "label": "short Korean label",
+  "trigger": ["keyword"],
+  "defaultTime": "HH:mm optional",
+  "projectId": "known project id optional",
+  "taskTypeId": "known task type id optional",
+  "isMajor": true,
+  "note": "short Korean note",
+  "reason": "why this is reusable"
 }
 
 Allowed tools:
@@ -424,6 +446,63 @@ function getPreferredItemId(items: Array<{ id: string; isActive: boolean }>, fal
 
 function normalizeLookupValue(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function truncateText(value: string, maxLength: number): string {
+  const normalizedMax = Number.isFinite(maxLength) ? Math.max(0, Math.floor(maxLength)) : DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  if (value.length <= normalizedMax) {
+    return value;
+  }
+  return value.slice(0, normalizedMax);
+}
+
+function pickFirstStringArray(record: Record<string, unknown>, keys: readonly string[]): string[] {
+  for (const key of keys) {
+    const candidate = record[key];
+    if (Array.isArray(candidate)) {
+      return candidate
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+        .slice(0, 8);
+    }
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate
+        .split(/[,，]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 8);
+    }
+  }
+  return [];
+}
+
+function normalizeContextCategory(value: unknown): UserContextRuleCategory | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "time" || normalized === "시간") {
+    return "time";
+  }
+  if (normalized === "classification" || normalized === "category" || normalized === "분류") {
+    return "classification";
+  }
+  if (normalized === "preference" || normalized === "선호" || normalized === "규칙") {
+    return "preference";
+  }
+  return undefined;
+}
+
+function normalizeDefaultTime(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  const match = trimmed.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!match) {
+    return undefined;
+  }
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 
 function pickFirstString(record: Record<string, unknown>, keys: readonly string[]): string {
@@ -755,6 +834,79 @@ function buildSummaryOnlyProposal(value: unknown, fallbackSummary?: string): Age
   };
 }
 
+function parseContextSuggestion(value: unknown, options: ParseOptions = {}): AgentContextSuggestion | null {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  if (!isRecord(normalizedValue)) {
+    return null;
+  }
+  const trigger = pickFirstStringArray(normalizedValue, ["trigger", "triggers", "keywords", "keyword"]);
+  const defaultTime = normalizeDefaultTime(normalizedValue.defaultTime ?? normalizedValue.default_time ?? normalizedValue.time);
+  const projectId = resolveEntityId(
+    pickFirstString(normalizedValue, PROJECT_KEYS),
+    options.projects ?? [],
+    undefined,
+  );
+  const taskTypeId = resolveEntityId(
+    pickFirstString(normalizedValue, TASK_TYPE_KEYS),
+    options.taskTypes ?? [],
+    undefined,
+  );
+  const isMajor = typeof normalizedValue.isMajor === "boolean"
+    ? normalizedValue.isMajor
+    : typeof normalizedValue.is_major === "boolean"
+      ? normalizedValue.is_major
+      : typeof normalizedValue.important === "boolean"
+        ? normalizedValue.important
+        : undefined;
+  const note = pickFirstString(normalizedValue, ["note", "description", "memo"]);
+  const reason = pickFirstString(normalizedValue, ["reason", "why"]);
+  const category =
+    normalizeContextCategory(normalizedValue.category) ??
+    (defaultTime ? "time" : projectId || taskTypeId ? "classification" : "preference");
+
+  if (trigger.length === 0 || (!defaultTime && !projectId && !taskTypeId && isMajor === undefined && !note)) {
+    return null;
+  }
+
+  return {
+    category,
+    label: pickFirstString(normalizedValue, ["label", "title", "name"]) || undefined,
+    trigger,
+    projectId: projectId || undefined,
+    taskTypeId: taskTypeId || undefined,
+    defaultTime,
+    isMajor,
+    note: note || undefined,
+    reason: reason || undefined,
+  };
+}
+
+function parseContextSuggestions(value: unknown, options: ParseOptions = {}): AgentContextSuggestion[] {
+  const normalizedValue = tryParseJsonLikeValue(value);
+  const source = Array.isArray(normalizedValue) ? normalizedValue : isRecord(normalizedValue) ? [normalizedValue] : [];
+  const seen = new Set<string>();
+  const suggestions: AgentContextSuggestion[] = [];
+  for (const item of source) {
+    const suggestion = parseContextSuggestion(item, options);
+    if (!suggestion) {
+      continue;
+    }
+    const key = JSON.stringify({
+      trigger: suggestion.trigger.map((entry) => entry.toLowerCase()).sort(),
+      defaultTime: suggestion.defaultTime ?? "",
+      projectId: suggestion.projectId ?? "",
+      taskTypeId: suggestion.taskTypeId ?? "",
+      isMajor: suggestion.isMajor ?? "",
+    });
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    suggestions.push(suggestion);
+  }
+  return suggestions.slice(0, 5);
+}
+
 function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[], taskTypes: TaskType[]): ToolExecutionResult {
   if (call.tool === "list_projects") {
     return {
@@ -892,10 +1044,26 @@ function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[]
 }
 
 function buildPromptMessages(input: RunScheduleAgentInput, toolResults: ToolExecutionResult[]): LlmChatMessage[] {
+  const userContextMaxLength = input.userContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  const userContextMarkdown = truncateText(input.userContext?.markdown ?? "", userContextMaxLength);
   const userPayload = {
     now: toIsoNow(),
     conversation: input.conversation.slice(-8),
     userRequest: input.userMessage,
+    userContextMarkdown,
+    userContextRules: (input.userContext?.rules ?? [])
+      .filter((rule) => rule.isActive)
+      .slice(0, 20)
+      .map((rule) => ({
+        category: rule.category,
+        label: rule.label,
+        trigger: rule.trigger,
+        projectId: rule.projectId ?? "",
+        taskTypeId: rule.taskTypeId ?? "",
+        defaultTime: rule.defaultTime ?? "",
+        isMajor: rule.isMajor ?? false,
+        note: rule.note ?? "",
+      })),
     knownChoices: {
       status: ["NOT_DONE", "ON_HOLD", "DONE"],
       projectList: input.projects.map((project) => ({
@@ -954,6 +1122,12 @@ export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<Ru
       parseProposal(payload.proposal, proposalOptions) ??
       buildSummaryOnlyProposal(payload.proposal, proposalOptions.fallbackSummary) ??
       parseProposal(payload, proposalOptions);
+    const proposalContextSuggestions =
+      isRecord(payload.proposal) ? parseContextSuggestions(payload.proposal.contextSuggestions, proposalOptions) : [];
+    const contextSuggestions = [
+      ...parseContextSuggestions(payload.contextSuggestions, proposalOptions),
+      ...proposalContextSuggestions,
+    ].slice(0, 5);
     const assistantMessage =
       typeof payload.assistantMessage === "string" && payload.assistantMessage.trim()
         ? payload.assistantMessage
@@ -966,6 +1140,7 @@ export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<Ru
       needsUserInput: Boolean(payload.needsUserInput),
       question,
       proposal,
+      contextSuggestions,
     };
   }
   throw new Error("LLM이 도구 호출만 반복하여 최종 제안을 만들지 못했습니다.");

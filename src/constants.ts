@@ -1,6 +1,9 @@
 ﻿import type { AppSetting, Project, RecurrencePattern, TaskStatus, TaskType } from "./models";
 
+import type { UserContext } from "./models";
+
 export const SETTINGS_ID = "default";
+export const USER_CONTEXT_ID = "user-context";
 export const DEFAULT_PROJECT_ID = "project-general";
 export const LUNCH_PROJECT_ID = "project-lunch";
 
@@ -9,6 +12,9 @@ export const LLM_DEFAULT_MODEL = "gpt-4o-mini";
 
 export const DEFAULT_NOTIFY_BEFORE_MINUTES = 30;
 export const DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES = 360;
+export const DEFAULT_AI_CONTEXT_MAX_LENGTH = 2000;
+export const MIN_AI_CONTEXT_MAX_LENGTH = 500;
+export const MAX_AI_CONTEXT_MAX_LENGTH = 8000;
 
 export const COLOR_PRESETS = [
   "#ef4444",
@@ -173,6 +179,70 @@ export const DEFAULT_PROJECTS: Project[] = [
 
 export const DEFAULT_PROJECT_IDS = DEFAULT_PROJECTS.map((project) => project.id);
 
+export const DEFAULT_USER_CONTEXT_MARKDOWN = `# User Context
+
+## 기본 시간 규칙
+- 점심 일정은 시간이 없으면 11:30으로 설정한다.
+- 제출 일정은 시간이 없으면 18:00으로 설정한다.
+
+## 기본 분류 규칙
+- 점심, 식사, 밥, lunch가 포함되면 프로젝트는 점심 약속, 종류는 식사로 설정한다.
+- 제출, 마감, 과제가 포함되면 종류는 제출로 설정한다.
+- 회의, 미팅이 포함되면 종류는 회의로 설정한다.
+
+## 선호 규칙
+- 제출 또는 마감 일정은 중요 일정으로 표시한다.
+`;
+
+export const DEFAULT_USER_CONTEXT: UserContext = {
+  id: USER_CONTEXT_ID,
+  markdown: DEFAULT_USER_CONTEXT_MARKDOWN,
+  rules: [
+    {
+      id: "context-lunch-default",
+      category: "classification",
+      label: "점심 기본 분류",
+      trigger: ["점심", "식사", "밥", "lunch"],
+      projectId: LUNCH_PROJECT_ID,
+      taskTypeId: "type-meal",
+      defaultTime: "11:30",
+      isMajor: false,
+      note: "점심 일정은 기본 프로젝트와 식사 종류로 정리합니다.",
+      source: "default",
+      isActive: true,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "context-submit-default",
+      category: "time",
+      label: "제출 기본 시간",
+      trigger: ["제출", "마감", "과제"],
+      taskTypeId: "type-submit",
+      defaultTime: "18:00",
+      isMajor: true,
+      note: "시간 없는 제출 일정은 18:00까지로 잡고 중요 일정으로 표시합니다.",
+      source: "default",
+      isActive: true,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "context-meeting-default",
+      category: "classification",
+      label: "회의 기본 종류",
+      trigger: ["회의", "미팅"],
+      taskTypeId: "type-meeting",
+      note: "회의성 일정은 기본적으로 회의 종류로 분류합니다.",
+      source: "default",
+      isActive: true,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ],
+  updatedAt: "",
+};
+
 export const DEFAULT_SETTING: AppSetting = {
   id: SETTINGS_ID,
   showPastCompleted: false,
@@ -185,5 +255,6 @@ export const DEFAULT_SETTING: AppSetting = {
   notifyBeforeMinutes: DEFAULT_NOTIFY_BEFORE_MINUTES,
   autoBackupEnabled: true,
   autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
+  aiContextMaxLength: DEFAULT_AI_CONTEXT_MAX_LENGTH,
   updatedAt: "",
 };

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { runScheduleAgent } from "../agent/scheduleAgent";
 import type {
   AgentConversationMessage,
+  AgentContextSuggestion,
   AgentCreateTaskOperation,
   AgentDeleteTaskOperation,
   AgentOperation,
@@ -184,7 +185,7 @@ export function AiAssistantWorkspace({
   onApplied,
   onRequestClose,
 }: AiAssistantWorkspaceProps) {
-  const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
+  const { tasks, projects, taskTypes, setting, userContext, createTask, updateTask, removeTask, acceptUserContextSuggestion } = useAppData();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [draft, setDraft] = useState(initialDraft);
   const [lastUserMessage, setLastUserMessage] = useState("");
@@ -193,6 +194,7 @@ export function AiAssistantWorkspace({
   );
   const [lastQuestion, setLastQuestion] = useState("");
   const [pendingProposal, setPendingProposal] = useState<AgentProposal | undefined>(undefined);
+  const [pendingContextSuggestions, setPendingContextSuggestions] = useState<AgentContextSuggestion[]>([]);
   const [selectedOperationIndexes, setSelectedOperationIndexes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
@@ -206,7 +208,7 @@ export function AiAssistantWorkspace({
   const taskTypeMap = useMemo(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = useMemo(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
-  const hasVisibleResult = Boolean(pendingProposal || lastQuestion || error || applyResult || isLoading);
+  const hasVisibleResult = Boolean(pendingProposal || pendingContextSuggestions.length > 0 || lastQuestion || error || applyResult || isLoading);
   const canApplyProposalWithEnter = Boolean(
     pendingProposal && hasOperations && selectedOperationIndexes.length > 0 && !isApplying,
   );
@@ -301,6 +303,7 @@ export function AiAssistantWorkspace({
     setApplyResult("");
     setLastQuestion("");
     setPendingProposal(undefined);
+    setPendingContextSuggestions([]);
     if (!messageOverride) {
       setDraft("");
     }
@@ -313,6 +316,8 @@ export function AiAssistantWorkspace({
         tasks,
         projects,
         taskTypes,
+        userContext,
+        userContextMaxLength: setting.aiContextMaxLength,
         endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
@@ -322,6 +327,7 @@ export function AiAssistantWorkspace({
       setLastAssistantMessage(result.assistantMessage);
       setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
+      setPendingContextSuggestions(result.contextSuggestions);
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
@@ -329,6 +335,7 @@ export function AiAssistantWorkspace({
       setError(message);
       setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
       setLastQuestion("");
+      setPendingContextSuggestions([]);
       setEndpointStatus("error");
       setEndpointStatusMessage(message);
     } finally {
@@ -521,6 +528,30 @@ export function AiAssistantWorkspace({
     onApplied?.();
   }
 
+  async function handleAcceptContextSuggestion(suggestion: AgentContextSuggestion, index: number) {
+    try {
+      await acceptUserContextSuggestion(suggestion);
+      setPendingContextSuggestions((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+      setApplyResult("user.md에 새 규칙을 저장했습니다.");
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
+    }
+  }
+
+  function describeContextSuggestion(suggestion: AgentContextSuggestion): string {
+    const projectName = suggestion.projectId ? projectMap[suggestion.projectId]?.name ?? suggestion.projectId : "";
+    const taskTypeName = suggestion.taskTypeId ? taskTypeMap[suggestion.taskTypeId]?.name ?? suggestion.taskTypeId : "";
+    return [
+      suggestion.trigger.length > 0 ? `키워드 ${suggestion.trigger.join(", ")}` : "",
+      suggestion.defaultTime ? `기본 시간 ${suggestion.defaultTime}` : "",
+      projectName ? `프로젝트 ${projectName}` : "",
+      taskTypeName ? `종류 ${taskTypeName}` : "",
+      suggestion.isMajor ? "중요 표시" : "",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
   function renderOperation(operation: AgentOperation, index: number) {
     const isSelected = selectedOperationSet.has(index);
     const actionMeta = getOperationActionMeta(operation);
@@ -677,6 +708,36 @@ export function AiAssistantWorkspace({
       ) : hideInitialResult ? null : (
         <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
       )}
+
+      {pendingContextSuggestions.length > 0 ? (
+        <div className="context-suggestion-block">
+          <div>
+            <span className="badge-pill">user.md</span>
+            <strong>AI가 학습한 규칙</strong>
+            <p className="description-text">반복해서 쓸 수 있는 일정 해석 규칙만 저장하세요.</p>
+          </div>
+          <ul className="context-suggestion-list">
+            {pendingContextSuggestions.map((suggestion, index) => (
+              <li key={`${suggestion.category}-${suggestion.trigger.join("-")}-${index}`}>
+                <div>
+                  <strong>{suggestion.label ?? suggestion.trigger.join(", ")}</strong>
+                  <p>{describeContextSuggestion(suggestion)}</p>
+                  {suggestion.reason || suggestion.note ? <small>{suggestion.reason ?? suggestion.note}</small> : null}
+                </div>
+                <button
+                  className="btn btn-soft"
+                  type="button"
+                  onClick={() => {
+                    void handleAcceptContextSuggestion(suggestion, index);
+                  }}
+                >
+                  규칙 저장
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {applyResult ? <p className="success-text">{applyResult}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}

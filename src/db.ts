@@ -1,6 +1,6 @@
 import Dexie, { type Table } from "dexie";
-import { DEFAULT_PROJECTS, DEFAULT_SETTING, DEFAULT_TASK_TYPES, SETTINGS_ID } from "./constants";
-import type { AppSetting, Memo, Project, Task, TaskType } from "./models";
+import { DEFAULT_PROJECTS, DEFAULT_SETTING, DEFAULT_TASK_TYPES, DEFAULT_USER_CONTEXT, SETTINGS_ID, USER_CONTEXT_ID } from "./constants";
+import type { AppSetting, Memo, Project, Task, TaskType, UserContext } from "./models";
 import { toIsoNow } from "./utils/date";
 
 class ScheduleDB extends Dexie {
@@ -9,6 +9,7 @@ class ScheduleDB extends Dexie {
   taskTypes!: Table<TaskType, string>;
   memos!: Table<Memo, string>;
   settings!: Table<AppSetting, string>;
+  userContexts!: Table<UserContext, string>;
 
   constructor() {
     super("schedule-manager-db");
@@ -18,6 +19,14 @@ class ScheduleDB extends Dexie {
       taskTypes: "id, name, isDefault, isActive, order, updatedAt",
       memos: "id, date, updatedAt",
       settings: "id, updatedAt",
+    });
+    this.version(2).stores({
+      tasks: "id, startAt, status, projectId, taskTypeId, isMajor, updatedAt",
+      projects: "id, name, isActive, updatedAt",
+      taskTypes: "id, name, isDefault, isActive, order, updatedAt",
+      memos: "id, date, updatedAt",
+      settings: "id, updatedAt",
+      userContexts: "id, updatedAt",
     });
   }
 }
@@ -41,7 +50,7 @@ export async function bootstrapDatabase(): Promise<void> {
       createdAt: now,
       updatedAt: now,
     }));
-    await db.taskTypes.bulkAdd(seeded);
+    await db.taskTypes.bulkPut(seeded);
   }
 
   const existingProjects = await db.projects.toArray();
@@ -51,7 +60,7 @@ export async function bootstrapDatabase(): Promise<void> {
     (project) => !existingProjectIds.has(project.id) && !existingProjectNames.has(project.name.trim().toLowerCase()),
   );
   if (missingProjects.length > 0) {
-    await db.projects.bulkAdd(missingProjects.map((project) => ({
+    await db.projects.bulkPut(missingProjects.map((project) => ({
       ...project,
       createdAt: now,
       updatedAt: now,
@@ -60,21 +69,24 @@ export async function bootstrapDatabase(): Promise<void> {
 
   const setting = await db.settings.get(SETTINGS_ID);
   if (!setting) {
-    await db.settings.add({
+    await db.settings.put({
       ...DEFAULT_SETTING,
       updatedAt: now,
     });
-    return;
   }
 
   if (
-    setting.llmEndpoint === undefined ||
-    setting.llmApiKey === undefined ||
-    setting.llmModel === undefined ||
-    setting.notificationsEnabled === undefined ||
-    setting.notifyBeforeMinutes === undefined ||
-    setting.autoBackupEnabled === undefined ||
-    setting.autoBackupIntervalMinutes === undefined
+    setting &&
+    (
+      setting.llmEndpoint === undefined ||
+      setting.llmApiKey === undefined ||
+      setting.llmModel === undefined ||
+      setting.notificationsEnabled === undefined ||
+      setting.notifyBeforeMinutes === undefined ||
+      setting.autoBackupEnabled === undefined ||
+      setting.autoBackupIntervalMinutes === undefined ||
+      setting.aiContextMaxLength === undefined
+    )
   ) {
     await db.settings.put({
       ...setting,
@@ -85,6 +97,20 @@ export async function bootstrapDatabase(): Promise<void> {
       notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_SETTING.notifyBeforeMinutes,
       autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
       autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_SETTING.autoBackupIntervalMinutes,
+      aiContextMaxLength: setting.aiContextMaxLength ?? DEFAULT_SETTING.aiContextMaxLength,
+      updatedAt: now,
+    });
+  }
+
+  const userContext = await db.userContexts.get(USER_CONTEXT_ID);
+  if (!userContext) {
+    await db.userContexts.put({
+      ...DEFAULT_USER_CONTEXT,
+      rules: DEFAULT_USER_CONTEXT.rules.map((rule) => ({
+        ...rule,
+        createdAt: now,
+        updatedAt: now,
+      })),
       updatedAt: now,
     });
   }
