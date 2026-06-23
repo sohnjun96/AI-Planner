@@ -34116,6 +34116,7 @@ var EMPTY_SUMMARY = {
   conflicts: 0,
   major: 0,
   lunch: 0,
+  markers: [],
   titles: []
 };
 var WEEK_LABELS = {
@@ -34148,6 +34149,19 @@ function getDensityLevel(total) {
     return 3;
   }
   return 4;
+}
+function sortCalendarMarkers(markers) {
+  return [...markers].sort((a, b) => {
+    const priorityDiff = (a.priority ?? 100) - (b.priority ?? 100);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+    return a.label.localeCompare(b.label, "ko");
+  });
+}
+function formatMarkerCount(marker, useDetail = false) {
+  const label = useDetail ? marker.detailLabel ?? marker.label : marker.label;
+  return `${label}${marker.count > 1 ? ` ${marker.count}` : ""}`;
 }
 function MonthCalendar({
   selectedDate,
@@ -34302,6 +34316,9 @@ function MonthCalendar({
       const key = getDateKey(date);
       const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
       const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
+      const markers = sortCalendarMarkers(summary.markers ?? []);
+      const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
+      const hasLunchMarker = markers.some((marker) => marker.tone === "lunch");
       const density = getDensityLevel(summary.total);
       const completionRatio = summary.total > 0 ? Math.round(summary.done / summary.total * 100) : 0;
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -34311,6 +34328,7 @@ function MonthCalendar({
         summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
         summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
         summary.lunch > 0 ? `점심 ${summary.lunch}건` : "",
+        ...markers.map((marker) => `${marker.detailLabel ?? marker.label} ${marker.count}건`),
         summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
         "Enter로 선택, 더블클릭으로 일정 추가"
       ].filter(Boolean).join(", ");
@@ -34318,7 +34336,7 @@ function MonthCalendar({
         "button",
         {
           type: "button",
-          className: `calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${todayKey === key ? "today" : ""} ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${dragOverDateKey === key ? "drag-target" : ""}`,
+          className: `calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${todayKey === key ? "today" : ""} ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${dragOverDateKey === key ? "drag-target" : ""} ${markerClassName}`,
           onClick: () => selectDate(date),
           onContextMenu: (event) => {
             if (!onDayContextMenu) {
@@ -34386,10 +34404,13 @@ function MonthCalendar({
           children: [
             /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top", children: [
               /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-day-number", children: date.getDate() }),
-              summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-day-count", children: [
-                summary.total,
-                "건"
-              ] }) : null
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top-meta", children: [
+                markers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-special-mark ${marker.tone}`, children: formatMarkerCount(marker) }, marker.id)),
+                summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-day-count", children: [
+                  summary.total,
+                  "건"
+                ] }) : null
+              ] })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-progress", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { width: `${completionRatio}%` } }) }),
             /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-event-stack", children: [
@@ -34400,7 +34421,8 @@ function MonthCalendar({
               ] }) : null
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-indicators", children: [
-              summary.lunch > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator lunch", children: [
+              markers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-indicator marker ${marker.tone}`, children: formatMarkerCount(marker, true) }, marker.id)),
+              !hasLunchMarker && summary.lunch > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator lunch", children: [
                 "점심",
                 summary.lunch > 1 ? ` ${summary.lunch}` : ""
               ] }) : null,
@@ -34426,7 +34448,7 @@ function MonthCalendar({
         key
       );
     }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "description-text", children: "날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 할 일 카드를 드래그하면 날짜를 이동할 수 있습니다." })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "description-text", children: "날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 일정 카드를 드래그하면 날짜를 이동할 수 있습니다." })
   ] });
 }
 
@@ -34902,6 +34924,7 @@ var EMPTY_DAY_SUMMARY = {
   conflicts: 0,
   major: 0,
   lunch: 0,
+  markers: [],
   titles: []
 };
 function toTaskInput2(task) {
@@ -34987,6 +35010,57 @@ function isLunchTask(task, typeMap, projectMap) {
   const source = `${task.title} ${task.content} ${taskTypeName} ${projectName}`.toLowerCase();
   return LUNCH_TASK_KEYWORDS.some((keyword) => source.includes(keyword));
 }
+function isLunchProjectTask(task, projectMap) {
+  const projectName = projectMap[task.projectId]?.name.trim().toLowerCase() ?? "";
+  return task.projectId === LUNCH_PROJECT_ID || projectName === "점심 약속";
+}
+function isCalendarTypeTask(task, typeMap, ids, names) {
+  const typeName = typeMap[task.taskTypeId]?.name.trim().toLowerCase() ?? "";
+  return ids.includes(task.taskTypeId) || names.includes(typeName);
+}
+var CALENDAR_MARKER_RULES = [
+  {
+    id: "lunch-project",
+    label: "점심",
+    detailLabel: "점심 약속",
+    tone: "lunch",
+    cellClass: "has-marker-lunch",
+    priority: 10,
+    matches: (task, { projectMap }) => isLunchProjectTask(task, projectMap)
+  },
+  {
+    id: "leave",
+    label: "연가",
+    tone: "leave",
+    cellClass: "has-marker-leave",
+    priority: 20,
+    matches: (task, { typeMap }) => isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"])
+  },
+  {
+    id: "trip",
+    label: "출장",
+    tone: "trip",
+    cellClass: "has-marker-trip",
+    priority: 30,
+    matches: (task, { typeMap }) => isCalendarTypeTask(task, typeMap, ["type-trip"], ["출장"])
+  }
+];
+function addCalendarMarker(summary, rule) {
+  const existing = summary.markers.find((marker2) => marker2.id === rule.id);
+  if (existing) {
+    existing.count += 1;
+    return;
+  }
+  const { matches: _matches, ...marker } = rule;
+  summary.markers.push({ ...marker, count: 1 });
+}
+function applyCalendarMarkerRules(summary, task, maps) {
+  for (const rule of CALENDAR_MARKER_RULES) {
+    if (rule.matches(task, maps)) {
+      addCalendarMarker(summary, rule);
+    }
+  }
+}
 function getPriorityTasks(tasks, mode) {
   if (mode === "all") {
     return tasks;
@@ -35012,7 +35086,7 @@ function summarizeTasks(tasks, conflictMap) {
       summary.titles.push(task.title);
       return summary;
     },
-    { ...EMPTY_DAY_SUMMARY, titles: [] }
+    { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] }
   );
 }
 function getWeekStart(dateKey, weekStartsOn) {
@@ -35170,7 +35244,7 @@ function DashboardPage() {
   const daySummaryByDate = (0, import_react10.useMemo)(() => {
     return calendarTasks.reduce((summaryMap, task) => {
       const key = getDateKey(task.startAt);
-      const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, titles: [] };
+      const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
       current.total += 1;
       current.done += task.status === "DONE" ? 1 : 0;
       current.pending += task.status === "NOT_DONE" ? 1 : 0;
@@ -35178,6 +35252,7 @@ function DashboardPage() {
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       current.major += task.isMajor ? 1 : 0;
       current.lunch += isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+      applyCalendarMarkerRules(current, task, { projectMap, typeMap });
       current.titles.push(task.title);
       summaryMap[key] = current;
       return summaryMap;

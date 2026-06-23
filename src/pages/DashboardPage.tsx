@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { MarkdownMemo } from "../components/MarkdownMemo";
-import { MonthCalendar, type CalendarDaySummary } from "../components/MonthCalendar";
+import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
 import { TaskViewSegmentedControl } from "../components/TaskViewSegmentedControl";
-import { STATUS_LABELS } from "../constants";
+import { LUNCH_PROJECT_ID, STATUS_LABELS } from "../constants";
 import type { TaskViewMode } from "../constants/taskViewModes";
 import { useAppData } from "../context/AppDataContext";
 import type { Project, Task, TaskFormInput, TaskStatus, TaskType } from "../models";
@@ -48,6 +48,7 @@ const EMPTY_DAY_SUMMARY: CalendarDaySummary = {
   conflicts: 0,
   major: 0,
   lunch: 0,
+  markers: [],
   titles: [],
 };
 
@@ -150,6 +151,85 @@ function isLunchTask(
   return LUNCH_TASK_KEYWORDS.some((keyword) => source.includes(keyword));
 }
 
+function isLunchProjectTask(task: Task, projectMap: Record<string, Project | undefined>): boolean {
+  const projectName = projectMap[task.projectId]?.name.trim().toLowerCase() ?? "";
+  return task.projectId === LUNCH_PROJECT_ID || projectName === "점심 약속";
+}
+
+function isCalendarTypeTask(
+  task: Task,
+  typeMap: Record<string, TaskType | undefined>,
+  ids: string[],
+  names: string[],
+): boolean {
+  const typeName = typeMap[task.taskTypeId]?.name.trim().toLowerCase() ?? "";
+  return ids.includes(task.taskTypeId) || names.includes(typeName);
+}
+
+interface CalendarMarkerRule extends Omit<CalendarDayMarker, "count"> {
+  matches: (
+    task: Task,
+    maps: {
+      projectMap: Record<string, Project | undefined>;
+      typeMap: Record<string, TaskType | undefined>;
+    },
+  ) => boolean;
+}
+
+const CALENDAR_MARKER_RULES: CalendarMarkerRule[] = [
+  {
+    id: "lunch-project",
+    label: "점심",
+    detailLabel: "점심 약속",
+    tone: "lunch",
+    cellClass: "has-marker-lunch",
+    priority: 10,
+    matches: (task, { projectMap }) => isLunchProjectTask(task, projectMap),
+  },
+  {
+    id: "leave",
+    label: "연가",
+    tone: "leave",
+    cellClass: "has-marker-leave",
+    priority: 20,
+    matches: (task, { typeMap }) => isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"]),
+  },
+  {
+    id: "trip",
+    label: "출장",
+    tone: "trip",
+    cellClass: "has-marker-trip",
+    priority: 30,
+    matches: (task, { typeMap }) => isCalendarTypeTask(task, typeMap, ["type-trip"], ["출장"]),
+  },
+];
+
+function addCalendarMarker(summary: CalendarDaySummary, rule: CalendarMarkerRule) {
+  const existing = summary.markers.find((marker) => marker.id === rule.id);
+  if (existing) {
+    existing.count += 1;
+    return;
+  }
+
+  const { matches: _matches, ...marker } = rule;
+  summary.markers.push({ ...marker, count: 1 });
+}
+
+function applyCalendarMarkerRules(
+  summary: CalendarDaySummary,
+  task: Task,
+  maps: {
+    projectMap: Record<string, Project | undefined>;
+    typeMap: Record<string, TaskType | undefined>;
+  },
+) {
+  for (const rule of CALENDAR_MARKER_RULES) {
+    if (rule.matches(task, maps)) {
+      addCalendarMarker(summary, rule);
+    }
+  }
+}
+
 function getPriorityTasks(tasks: Task[], mode: AgendaViewMode): Task[] {
   if (mode === "all") {
     return tasks;
@@ -179,7 +259,7 @@ function summarizeTasks(tasks: Task[], conflictMap: Record<string, string[]>): C
       summary.titles.push(task.title);
       return summary;
     },
-    { ...EMPTY_DAY_SUMMARY, titles: [] },
+    { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] },
   );
 }
 
@@ -368,7 +448,7 @@ export function DashboardPage() {
   const daySummaryByDate = useMemo(() => {
     return calendarTasks.reduce<Record<string, CalendarDaySummary>>((summaryMap, task) => {
       const key = getDateKey(task.startAt);
-      const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, titles: [] };
+      const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
       current.total += 1;
       current.done += task.status === "DONE" ? 1 : 0;
       current.pending += task.status === "NOT_DONE" ? 1 : 0;
@@ -376,6 +456,7 @@ export function DashboardPage() {
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       current.major += task.isMajor ? 1 : 0;
       current.lunch += isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+      applyCalendarMarkerRules(current, task, { projectMap, typeMap });
       current.titles.push(task.title);
       summaryMap[key] = current;
       return summaryMap;

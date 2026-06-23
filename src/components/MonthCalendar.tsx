@@ -1,6 +1,18 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { addDays, addMonths, getDateKey, getMonthGridStart, startOfMonth } from "../utils/date";
 
+export type CalendarMarkerTone = "default" | "lunch" | "leave" | "trip";
+
+export interface CalendarDayMarker {
+  id: string;
+  label: string;
+  count: number;
+  tone: CalendarMarkerTone;
+  detailLabel?: string;
+  cellClass?: string;
+  priority?: number;
+}
+
 export interface CalendarDaySummary {
   total: number;
   done: number;
@@ -9,6 +21,7 @@ export interface CalendarDaySummary {
   conflicts: number;
   major: number;
   lunch: number;
+  markers: CalendarDayMarker[];
   titles: string[];
 }
 
@@ -30,6 +43,7 @@ const EMPTY_SUMMARY: CalendarDaySummary = {
   conflicts: 0,
   major: 0,
   lunch: 0,
+  markers: [],
   titles: [],
 };
 
@@ -66,6 +80,21 @@ function getDensityLevel(total: number): number {
     return 3;
   }
   return 4;
+}
+
+function sortCalendarMarkers(markers: CalendarDayMarker[]): CalendarDayMarker[] {
+  return [...markers].sort((a, b) => {
+    const priorityDiff = (a.priority ?? 100) - (b.priority ?? 100);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+    return a.label.localeCompare(b.label, "ko");
+  });
+}
+
+function formatMarkerCount(marker: CalendarDayMarker, useDetail = false): string {
+  const label = useDetail ? marker.detailLabel ?? marker.label : marker.label;
+  return `${label}${marker.count > 1 ? ` ${marker.count}` : ""}`;
 }
 
 export function MonthCalendar({
@@ -223,6 +252,9 @@ export function MonthCalendar({
           const key = getDateKey(date);
           const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
           const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
+          const markers = sortCalendarMarkers(summary.markers ?? []);
+          const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
+          const hasLunchMarker = markers.some((marker) => marker.tone === "lunch");
           const density = getDensityLevel(summary.total);
           const completionRatio = summary.total > 0 ? Math.round((summary.done / summary.total) * 100) : 0;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -233,6 +265,7 @@ export function MonthCalendar({
             summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
             summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
             summary.lunch > 0 ? `점심 ${summary.lunch}건` : "",
+            ...markers.map((marker) => `${marker.detailLabel ?? marker.label} ${marker.count}건`),
             summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
             "Enter로 선택, 더블클릭으로 일정 추가",
           ]
@@ -247,7 +280,7 @@ export function MonthCalendar({
                 todayKey === key ? "today" : ""
               } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
                 dragOverDateKey === key ? "drag-target" : ""
-              }`}
+              } ${markerClassName}`}
               onClick={() => selectDate(date)}
               onContextMenu={(event) => {
                 if (!onDayContextMenu) {
@@ -317,7 +350,14 @@ export function MonthCalendar({
             >
               <div className="calendar-day-top">
                 <span className="calendar-day-number">{date.getDate()}</span>
-                {summary.total > 0 ? <span className="calendar-day-count">{summary.total}건</span> : null}
+                <div className="calendar-day-top-meta">
+                  {markers.map((marker) => (
+                    <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
+                      {formatMarkerCount(marker)}
+                    </span>
+                  ))}
+                  {summary.total > 0 ? <span className="calendar-day-count">{summary.total}건</span> : null}
+                </div>
               </div>
 
               <div className="calendar-progress" aria-hidden="true">
@@ -334,7 +374,14 @@ export function MonthCalendar({
               </div>
 
               <div className="calendar-indicators">
-                {summary.lunch > 0 ? <span className="calendar-indicator lunch">점심{summary.lunch > 1 ? ` ${summary.lunch}` : ""}</span> : null}
+                {markers.map((marker) => (
+                  <span key={marker.id} className={`calendar-indicator marker ${marker.tone}`}>
+                    {formatMarkerCount(marker, true)}
+                  </span>
+                ))}
+                {!hasLunchMarker && summary.lunch > 0 ? (
+                  <span className="calendar-indicator lunch">점심{summary.lunch > 1 ? ` ${summary.lunch}` : ""}</span>
+                ) : null}
                 {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
                 {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
                 {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
@@ -345,7 +392,7 @@ export function MonthCalendar({
         })}
       </div>
 
-      <p className="description-text">날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 할 일 카드를 드래그하면 날짜를 이동할 수 있습니다.</p>
+      <p className="description-text">날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 일정 카드를 드래그하면 날짜를 이동할 수 있습니다.</p>
     </section>
   );
 }
