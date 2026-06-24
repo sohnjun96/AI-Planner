@@ -35348,6 +35348,9 @@ function DashboardPage() {
       if (target?.closest(".calendar-day-popover")) {
         return;
       }
+      if (target?.closest(".modal-backdrop, .modal-card")) {
+        return;
+      }
       setDatePopoverKey(null);
     };
     const handleKeyDown = (event) => {
@@ -35403,7 +35406,7 @@ function DashboardPage() {
   }
   function getLeaveTasksForDate(dateKey) {
     return tasks.filter(
-      (task) => getDateKey(task.startAt) === dateKey && task.projectId === generalProjectId && task.taskTypeId === leaveTaskTypeId
+      (task) => getDateKey(task.startAt) === dateKey && isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"])
     );
   }
   function handleCalendarDateSelect(dateKey) {
@@ -35417,7 +35420,6 @@ function DashboardPage() {
     setTaskModalState({ mode: "create", defaultDate });
   }
   function openEditTask(taskId) {
-    setDatePopoverKey(null);
     setTaskModalState({ mode: "edit", taskId });
   }
   function changeTaskStatus(task, status) {
@@ -35694,7 +35696,7 @@ function DashboardPage() {
         const taskType = typeMap[task.taskTypeId];
         const hasConflict = (calendarConflictMap[task.id]?.length ?? 0) > 0;
         const isProjectTinted = task.status === "NOT_DONE" || task.status === "DONE" && isAllDoneDay;
-        return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+        return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
           "button",
           {
             type: "button",
@@ -35702,19 +35704,23 @@ function DashboardPage() {
             style: isProjectTinted ? getCalendarDetailProjectStyle(project) : void 0,
             onClick: () => openEditTask(task.id),
             onContextMenu: (event) => openTaskContextMenu(event, task),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "calendar-day-detail-time", children: formatTaskTime(task, setting.timeFormat) }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: task.title }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { children: [
-                project?.name ?? "프로젝트 없음",
-                " · ",
-                taskType?.name ?? "종류 없음"
+            children: /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "calendar-day-detail-main", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "calendar-day-detail-copy", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "calendar-day-detail-headline", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "calendar-day-detail-time", children: formatTaskTime(task, setting.timeFormat) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: task.title })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { children: [
+                  project?.name ?? "프로젝트 없음",
+                  " · ",
+                  taskType?.name ?? "종류 없음"
+                ] })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "calendar-day-detail-badges", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: `status-badge ${task.status.toLowerCase()}`, children: STATUS_LABELS[task.status] }),
                 hasConflict ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "conflict-badge", children: "충돌" }) : null
               ] })
-            ]
+            ] })
           },
           task.id
         );
@@ -36492,13 +36498,10 @@ function ProjectsPage() {
     setTaskFormSerial((prev) => prev + 1);
   }
   async function handleUpdateProjectTask(input) {
-    if (!editingTask || !selectedProject) {
+    if (!editingTask) {
       return;
     }
-    await updateTask(editingTask.id, {
-      ...input,
-      projectId: selectedProject.id
-    });
+    await updateTask(editingTask.id, input);
   }
   async function handleDeleteProjectTask() {
     if (!editingTask) {
@@ -36783,7 +36786,6 @@ function ProjectsPage() {
               projects,
               taskTypes,
               allTasks: tasks,
-              fixedProjectId: selectedProject.id,
               initialTask: editingTask,
               timeFormat: setting.timeFormat,
               onSubmit: handleUpdateProjectTask,

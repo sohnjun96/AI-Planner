@@ -444,14 +444,11 @@ export function ProjectsPage() {
   }
 
   async function handleUpdateProjectTask(input: TaskFormInput) {
-    if (!editingTask || !selectedProject) {
+    if (!editingTask) {
       return;
     }
 
-    await updateTask(editingTask.id, {
-      ...input,
-      projectId: selectedProject.id,
-    });
+    await updateTask(editingTask.id, input);
   }
 
   async function handleDeleteProjectTask() {
@@ -717,7 +714,6 @@ export function ProjectsPage() {
                 projects={projects}
                 taskTypes={taskTypes}
                 allTasks={tasks}
-                fixedProjectId={selectedProject.id}
                 initialTask={editingTask}
                 timeFormat={setting.timeFormat}
                 onSubmit={handleUpdateProjectTask}

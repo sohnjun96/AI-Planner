@@ -3297,10 +3297,9 @@ textarea:focus-visible,
   --calendar-detail-project-bg: var(--canvas);
   --calendar-detail-project-border: var(--hairline);
   display: grid;
-  gap: 4px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
-  padding: 9px 10px;
+  padding: 10px 11px;
   background: var(--canvas);
   color: var(--ink);
   cursor: pointer;
@@ -3334,15 +3333,35 @@ textarea:focus-visible,
 .calendar-day-detail-item.project-tinted.conflict {
   box-shadow: inset 3px 0 0 var(--calendar-detail-project-color), inset 0 0 0 1px rgba(220, 38, 38, 0.08);
 }
+.calendar-day-detail-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+.calendar-day-detail-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.calendar-day-detail-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
 .calendar-day-detail-time {
   color: var(--body-muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .calendar-day-detail-item strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -3361,12 +3380,14 @@ textarea:focus-visible,
   overflow: hidden;
   color: var(--body-muted);
   font-size: 12px;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .calendar-day-detail-badges {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 5px;
 }
 .empty-inline {

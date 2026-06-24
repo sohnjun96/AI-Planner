@@ -566,6 +566,9 @@ export function DashboardPage() {
       if (target?.closest(".calendar-day-popover")) {
         return;
       }
+      if (target?.closest(".modal-backdrop, .modal-card")) {
+        return;
+      }
       setDatePopoverKey(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -631,8 +634,7 @@ export function DashboardPage() {
     return tasks.filter(
       (task) =>
         getDateKey(task.startAt) === dateKey &&
-        task.projectId === generalProjectId &&
-        task.taskTypeId === leaveTaskTypeId,
+        isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"]),
     );
   }
 
@@ -649,7 +651,6 @@ export function DashboardPage() {
   }
 
   function openEditTask(taskId: string) {
-    setDatePopoverKey(null);
     setTaskModalState({ mode: "edit", taskId });
   }
 
@@ -972,14 +973,20 @@ export function DashboardPage() {
                   onClick={() => openEditTask(task.id)}
                   onContextMenu={(event) => openTaskContextMenu(event, task)}
                 >
-                  <span className="calendar-day-detail-time">{formatTaskTime(task, setting.timeFormat)}</span>
-                  <strong>{task.title}</strong>
-                  <small>
-                    {project?.name ?? "프로젝트 없음"} · {taskType?.name ?? "종류 없음"}
-                  </small>
-                  <span className="calendar-day-detail-badges">
-                    <span className={`status-badge ${task.status.toLowerCase()}`}>{STATUS_LABELS[task.status]}</span>
-                    {hasConflict ? <span className="conflict-badge">충돌</span> : null}
+                  <span className="calendar-day-detail-main">
+                    <span className="calendar-day-detail-copy">
+                      <span className="calendar-day-detail-headline">
+                        <span className="calendar-day-detail-time">{formatTaskTime(task, setting.timeFormat)}</span>
+                        <strong>{task.title}</strong>
+                      </span>
+                      <small>
+                        {project?.name ?? "프로젝트 없음"} · {taskType?.name ?? "종류 없음"}
+                      </small>
+                    </span>
+                    <span className="calendar-day-detail-badges">
+                      <span className={`status-badge ${task.status.toLowerCase()}`}>{STATUS_LABELS[task.status]}</span>
+                      {hasConflict ? <span className="conflict-badge">충돌</span> : null}
+                    </span>
                   </span>
                 </button>
               );
