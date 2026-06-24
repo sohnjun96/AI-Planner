@@ -1,97 +1,215 @@
-# AI Planner
+# 업무 일정관리
 
-AI Planner is a full-page Chrome extension for calendar-based work planning. It centers the dashboard, calendar, AI-assisted schedule creation, project tracking, archive browsing, and local-first data storage in one interface.
+업무 일정관리는 달력, 프로젝트, 보관함, 메모, AI 일정 입력을 한 화면 흐름으로 묶은 Chrome 확장 프로그램입니다. 매번 캘린더 앱, 메모장, 프로젝트 목록, 제출 마감표를 오가며 확인하지 않아도 오늘 해야 할 일과 앞으로의 일정을 바로 정리할 수 있도록 만들었습니다.
 
-## Current product shape
-- Full-page app: clicking the extension opens `index.html#/dashboard`
-- Main tabs: `대시보드`, `프로젝트`, `보관함`, `설정`
-- Dashboard calendar views: `목록`, `주간`, `월간`
-- AI schedule modal: natural-language create, update, delete proposals with explicit apply confirmation
-- Local storage: IndexedDB via Dexie
-- Build output: `dist`
+## 왜 필요한가요?
 
-## Core features
-- Dashboard-first planning with a large month calendar and per-day agenda
-- Collapsible top summary for `오늘 일정` and `제출 일정`
-- AI schedule modal with keyboard flow
-- Right-click context menu on calendar days
-- Right-click context menu on task cards
-- Project management with status and type-based filtering
-- Archive view for completed past schedules
-- Global memo with checklist support
-- Undo for the latest change
-- Notification and backup settings
+일정 관리는 단순히 날짜를 저장하는 문제가 아닙니다. 실제 업무에서는 다음 문제가 자주 생깁니다.
 
-## AI workflow
-1. Open `AI 일정 추가` from the top bar, shortcut, or calendar day context menu.
-2. Enter a natural-language request.
-3. Review the generated operations.
-4. Apply the selected operations.
+- 오늘 무엇을 먼저 해야 하는지 한눈에 보이지 않습니다.
+- 제출, 회의, 점심, 연가, 출장처럼 성격이 다른 일정이 섞이면 우선순위를 놓치기 쉽습니다.
+- 완료한 일정과 지나간 일정을 다시 찾아야 할 때 기록이 흩어져 있습니다.
+- 반복해서 입력하는 개인 규칙이 많습니다. 예를 들어 점심은 보통 11:30, 제출은 보통 18:00처럼 정해진 습관이 있습니다.
+- 자연어로 “내일 10시에 보고서 제출 추가해줘”라고 쓰고 싶은데, 실제 캘린더 입력 폼은 여전히 번거롭습니다.
 
-Supported AI actions:
-- Create schedules
-- Update schedules
-- Delete schedules
+이 앱은 이런 불편을 줄이기 위해 대시보드 중심으로 설계되어 있습니다. 달력에서 전체 흐름을 보고, 필요한 날짜를 누르면 바로 그 날짜의 일정을 확인하고, AI로 초안을 만든 뒤 확인해서 적용할 수 있습니다.
 
-Current UX details:
-- `A` or `Ctrl+Shift+N` opens the AI modal
-- `Esc` closes the AI modal
-- When a proposal is ready, `Enter` applies the selected draft
-- When the modal is opened with a prefilled request, the textarea is focused and the cursor moves to the end
+## 핵심 장점
 
-## Context menus
-Calendar day context menu:
-- `AI 일정 추가`
-- `일정 직접 추가`
-- `해당 날짜 보기`
+### 1. 대시보드에서 오늘과 전체 흐름을 같이 봅니다
 
-Task card context menu:
-- `완료하기` or `보류하기`
-- `수정`
-- `AI로 수정`
-- `복제`
-- `삭제`
+대시보드는 월간 달력을 중심으로 구성되어 있습니다. 목록, 주간, 월간 보기로 전환할 수 있고, 기본은 월간입니다.
 
-## Settings
-The settings page stores values immediately, including:
-- `LLM Endpoint`
-- `LLM Model`
-- `LLM API Key`
-- Week start day
-- Time format
-- Notifications
-- Automatic backups
-- Task types
+- 월간 보기: 날짜별 일정 밀도와 특수 일정 표시를 빠르게 확인합니다.
+- 주간 보기: 이번 주의 미완료/보류 일정을 집중해서 봅니다.
+- 목록 보기: 오늘 이후의 남은 일정을 날짜순으로 훑습니다.
 
-## Install
-Load the built extension from `dist`.
+특정 날짜를 클릭하면 날짜 근처에 해당 날짜의 일정이 열립니다. 미완료, 보류, 완료 순서로 정렬되어 “지금 봐야 할 것”이 위로 올라옵니다.
 
-1. Open `chrome://extensions`
-2. Enable `개발자 모드`
-3. Click `압축해제된 확장 프로그램을 로드합니다`
-4. Select `dist`
+### 2. 일정 상태가 색과 배치로 구분됩니다
 
-## Development
-Run commands inside `source`.
+일정은 상태에 따라 다르게 표시됩니다.
+
+- 미완료: 더 눈에 띄는 테두리와 프로젝트별 배경색으로 표시됩니다.
+- 보류: 보류 상태가 따로 드러나므로 미완료와 섞이지 않습니다.
+- 완료: 기본적으로 더 흐리게 표시되어 남은 일정을 방해하지 않습니다.
+- 해당 날짜의 일정이 전부 완료된 경우: 완료 일정도 프로젝트별 색상으로 표시되어 날짜의 맥락을 유지합니다.
+
+연가와 출장은 날짜 셀 자체에 표시됩니다.
+
+- 연가: 날짜 셀이 초록색 계열로 표시됩니다.
+- 출장: 날짜 셀이 파란색 계열로 표시됩니다.
+- 점심 약속: 날짜 안에 깔끔한 식사 마커로 표시됩니다.
+
+### 3. AI 일정 추가로 입력 시간을 줄입니다
+
+상단의 `AI 일정 추가` 버튼이나 단축키 `A`, `Ctrl+Shift+N`으로 AI 일정 입력을 열 수 있습니다.
+
+예를 들어 다음처럼 입력할 수 있습니다.
+
+```text
+다음 주 화요일 10시에 회의 넣어줘
+금요일 18시까지 보고서 제출 일정 추가해줘
+내일 점심 약속 추가해줘
+어제 만든 보고 일정 삭제해줘
+```
+
+AI는 바로 일정을 저장하지 않고 먼저 초안을 보여줍니다. 사용자는 초안을 보고 적용할 수 있어 잘못된 일정이 바로 저장되는 일을 줄일 수 있습니다.
+
+지원하는 AI 작업은 다음과 같습니다.
+
+- 일정 생성
+- 일정 수정
+- 일정 삭제
+- 기존 일정 검색을 통한 삭제/수정 후보 확인
+- 프로젝트와 일정 종류 자동 분류
+- `user.md`에 저장된 개인 규칙 반영
+
+### 4. 우클릭 메뉴로 빠르게 처리합니다
+
+월간 달력의 날짜를 오른쪽 클릭하면 자주 쓰는 작업을 바로 할 수 있습니다.
+
+- AI 일정 추가
+- 일정 직접 추가
+- 연가 설정 / 연가 취소
+
+일정 카드를 오른쪽 클릭하면 상태 변경과 편집을 빠르게 할 수 있습니다.
+
+- 완료하기
+- 보류하기
+- 수정
+- AI로 수정
+- 복제
+- 삭제
+
+마우스 이동을 줄이고, 달력에서 바로 처리할 수 있도록 만든 기능입니다.
+
+### 5. 프로젝트별로 일을 관리합니다
+
+프로젝트 탭에서는 프로젝트별 진행 상황을 먼저 보고, 필요한 프로젝트 안에서 일정을 관리할 수 있습니다.
+
+- 전체, 진행, 완료, 이번주 기준으로 프로젝트 일정을 빠르게 필터링합니다.
+- 기본 보기는 완료된 일정을 숨겨 현재 진행 중인 일에 집중합니다.
+- 일정 수정 시 프로젝트도 변경할 수 있어, 잘못 분류한 일정을 다시 옮기기 쉽습니다.
+- 프로젝트 설명도 AI 도구 호출에 함께 제공되어 AI가 프로젝트 맥락을 더 잘 이해할 수 있습니다.
+
+프로젝트가 많은 업무 환경에서 “어느 프로젝트가 밀리고 있는지”를 빠르게 확인하는 데 유용합니다.
+
+### 6. 보관함에서 지난 일정을 쉽게 찾습니다
+
+보관함은 완료된 과거 일정을 다시 찾기 위한 공간입니다.
+
+- 월별로 지난 일정을 훑어볼 수 있습니다.
+- 제목, 내용, 프로젝트, 종류로 검색할 수 있습니다.
+- 완료된 기록을 복원하는 흐름보다 “지난 일을 빠르게 파악하는 것”에 초점을 맞췄습니다.
+
+나중에 “그 업무 언제 끝냈지?”, “그 제출 일정이 어떤 프로젝트였지?” 같은 질문이 생겼을 때 유용합니다.
+
+### 7. 설정에서 내 방식대로 맞춥니다
+
+설정 탭에서는 앱의 동작을 직접 조정할 수 있습니다.
+
+- AI Endpoint 주소
+- AI 모델명
+- API Key
+- 주 시작 요일
+- 시간 표시 방식
+- 알림 설정
+- 자동 백업
+- 일정 종류 추가/수정
+- `user.md` 개인 규칙
+- AI에 전달할 `user.md` 최대 길이
+
+특히 `user.md`는 AI가 참고하는 개인 일정 규칙입니다. 예를 들어 다음과 같은 규칙을 저장할 수 있습니다.
+
+```md
+- 점심 일정은 시간이 없으면 11:30으로 설정한다.
+- 제출 일정은 시간이 없으면 18:00으로 설정한다.
+- 점심, 식사, 밥이 들어가면 프로젝트는 점심 약속, 종류는 식사로 설정한다.
+```
+
+자주 반복되는 입력 습관을 저장해 두면 AI 일정 추가가 더 정확해집니다.
+
+### 8. 로컬 중심으로 데이터를 관리합니다
+
+일반 일정 데이터는 브라우저의 IndexedDB에 저장됩니다. 네트워크가 없어도 일정 관리 자체는 사용할 수 있습니다.
+
+AI 기능은 설정한 LLM Endpoint에 연결되어야 동작합니다. 즉, 일정 관리와 AI 기능이 분리되어 있어 AI 서버가 꺼져 있어도 기본 캘린더와 프로젝트 관리는 계속 사용할 수 있습니다.
+
+## 주요 화면
+
+### 대시보드
+
+- 월간/주간/목록 보기 전환
+- 날짜별 일정 팝오버
+- 오늘 일정 요약
+- 제출 일정 요약
+- AI 일정 추가
+- 전역 메모 체크리스트
+
+### 프로젝트
+
+- 프로젝트별 일정 현황
+- 프로젝트 검색
+- 프로젝트 설명 관리
+- 프로젝트 안에서 일정 추가/수정
+- 종류별/상태별 필터링
+
+### 보관함
+
+- 지난 완료 일정 확인
+- 월별 기록 탐색
+- 프로젝트/종류/키워드 검색
+
+### 설정
+
+- AI 연결 설정
+- 일정 종류 관리
+- 알림과 백업
+- `user.md` 개인 규칙 편집
+- 자동 백업 목록 관리
+
+## 설치 방법
+
+빌드된 확장 프로그램은 `dist` 폴더에서 로드합니다.
+
+1. Chrome에서 `chrome://extensions`를 엽니다.
+2. 우측 상단의 `개발자 모드`를 켭니다.
+3. `압축해제된 확장 프로그램을 로드합니다`를 누릅니다.
+4. 이 프로젝트의 `dist` 폴더를 선택합니다.
+5. 확장 프로그램 아이콘을 클릭하면 풀페이지 앱이 열립니다.
+
+## 개발 방법
+
+명령은 `source` 폴더에서 실행합니다.
 
 ```bash
 npm install
 npm run build
 ```
 
-For local development:
+개발 서버 실행:
 
 ```bash
 npm run dev
 ```
 
-## Stack
+타입 체크:
+
+```bash
+npm run typecheck
+```
+
+## 기술 스택
+
 - React
 - TypeScript
 - Vite
 - Dexie
 - Chrome Extension Manifest V3
 
-## Notes
-- General schedule management works offline
-- AI features require access to a reachable LLM endpoint
+## 참고
+
+- 일반 일정 관리 기능은 로컬에서 동작합니다.
+- AI 일정 추가 기능은 설정된 LLM Endpoint가 필요합니다.
+- 배포용 파일은 `dist` 폴더에 생성됩니다.
