@@ -1,14 +1,21 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
 import { TaskViewSegmentedControl } from "../components/TaskViewSegmentedControl";
-import { LUNCH_PROJECT_ID, STATUS_LABELS } from "../constants";
+import { DEFAULT_PROJECT_ID, LUNCH_PROJECT_ID, STATUS_LABELS } from "../constants";
 import type { TaskViewMode } from "../constants/taskViewModes";
 import { useAppData } from "../context/AppDataContext";
 import type { Project, Task, TaskFormInput, TaskStatus, TaskType } from "../models";
-import { addDays, compareByStartAtAsc, getDateKey, isPastCompletedHidden, shiftIsoToDateKey } from "../utils/date";
+import {
+  addDays,
+  combineDateTimeToIso,
+  compareByStartAtAsc,
+  getDateKey,
+  isPastCompletedHidden,
+  shiftIsoToDateKey,
+} from "../utils/date";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 
 const GLOBAL_MEMO_KEY = "global";
@@ -121,6 +128,35 @@ function formatShortDateTime(value: string): string {
   return `${month}.${day}. ${hours}:${minutes}`;
 }
 
+function colorWithAlpha(color: string, alpha: number): string {
+  const hex = color.trim().replace("#", "");
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((value) => `${value}${value}`)
+          .join("")
+      : hex;
+
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) {
+    return color;
+  }
+
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function getCalendarDetailProjectStyle(project?: Project): CSSProperties {
+  const projectColor = project?.color ?? "#64748b";
+  return {
+    "--calendar-detail-project-color": projectColor,
+    "--calendar-detail-project-bg": colorWithAlpha(projectColor, 0.13),
+    "--calendar-detail-project-border": colorWithAlpha(projectColor, 0.38),
+  } as CSSProperties;
+}
+
 function compareByStatusThenStartAt(a: Task, b: Task): number {
   const rank = (status: TaskStatus) => (status === "DONE" ? 1 : 0);
   const rankDiff = rank(a.status) - rank(b.status);
@@ -230,15 +266,6 @@ function applyCalendarMarkerRules(
   }
 }
 
-function getPriorityTasks(tasks: Task[], mode: AgendaViewMode): Task[] {
-  if (mode === "all") {
-    return tasks;
-  }
-
-  const activeTasks = tasks.filter((task) => task.status === "NOT_DONE" || task.status === "ON_HOLD");
-  return activeTasks.length > 0 ? activeTasks : tasks;
-}
-
 function getSchedulePriorityTasks(tasks: Task[], mode: AgendaViewMode): Task[] {
   if (mode === "all") {
     return tasks;
@@ -286,6 +313,23 @@ function groupTasksByDate(tasks: Task[]) {
       title: formatDateLabel(dateKey),
       tasks: items.sort(compareByStartAtAsc),
     }));
+}
+
+function compareByStatusGroupThenStartAt(a: Task, b: Task): number {
+  const rank = (status: TaskStatus) => {
+    if (status === "NOT_DONE") {
+      return 0;
+    }
+    if (status === "ON_HOLD") {
+      return 1;
+    }
+    return 2;
+  };
+  const rankDiff = rank(a.status) - rank(b.status);
+  if (rankDiff !== 0) {
+    return rankDiff;
+  }
+  return compareByStartAtAsc(a, b);
 }
 
 interface CompactTaskCardProps {
@@ -365,9 +409,9 @@ export function DashboardPage() {
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
+  const [datePopoverKey, setDatePopoverKey] = useState<string | null>(null);
   const [calendarViewMode, setCalendarViewMode] = useState<TaskViewMode>("MONTH");
   const [isTopbarExpanded, setIsTopbarExpanded] = useState(false);
-  const [agendaViewPreference, setAgendaViewPreference] = useState<{ date: string; mode: AgendaViewMode } | null>(null);
   const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("priority");
   const [contextMenu, setContextMenu] = useState<DashboardContextMenu | null>(null);
 
@@ -382,6 +426,14 @@ export function DashboardPage() {
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const generalProjectId = useMemo(
+    () => projects.find((project) => project.id === DEFAULT_PROJECT_ID)?.id ?? projects.find((project) => project.name === "일반")?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
+    [projects],
+  );
+  const leaveTaskTypeId = useMemo(
+    () => taskTypes.find((type) => type.id === "type-leave")?.id ?? taskTypes.find((type) => type.name === "연가")?.id ?? taskTypes[0]?.id ?? "type-leave",
+    [taskTypes],
+  );
   const memoMap = useMemo(() => Object.fromEntries(memos.map((memo) => [memo.date, memo])), [memos]);
   const conflictMap = useMemo(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
   const calendarConflictMap = useMemo(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
@@ -392,17 +444,14 @@ export function DashboardPage() {
   );
 
   const submissionTasks = useMemo(
-    () => tasks.filter((task) => isSubmissionTaskType(task, typeMap)).sort(compareByStatusThenStartAt),
-    [tasks, typeMap],
+    () =>
+      tasks
+        .filter((task) => isSubmissionTaskType(task, typeMap))
+        .filter((task) => task.status !== "DONE" || getDateKey(task.startAt) >= todayKey)
+        .sort(compareByStatusThenStartAt),
+    [tasks, todayKey, typeMap],
   );
 
-  const selectedDayTasks = useMemo(
-    () => calendarTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStartAtAsc),
-    [calendarTasks, selectedDate],
-  );
-
-  const agendaViewMode = agendaViewPreference?.date === selectedDate ? agendaViewPreference.mode : "priority";
-  const agendaTasks = getPriorityTasks(selectedDayTasks, agendaViewMode);
   const calendarListGroups = useMemo(() => groupTasksByDate(calendarTasks), [calendarTasks]);
   const upcomingCalendarListGroups = useMemo(
     () => calendarListGroups.filter((group) => group.dateKey >= todayKey),
@@ -463,7 +512,6 @@ export function DashboardPage() {
     }, {});
   }, [calendarConflictMap, calendarTasks, projectMap, typeMap]);
 
-  const selectedDaySummary = daySummaryByDate[selectedDate] ?? EMPTY_DAY_SUMMARY;
   const weekViewSourceTasks = useMemo(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = useMemo(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
   const listViewSummary = useMemo(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
@@ -498,6 +546,41 @@ export function DashboardPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [activeTaskModalState]);
+
+  useEffect(() => {
+    if (!datePopoverKey) {
+      return;
+    }
+    if ((daySummaryByDate[datePopoverKey]?.total ?? 0) === 0) {
+      setDatePopoverKey(null);
+    }
+  }, [datePopoverKey, daySummaryByDate]);
+
+  useEffect(() => {
+    if (!datePopoverKey) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".calendar-day-popover")) {
+        return;
+      }
+      setDatePopoverKey(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDatePopoverKey(null);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [datePopoverKey]);
 
   async function handleCreateTask(input: TaskFormInput) {
     await createTask(input);
@@ -544,12 +627,29 @@ export function DashboardPage() {
     });
   }
 
+  function getLeaveTasksForDate(dateKey: string) {
+    return tasks.filter(
+      (task) =>
+        getDateKey(task.startAt) === dateKey &&
+        task.projectId === generalProjectId &&
+        task.taskTypeId === leaveTaskTypeId,
+    );
+  }
+
+  function handleCalendarDateSelect(dateKey: string) {
+    setSelectedDate(dateKey);
+    setContextMenu(null);
+    setDatePopoverKey((daySummaryByDate[dateKey]?.total ?? 0) > 0 ? dateKey : null);
+  }
+
   function openCreateTask(defaultDate = selectedDate) {
+    setDatePopoverKey(null);
     setTaskFormSerial((prev) => prev + 1);
     setTaskModalState({ mode: "create", defaultDate });
   }
 
   function openEditTask(taskId: string) {
+    setDatePopoverKey(null);
     setTaskModalState({ mode: "edit", taskId });
   }
 
@@ -571,6 +671,8 @@ export function DashboardPage() {
   function openDateContextMenu(event: MouseEvent<HTMLElement>, dateKey: string) {
     event.preventDefault();
     event.stopPropagation();
+    setSelectedDate(dateKey);
+    setDatePopoverKey(null);
     setContextMenu({
       kind: "date",
       x: event.clientX,
@@ -604,6 +706,27 @@ export function DashboardPage() {
     void removeTask(task.id);
   }
 
+  async function toggleLeaveForDate(dateKey: string) {
+    const existingLeaveTasks = getLeaveTasksForDate(dateKey);
+    setDatePopoverKey(null);
+
+    if (existingLeaveTasks.length > 0) {
+      await Promise.all(existingLeaveTasks.map((task) => removeTask(task.id)));
+      return;
+    }
+
+    await createTask({
+      title: "연가",
+      content: "",
+      taskTypeId: leaveTaskTypeId,
+      projectId: generalProjectId,
+      status: "NOT_DONE",
+      startAt: combineDateTimeToIso(dateKey, "09:00"),
+      endAt: combineDateTimeToIso(dateKey, "18:00"),
+      isMajor: false,
+    });
+  }
+
   function getContextMenuTitle(): string | undefined {
     if (!contextMenu) {
       return undefined;
@@ -621,6 +744,7 @@ export function DashboardPage() {
 
     if (contextMenu.kind === "date") {
       const dateLabel = formatContextDateLabel(contextMenu.dateKey);
+      const hasLeave = getLeaveTasksForDate(contextMenu.dateKey).length > 0;
       return [
         {
           id: "ai-create-date-task",
@@ -632,16 +756,16 @@ export function DashboardPage() {
         {
           id: "create-date-task",
           label: "일정 직접 추가",
-          description: "날짜가 미리 선택된 입력폼 열기",
+          description: "선택한 날짜로 입력 폼 열기",
           onSelect: () => openCreateTask(contextMenu.dateKey),
         },
         {
-          id: "select-date",
-          label: "해당 날짜 보기",
-          description: "Agenda를 이 날짜로 이동",
+          id: "toggle-date-leave",
+          label: hasLeave ? "연가 취소" : "연가 설정",
+          description: hasLeave ? "이 날짜의 연가 일정을 제거" : "09:00-18:00 연가 일정 생성",
+          tone: hasLeave ? "danger" : "default",
           onSelect: () => {
-            setSelectedDate(contextMenu.dateKey);
-            setCalendarViewMode("MONTH");
+            void toggleLeaveForDate(contextMenu.dateKey);
           },
         },
       ];
@@ -806,6 +930,66 @@ export function DashboardPage() {
     );
   }
 
+  function renderSelectedDatePopover(dateKey: string) {
+    const dayTasks = calendarTasks
+      .filter((task) => getDateKey(task.startAt) === dateKey)
+      .sort(compareByStatusGroupThenStartAt);
+
+    if (dayTasks.length === 0) {
+      return null;
+    }
+
+    const isAllDoneDay = dayTasks.every((task) => task.status === "DONE");
+
+    return (
+      <section className="calendar-day-detail-popover" aria-label={`${formatDateLabel(dateKey)} 일정`}>
+        <header>
+          <div>
+            <span>선택일</span>
+            <strong>{formatDateLabel(dateKey)}</strong>
+          </div>
+          <button type="button" className="btn btn-soft" onClick={() => openCreateTask(dateKey)}>
+            일정 추가
+          </button>
+        </header>
+
+        {dayTasks.length > 0 ? (
+          <div className="calendar-day-detail-list">
+            {dayTasks.map((task) => {
+              const project = projectMap[task.projectId];
+              const taskType = typeMap[task.taskTypeId];
+              const hasConflict = (calendarConflictMap[task.id]?.length ?? 0) > 0;
+              const isProjectTinted = task.status === "NOT_DONE" || (task.status === "DONE" && isAllDoneDay);
+
+              return (
+                <button
+                  key={task.id}
+                  type="button"
+                  className={`calendar-day-detail-item ${task.status.toLowerCase()} ${isProjectTinted ? "project-tinted" : ""} ${
+                    isAllDoneDay ? "all-done-day" : ""
+                  } ${hasConflict ? "conflict" : ""}`}
+                  style={isProjectTinted ? getCalendarDetailProjectStyle(project) : undefined}
+                  onClick={() => openEditTask(task.id)}
+                  onContextMenu={(event) => openTaskContextMenu(event, task)}
+                >
+                  <span className="calendar-day-detail-time">{formatTaskTime(task, setting.timeFormat)}</span>
+                  <strong>{task.title}</strong>
+                  <small>
+                    {project?.name ?? "프로젝트 없음"} · {taskType?.name ?? "종류 없음"}
+                  </small>
+                  <span className="calendar-day-detail-badges">
+                    <span className={`status-badge ${task.status.toLowerCase()}`}>{STATUS_LABELS[task.status]}</span>
+                    {hasConflict ? <span className="conflict-badge">충돌</span> : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <div className="dashboard-workspace">
       <section className={`dashboard-topbar compact-dashboard-topbar ${isTopbarExpanded ? "expanded" : "collapsed"}`}>
@@ -867,82 +1051,17 @@ export function DashboardPage() {
           </header>
 
           {calendarViewMode === "MONTH" ? (
-            <div className="dashboard-calendar-layout">
-              <div className="dashboard-calendar-month">
-                <MonthCalendar
-                  selectedDate={selectedDate}
-                  weekStartsOn={setting.weekStartsOn}
-                  daySummaryByDate={daySummaryByDate}
-                  onSelectDate={setSelectedDate}
-                  onDropTaskToDate={handleDropTaskToDate}
-                  onCreateTaskAtDate={openCreateTask}
-                  onDayContextMenu={openDateContextMenu}
-                />
-              </div>
-
-              <aside className="dashboard-agenda-panel" aria-label="선택한 날짜의 일정">
-                <header>
-                  <div>
-                    <p className="eyebrow">AGENDA</p>
-                    <h4>{formatDateLabel(selectedDate)}</h4>
-                  </div>
-                  <span>{agendaTasks.length}/{selectedDayTasks.length}개</span>
-                </header>
-
-                <div className="agenda-stat-grid">
-                  <button
-                    type="button"
-                    className={`all ${agendaViewMode === "all" ? "active" : ""}`}
-                    onClick={() => {
-                      setAgendaViewPreference({ date: selectedDate, mode: agendaViewMode === "all" ? "priority" : "all" });
-                    }}
-                    aria-pressed={agendaViewMode === "all"}
-                  >
-                    전체 {selectedDaySummary.total}
-                  </button>
-                  <span className="not_done">미완료 {selectedDaySummary.pending}</span>
-                  <span className="on_hold">보류 {selectedDaySummary.onHold}</span>
-                  <span className="done">완료 {selectedDaySummary.done}</span>
-                  <span className="conflict">충돌 {selectedDaySummary.conflicts}</span>
-                </div>
-
-                <div className="agenda-timeline">
-                  {agendaTasks.length === 0 ? (
-                    <div className="agenda-empty">
-                      <strong>이 날짜에는 일정이 없습니다.</strong>
-                      <p>달력의 날짜를 더블클릭하면 바로 일정을 추가할 수 있습니다.</p>
-                    </div>
-                  ) : null}
-
-                  {agendaTasks.map((task) => {
-                    const project = projectMap[task.projectId];
-                    const taskType = typeMap[task.taskTypeId];
-                    const hasConflict = (calendarConflictMap[task.id]?.length ?? 0) > 0;
-
-                    return (
-                      <button
-                        key={task.id}
-                        type="button"
-                        className={`agenda-event-card ${task.status.toLowerCase()} ${hasConflict ? "conflict" : ""}`}
-                        style={{ borderLeftColor: project?.color ?? "#6b7280" }}
-                        onClick={() => openEditTask(task.id)}
-                        onContextMenu={(event) => openTaskContextMenu(event, task)}
-                      >
-                        <span className="agenda-event-time">{formatTaskTime(task, setting.timeFormat)}</span>
-                        <strong>{task.title}</strong>
-                        <small>
-                          {project?.name ?? "프로젝트 없음"} · {taskType?.name ?? "종류 없음"}
-                        </small>
-                        <span className="agenda-event-badges">
-                          <span className={`status-badge ${task.status.toLowerCase()}`}>{STATUS_LABELS[task.status]}</span>
-                          {task.isMajor ? <span className="major-tag">중요</span> : null}
-                          {hasConflict ? <span className="conflict-badge">충돌</span> : null}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </aside>
+            <div className="dashboard-calendar-month">
+              <MonthCalendar
+                selectedDate={selectedDate}
+                weekStartsOn={setting.weekStartsOn}
+                daySummaryByDate={daySummaryByDate}
+                onSelectDate={handleCalendarDateSelect}
+                onDropTaskToDate={handleDropTaskToDate}
+                onCreateTaskAtDate={openCreateTask}
+                onDayContextMenu={openDateContextMenu}
+                renderSelectedDateDetails={datePopoverKey === selectedDate ? renderSelectedDatePopover : undefined}
+              />
             </div>
           ) : null}
 

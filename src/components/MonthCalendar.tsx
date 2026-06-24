@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { addDays, addMonths, getDateKey, getMonthGridStart, startOfMonth } from "../utils/date";
 
 export type CalendarMarkerTone = "default" | "lunch" | "leave" | "trip";
@@ -33,6 +33,7 @@ interface MonthCalendarProps {
   onDropTaskToDate?: (taskId: string, dateKey: string) => Promise<void> | void;
   onCreateTaskAtDate?: (dateKey: string) => void;
   onDayContextMenu?: (event: MouseEvent<HTMLElement>, dateKey: string) => void;
+  renderSelectedDateDetails?: (dateKey: string) => ReactNode;
 }
 
 const EMPTY_SUMMARY: CalendarDaySummary = {
@@ -105,6 +106,7 @@ export function MonthCalendar({
   onDropTaskToDate,
   onCreateTaskAtDate,
   onDayContextMenu,
+  renderSelectedDateDetails,
 }: MonthCalendarProps) {
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date(selectedDate)));
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
@@ -254,7 +256,7 @@ export function MonthCalendar({
           const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
           const markers = sortCalendarMarkers(summary.markers ?? []);
           const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
-          const hasLunchMarker = markers.some((marker) => marker.tone === "lunch");
+          const visibleIndicators = markers.filter((marker) => marker.tone !== "lunch");
           const density = getDensityLevel(summary.total);
           const completionRatio = summary.total > 0 ? Math.round((summary.done / summary.total) * 100) : 0;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -273,121 +275,124 @@ export function MonthCalendar({
             .join(", ");
 
           return (
-            <button
-              key={key}
-              type="button"
-              className={`calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${
-                todayKey === key ? "today" : ""
-              } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
-                dragOverDateKey === key ? "drag-target" : ""
-              } ${markerClassName}`}
-              onClick={() => selectDate(date)}
-              onContextMenu={(event) => {
-                if (!onDayContextMenu) {
-                  return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                selectDate(date);
-                onDayContextMenu(event, key);
-              }}
-              onDoubleClick={() => {
-                onCreateTaskAtDate?.(key);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowLeft") {
+            <div key={key} className={`calendar-day-slot ${selectedKey === key ? "selected" : ""}`}>
+              <button
+                type="button"
+                className={`calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${
+                  todayKey === key ? "today" : ""
+                } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
+                  dragOverDateKey === key ? "drag-target" : ""
+                } ${markerClassName}`}
+                onClick={() => selectDate(date)}
+                onContextMenu={(event) => {
+                  if (!onDayContextMenu) {
+                    return;
+                  }
                   event.preventDefault();
-                  moveSelectionByDays(-1);
-                } else if (event.key === "ArrowRight") {
+                  event.stopPropagation();
+                  selectDate(date);
+                  onDayContextMenu(event, key);
+                }}
+                onDoubleClick={() => {
+                  onCreateTaskAtDate?.(key);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    moveSelectionByDays(-1);
+                  } else if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    moveSelectionByDays(1);
+                  } else if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    moveSelectionByDays(-7);
+                  } else if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    moveSelectionByDays(7);
+                  } else if (event.key === "Home") {
+                    event.preventDefault();
+                    handleSelectToday();
+                  }
+                }}
+                onDragOver={(event) => {
+                  if (!onDropTaskToDate) {
+                    return;
+                  }
+                  const taskId =
+                    event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+                  if (!taskId) {
+                    return;
+                  }
                   event.preventDefault();
-                  moveSelectionByDays(1);
-                } else if (event.key === "ArrowUp") {
+                  event.dataTransfer.dropEffect = "move";
+                  if (dragOverDateKey !== key) {
+                    setDragOverDateKey(key);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverDateKey === key) {
+                    setDragOverDateKey(null);
+                  }
+                }}
+                onDrop={(event) => {
+                  if (!onDropTaskToDate) {
+                    return;
+                  }
+                  const taskId =
+                    event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+                  if (!taskId) {
+                    return;
+                  }
                   event.preventDefault();
-                  moveSelectionByDays(-7);
-                } else if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  moveSelectionByDays(7);
-                } else if (event.key === "Home") {
-                  event.preventDefault();
-                  handleSelectToday();
-                }
-              }}
-              onDragOver={(event) => {
-                if (!onDropTaskToDate) {
-                  return;
-                }
-                const taskId =
-                  event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
-                if (!taskId) {
-                  return;
-                }
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                if (dragOverDateKey !== key) {
-                  setDragOverDateKey(key);
-                }
-              }}
-              onDragLeave={() => {
-                if (dragOverDateKey === key) {
                   setDragOverDateKey(null);
-                }
-              }}
-              onDrop={(event) => {
-                if (!onDropTaskToDate) {
-                  return;
-                }
-                const taskId =
-                  event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
-                if (!taskId) {
-                  return;
-                }
-                event.preventDefault();
-                setDragOverDateKey(null);
-                setVisibleMonth(startOfMonth(date));
-                void onDropTaskToDate(taskId, key);
-              }}
-              aria-label={ariaLabel}
-            >
-              <div className="calendar-day-top">
-                <span className="calendar-day-number">{date.getDate()}</span>
-                <div className="calendar-day-top-meta">
-                  {markers.map((marker) => (
-                    <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
-                      {formatMarkerCount(marker)}
+                  setVisibleMonth(startOfMonth(date));
+                  void onDropTaskToDate(taskId, key);
+                }}
+                aria-label={ariaLabel}
+              >
+                <div className="calendar-day-top">
+                  <span className="calendar-day-number">{date.getDate()}</span>
+                  <div className="calendar-day-top-meta">
+                    {markers.map((marker) => (
+                      <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
+                        {formatMarkerCount(marker)}
+                      </span>
+                    ))}
+                    {summary.total > 0 ? <span className="calendar-day-count">{summary.total}건</span> : null}
+                  </div>
+                </div>
+
+                <div className="calendar-progress" aria-hidden="true">
+                  <span style={{ width: `${completionRatio}%` }} />
+                </div>
+
+                <div className="calendar-event-stack">
+                  {summary.titles.slice(0, 3).map((title, index) => (
+                    <span key={`${key}-title-${index}`} className="calendar-event-line" title={title}>
+                      {title}
                     </span>
                   ))}
-                  {summary.total > 0 ? <span className="calendar-day-count">{summary.total}건</span> : null}
+                  {summary.total > 3 ? <span className="calendar-event-more">+{summary.total - 3}</span> : null}
                 </div>
-              </div>
 
-              <div className="calendar-progress" aria-hidden="true">
-                <span style={{ width: `${completionRatio}%` }} />
-              </div>
-
-              <div className="calendar-event-stack">
-                {summary.titles.slice(0, 3).map((title, index) => (
-                  <span key={`${key}-title-${index}`} className="calendar-event-line" title={title}>
-                    {title}
-                  </span>
-                ))}
-                {summary.total > 3 ? <span className="calendar-event-more">+{summary.total - 3}</span> : null}
-              </div>
-
-              <div className="calendar-indicators">
-                {markers.map((marker) => (
-                  <span key={marker.id} className={`calendar-indicator marker ${marker.tone}`}>
-                    {formatMarkerCount(marker, true)}
-                  </span>
-                ))}
-                {!hasLunchMarker && summary.lunch > 0 ? (
-                  <span className="calendar-indicator lunch">점심{summary.lunch > 1 ? ` ${summary.lunch}` : ""}</span>
-                ) : null}
-                {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
-                {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
-                {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
-                {summary.conflicts > 0 ? <span className="calendar-indicator conflict">충돌 {summary.conflicts}</span> : null}
-              </div>
-            </button>
+                <div className="calendar-indicators">
+                  {visibleIndicators.map((marker) => (
+                    <span key={marker.id} className={`calendar-indicator marker ${marker.tone}`}>
+                      {formatMarkerCount(marker, true)}
+                    </span>
+                  ))}
+                  {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
+                  {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
+                  {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
+                  {summary.conflicts > 0 ? <span className="calendar-indicator conflict">충돌 {summary.conflicts}</span> : null}
+                </div>
+              </button>
+              {selectedKey === key && renderSelectedDateDetails ? (
+                <div className="calendar-day-popover" onClick={(event) => event.stopPropagation()}>
+                  {renderSelectedDateDetails(key)}
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </div>

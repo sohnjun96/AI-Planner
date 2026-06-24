@@ -34170,7 +34170,8 @@ function MonthCalendar({
   onSelectDate,
   onDropTaskToDate,
   onCreateTaskAtDate,
-  onDayContextMenu
+  onDayContextMenu,
+  renderSelectedDateDetails
 }) {
   const [visibleMonth, setVisibleMonth] = (0, import_react8.useState)(() => startOfMonth(new Date(selectedDate)));
   const [dragOverDateKey, setDragOverDateKey] = (0, import_react8.useState)(null);
@@ -34318,7 +34319,7 @@ function MonthCalendar({
       const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
       const markers = sortCalendarMarkers(summary.markers ?? []);
       const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
-      const hasLunchMarker = markers.some((marker) => marker.tone === "lunch");
+      const visibleIndicators = markers.filter((marker) => marker.tone !== "lunch");
       const density = getDensityLevel(summary.total);
       const completionRatio = summary.total > 0 ? Math.round(summary.done / summary.total * 100) : 0;
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -34332,121 +34333,119 @@ function MonthCalendar({
         summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
         "Enter로 선택, 더블클릭으로 일정 추가"
       ].filter(Boolean).join(", ");
-      return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
-        "button",
-        {
-          type: "button",
-          className: `calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${todayKey === key ? "today" : ""} ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${dragOverDateKey === key ? "drag-target" : ""} ${markerClassName}`,
-          onClick: () => selectDate(date),
-          onContextMenu: (event) => {
-            if (!onDayContextMenu) {
-              return;
-            }
-            event.preventDefault();
-            event.stopPropagation();
-            selectDate(date);
-            onDayContextMenu(event, key);
-          },
-          onDoubleClick: () => {
-            onCreateTaskAtDate?.(key);
-          },
-          onKeyDown: (event) => {
-            if (event.key === "ArrowLeft") {
+      return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `calendar-day-slot ${selectedKey === key ? "selected" : ""}`, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${todayKey === key ? "today" : ""} ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${dragOverDateKey === key ? "drag-target" : ""} ${markerClassName}`,
+            onClick: () => selectDate(date),
+            onContextMenu: (event) => {
+              if (!onDayContextMenu) {
+                return;
+              }
               event.preventDefault();
-              moveSelectionByDays(-1);
-            } else if (event.key === "ArrowRight") {
+              event.stopPropagation();
+              selectDate(date);
+              onDayContextMenu(event, key);
+            },
+            onDoubleClick: () => {
+              onCreateTaskAtDate?.(key);
+            },
+            onKeyDown: (event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                moveSelectionByDays(-1);
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                moveSelectionByDays(1);
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                moveSelectionByDays(-7);
+              } else if (event.key === "ArrowDown") {
+                event.preventDefault();
+                moveSelectionByDays(7);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                handleSelectToday();
+              }
+            },
+            onDragOver: (event) => {
+              if (!onDropTaskToDate) {
+                return;
+              }
+              const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+              if (!taskId) {
+                return;
+              }
               event.preventDefault();
-              moveSelectionByDays(1);
-            } else if (event.key === "ArrowUp") {
+              event.dataTransfer.dropEffect = "move";
+              if (dragOverDateKey !== key) {
+                setDragOverDateKey(key);
+              }
+            },
+            onDragLeave: () => {
+              if (dragOverDateKey === key) {
+                setDragOverDateKey(null);
+              }
+            },
+            onDrop: (event) => {
+              if (!onDropTaskToDate) {
+                return;
+              }
+              const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+              if (!taskId) {
+                return;
+              }
               event.preventDefault();
-              moveSelectionByDays(-7);
-            } else if (event.key === "ArrowDown") {
-              event.preventDefault();
-              moveSelectionByDays(7);
-            } else if (event.key === "Home") {
-              event.preventDefault();
-              handleSelectToday();
-            }
-          },
-          onDragOver: (event) => {
-            if (!onDropTaskToDate) {
-              return;
-            }
-            const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
-            if (!taskId) {
-              return;
-            }
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-            if (dragOverDateKey !== key) {
-              setDragOverDateKey(key);
-            }
-          },
-          onDragLeave: () => {
-            if (dragOverDateKey === key) {
               setDragOverDateKey(null);
-            }
-          },
-          onDrop: (event) => {
-            if (!onDropTaskToDate) {
-              return;
-            }
-            const taskId = event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
-            if (!taskId) {
-              return;
-            }
-            event.preventDefault();
-            setDragOverDateKey(null);
-            setVisibleMonth(startOfMonth(date));
-            void onDropTaskToDate(taskId, key);
-          },
-          "aria-label": ariaLabel,
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-day-number", children: date.getDate() }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top-meta", children: [
-                markers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-special-mark ${marker.tone}`, children: formatMarkerCount(marker) }, marker.id)),
-                summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-day-count", children: [
-                  summary.total,
-                  "건"
+              setVisibleMonth(startOfMonth(date));
+              void onDropTaskToDate(taskId, key);
+            },
+            "aria-label": ariaLabel,
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-day-number", children: date.getDate() }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top-meta", children: [
+                  markers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-special-mark ${marker.tone}`, children: formatMarkerCount(marker) }, marker.id)),
+                  summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-day-count", children: [
+                    summary.total,
+                    "건"
+                  ] }) : null
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-progress", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { width: `${completionRatio}%` } }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-event-stack", children: [
+                summary.titles.slice(0, 3).map((title, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-event-line", title, children: title }, `${key}-title-${index}`)),
+                summary.total > 3 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-event-more", children: [
+                  "+",
+                  summary.total - 3
+                ] }) : null
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-indicators", children: [
+                visibleIndicators.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-indicator marker ${marker.tone}`, children: formatMarkerCount(marker, true) }, marker.id)),
+                summary.pending > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator pending", children: [
+                  "미완료 ",
+                  summary.pending
+                ] }) : null,
+                summary.onHold > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator hold", children: [
+                  "보류 ",
+                  summary.onHold
+                ] }) : null,
+                summary.major > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator major", children: [
+                  "중요 ",
+                  summary.major
+                ] }) : null,
+                summary.conflicts > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator conflict", children: [
+                  "충돌 ",
+                  summary.conflicts
                 ] }) : null
               ] })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-progress", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { width: `${completionRatio}%` } }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-event-stack", children: [
-              summary.titles.slice(0, 3).map((title, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-event-line", title, children: title }, `${key}-title-${index}`)),
-              summary.total > 3 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-event-more", children: [
-                "+",
-                summary.total - 3
-              ] }) : null
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-indicators", children: [
-              markers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-indicator marker ${marker.tone}`, children: formatMarkerCount(marker, true) }, marker.id)),
-              !hasLunchMarker && summary.lunch > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator lunch", children: [
-                "점심",
-                summary.lunch > 1 ? ` ${summary.lunch}` : ""
-              ] }) : null,
-              summary.pending > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator pending", children: [
-                "미완료 ",
-                summary.pending
-              ] }) : null,
-              summary.onHold > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator hold", children: [
-                "보류 ",
-                summary.onHold
-              ] }) : null,
-              summary.major > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator major", children: [
-                "중요 ",
-                summary.major
-              ] }) : null,
-              summary.conflicts > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator conflict", children: [
-                "충돌 ",
-                summary.conflicts
-              ] }) : null
-            ] })
-          ]
-        },
-        key
-      );
+            ]
+          }
+        ),
+        selectedKey === key && renderSelectedDateDetails ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-day-popover", onClick: (event) => event.stopPropagation(), children: renderSelectedDateDetails(key) }) : null
+      ] }, key);
     }) }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "description-text", children: "날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 일정 카드를 드래그하면 날짜를 이동할 수 있습니다." })
   ] });
@@ -34456,13 +34455,18 @@ function MonthCalendar({
 var import_react9 = __toESM(require_react(), 1);
 
 // src/utils/taskConflicts.ts
-function toTimeRange(startAt, endAt) {
+function toTimedRange(startAt, endAt) {
+  if (!endAt) {
+    return null;
+  }
   const start = new Date(startAt).getTime();
-  const endRaw = endAt ? new Date(endAt).getTime() : start;
-  const end = Number.isFinite(endRaw) ? endRaw : start;
+  const endRaw = new Date(endAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(endRaw)) {
+    return null;
+  }
   return {
     start,
-    end: Math.max(start, end)
+    end: Math.max(start, endRaw)
   };
 }
 function overlaps(a, b) {
@@ -34471,15 +34475,17 @@ function overlaps(a, b) {
 function buildTaskConflictMap(tasks) {
   const activeTasks = tasks.filter((task) => task.status !== "DONE");
   const conflictMap = {};
+  const timedTasks = activeTasks.map((task) => ({
+    task,
+    range: toTimedRange(task.startAt, task.endAt)
+  })).filter((entry) => entry.range !== null);
   for (const task of activeTasks) {
     conflictMap[task.id] = /* @__PURE__ */ new Set();
   }
-  for (let i = 0; i < activeTasks.length; i += 1) {
-    const a = activeTasks[i];
-    const rangeA = toTimeRange(a.startAt, a.endAt);
-    for (let j = i + 1; j < activeTasks.length; j += 1) {
-      const b = activeTasks[j];
-      const rangeB = toTimeRange(b.startAt, b.endAt);
+  for (let i = 0; i < timedTasks.length; i += 1) {
+    const { task: a, range: rangeA } = timedTasks[i];
+    for (let j = i + 1; j < timedTasks.length; j += 1) {
+      const { task: b, range: rangeB } = timedTasks[j];
       if (!overlaps(rangeA, rangeB)) {
         continue;
       }
@@ -34492,8 +34498,14 @@ function buildTaskConflictMap(tasks) {
   );
 }
 function findTaskConflictsForRange(tasks, rangeStartAt, rangeEndAt, excludeTaskId) {
-  const targetRange = toTimeRange(rangeStartAt, rangeEndAt);
-  return tasks.filter((task) => task.status !== "DONE").filter((task) => task.id !== excludeTaskId).filter((task) => overlaps(targetRange, toTimeRange(task.startAt, task.endAt))).sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+  const targetRange = toTimedRange(rangeStartAt, rangeEndAt);
+  if (!targetRange) {
+    return [];
+  }
+  return tasks.filter((task) => task.status !== "DONE").filter((task) => task.id !== excludeTaskId).filter((task) => {
+    const taskRange = toTimedRange(task.startAt, task.endAt);
+    return taskRange ? overlaps(targetRange, taskRange) : false;
+  }).sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 }
 
 // src/components/TaskForm.tsx
@@ -34988,6 +35000,25 @@ function formatShortDateTime(value) {
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${month}.${day}. ${hours}:${minutes}`;
 }
+function colorWithAlpha(color, alpha) {
+  const hex = color.trim().replace("#", "");
+  const normalized = hex.length === 3 ? hex.split("").map((value) => `${value}${value}`).join("") : hex;
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) {
+    return color;
+  }
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+function getCalendarDetailProjectStyle(project) {
+  const projectColor = project?.color ?? "#64748b";
+  return {
+    "--calendar-detail-project-color": projectColor,
+    "--calendar-detail-project-bg": colorWithAlpha(projectColor, 0.13),
+    "--calendar-detail-project-border": colorWithAlpha(projectColor, 0.38)
+  };
+}
 function compareByStatusThenStartAt(a, b) {
   const rank = (status) => status === "DONE" ? 1 : 0;
   const rankDiff = rank(a.status) - rank(b.status);
@@ -35061,13 +35092,6 @@ function applyCalendarMarkerRules(summary, task, maps) {
     }
   }
 }
-function getPriorityTasks(tasks, mode) {
-  if (mode === "all") {
-    return tasks;
-  }
-  const activeTasks = tasks.filter((task) => task.status === "NOT_DONE" || task.status === "ON_HOLD");
-  return activeTasks.length > 0 ? activeTasks : tasks;
-}
 function getSchedulePriorityTasks(tasks, mode) {
   if (mode === "all") {
     return tasks;
@@ -35107,6 +35131,22 @@ function groupTasksByDate(tasks) {
     title: formatDateLabel(dateKey),
     tasks: items.sort(compareByStartAtAsc)
   }));
+}
+function compareByStatusGroupThenStartAt(a, b) {
+  const rank = (status) => {
+    if (status === "NOT_DONE") {
+      return 0;
+    }
+    if (status === "ON_HOLD") {
+      return 1;
+    }
+    return 2;
+  };
+  const rankDiff = rank(a.status) - rank(b.status);
+  if (rankDiff !== 0) {
+    return rankDiff;
+  }
+  return compareByStartAtAsc(a, b);
 }
 function CompactTaskCard({
   task,
@@ -35171,9 +35211,9 @@ function DashboardPage() {
   const [taskModalState, setTaskModalState] = (0, import_react10.useState)(null);
   const [taskFormSerial, setTaskFormSerial] = (0, import_react10.useState)(0);
   const [selectedDate, setSelectedDate] = (0, import_react10.useState)(() => getDateKey(/* @__PURE__ */ new Date()));
+  const [datePopoverKey, setDatePopoverKey] = (0, import_react10.useState)(null);
   const [calendarViewMode, setCalendarViewMode] = (0, import_react10.useState)("MONTH");
   const [isTopbarExpanded, setIsTopbarExpanded] = (0, import_react10.useState)(false);
-  const [agendaViewPreference, setAgendaViewPreference] = (0, import_react10.useState)(null);
   const [scheduleViewMode, setScheduleViewMode] = (0, import_react10.useState)("priority");
   const [contextMenu, setContextMenu] = (0, import_react10.useState)(null);
   const today = (0, import_react10.useMemo)(() => /* @__PURE__ */ new Date(), []);
@@ -35185,6 +35225,14 @@ function DashboardPage() {
   const calendarTasks = tasks;
   const projectMap = (0, import_react10.useMemo)(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = (0, import_react10.useMemo)(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const generalProjectId = (0, import_react10.useMemo)(
+    () => projects.find((project) => project.id === DEFAULT_PROJECT_ID)?.id ?? projects.find((project) => project.name === "일반")?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
+    [projects]
+  );
+  const leaveTaskTypeId = (0, import_react10.useMemo)(
+    () => taskTypes.find((type) => type.id === "type-leave")?.id ?? taskTypes.find((type) => type.name === "연가")?.id ?? taskTypes[0]?.id ?? "type-leave",
+    [taskTypes]
+  );
   const memoMap = (0, import_react10.useMemo)(() => Object.fromEntries(memos.map((memo2) => [memo2.date, memo2])), [memos]);
   const conflictMap = (0, import_react10.useMemo)(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
   const calendarConflictMap = (0, import_react10.useMemo)(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
@@ -35193,15 +35241,9 @@ function DashboardPage() {
     [tasks, todayKey]
   );
   const submissionTasks = (0, import_react10.useMemo)(
-    () => tasks.filter((task) => isSubmissionTaskType(task, typeMap)).sort(compareByStatusThenStartAt),
-    [tasks, typeMap]
+    () => tasks.filter((task) => isSubmissionTaskType(task, typeMap)).filter((task) => task.status !== "DONE" || getDateKey(task.startAt) >= todayKey).sort(compareByStatusThenStartAt),
+    [tasks, todayKey, typeMap]
   );
-  const selectedDayTasks = (0, import_react10.useMemo)(
-    () => calendarTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStartAtAsc),
-    [calendarTasks, selectedDate]
-  );
-  const agendaViewMode = agendaViewPreference?.date === selectedDate ? agendaViewPreference.mode : "priority";
-  const agendaTasks = getPriorityTasks(selectedDayTasks, agendaViewMode);
   const calendarListGroups = (0, import_react10.useMemo)(() => groupTasksByDate(calendarTasks), [calendarTasks]);
   const upcomingCalendarListGroups = (0, import_react10.useMemo)(
     () => calendarListGroups.filter((group) => group.dateKey >= todayKey),
@@ -35258,7 +35300,6 @@ function DashboardPage() {
       return summaryMap;
     }, {});
   }, [calendarConflictMap, calendarTasks, projectMap, typeMap]);
-  const selectedDaySummary = daySummaryByDate[selectedDate] ?? EMPTY_DAY_SUMMARY;
   const weekViewSourceTasks = (0, import_react10.useMemo)(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = (0, import_react10.useMemo)(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
   const listViewSummary = (0, import_react10.useMemo)(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
@@ -35290,6 +35331,37 @@ function DashboardPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [activeTaskModalState]);
+  (0, import_react10.useEffect)(() => {
+    if (!datePopoverKey) {
+      return;
+    }
+    if ((daySummaryByDate[datePopoverKey]?.total ?? 0) === 0) {
+      setDatePopoverKey(null);
+    }
+  }, [datePopoverKey, daySummaryByDate]);
+  (0, import_react10.useEffect)(() => {
+    if (!datePopoverKey) {
+      return;
+    }
+    const handlePointerDown = (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".calendar-day-popover")) {
+        return;
+      }
+      setDatePopoverKey(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setDatePopoverKey(null);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [datePopoverKey]);
   async function handleCreateTask(input) {
     await createTask(input);
     setTaskModalState(null);
@@ -35329,11 +35401,23 @@ function DashboardPage() {
       endAt: task.endAt ? shiftIsoToDateKey(task.endAt, dateKey) : void 0
     });
   }
+  function getLeaveTasksForDate(dateKey) {
+    return tasks.filter(
+      (task) => getDateKey(task.startAt) === dateKey && task.projectId === generalProjectId && task.taskTypeId === leaveTaskTypeId
+    );
+  }
+  function handleCalendarDateSelect(dateKey) {
+    setSelectedDate(dateKey);
+    setContextMenu(null);
+    setDatePopoverKey((daySummaryByDate[dateKey]?.total ?? 0) > 0 ? dateKey : null);
+  }
   function openCreateTask(defaultDate = selectedDate) {
+    setDatePopoverKey(null);
     setTaskFormSerial((prev) => prev + 1);
     setTaskModalState({ mode: "create", defaultDate });
   }
   function openEditTask(taskId) {
+    setDatePopoverKey(null);
     setTaskModalState({ mode: "edit", taskId });
   }
   function changeTaskStatus(task, status) {
@@ -35352,6 +35436,8 @@ function DashboardPage() {
   function openDateContextMenu(event, dateKey) {
     event.preventDefault();
     event.stopPropagation();
+    setSelectedDate(dateKey);
+    setDatePopoverKey(null);
     setContextMenu({
       kind: "date",
       x: event.clientX,
@@ -35381,6 +35467,24 @@ function DashboardPage() {
     }
     void removeTask(task.id);
   }
+  async function toggleLeaveForDate(dateKey) {
+    const existingLeaveTasks = getLeaveTasksForDate(dateKey);
+    setDatePopoverKey(null);
+    if (existingLeaveTasks.length > 0) {
+      await Promise.all(existingLeaveTasks.map((task) => removeTask(task.id)));
+      return;
+    }
+    await createTask({
+      title: "연가",
+      content: "",
+      taskTypeId: leaveTaskTypeId,
+      projectId: generalProjectId,
+      status: "NOT_DONE",
+      startAt: combineDateTimeToIso(dateKey, "09:00"),
+      endAt: combineDateTimeToIso(dateKey, "18:00"),
+      isMajor: false
+    });
+  }
   function getContextMenuTitle() {
     if (!contextMenu) {
       return void 0;
@@ -35396,6 +35500,7 @@ function DashboardPage() {
     }
     if (contextMenu.kind === "date") {
       const dateLabel2 = formatContextDateLabel(contextMenu.dateKey);
+      const hasLeave = getLeaveTasksForDate(contextMenu.dateKey).length > 0;
       return [
         {
           id: "ai-create-date-task",
@@ -35407,16 +35512,16 @@ function DashboardPage() {
         {
           id: "create-date-task",
           label: "일정 직접 추가",
-          description: "날짜가 미리 선택된 입력폼 열기",
+          description: "선택한 날짜로 입력 폼 열기",
           onSelect: () => openCreateTask(contextMenu.dateKey)
         },
         {
-          id: "select-date",
-          label: "해당 날짜 보기",
-          description: "Agenda를 이 날짜로 이동",
+          id: "toggle-date-leave",
+          label: hasLeave ? "연가 취소" : "연가 설정",
+          description: hasLeave ? "이 날짜의 연가 일정을 제거" : "09:00-18:00 연가 일정 생성",
+          tone: hasLeave ? "danger" : "default",
           onSelect: () => {
-            setSelectedDate(contextMenu.dateKey);
-            setCalendarViewMode("MONTH");
+            void toggleLeaveForDate(contextMenu.dateKey);
           }
         }
       ];
@@ -35570,6 +35675,52 @@ function DashboardPage() {
       ] })
     ] });
   }
+  function renderSelectedDatePopover(dateKey) {
+    const dayTasks = calendarTasks.filter((task) => getDateKey(task.startAt) === dateKey).sort(compareByStatusGroupThenStartAt);
+    if (dayTasks.length === 0) {
+      return null;
+    }
+    const isAllDoneDay = dayTasks.every((task) => task.status === "DONE");
+    return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: "calendar-day-detail-popover", "aria-label": `${formatDateLabel(dateKey)} 일정`, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: "선택일" }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: formatDateLabel(dateKey) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => openCreateTask(dateKey), children: "일정 추가" })
+      ] }),
+      dayTasks.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "calendar-day-detail-list", children: dayTasks.map((task) => {
+        const project = projectMap[task.projectId];
+        const taskType = typeMap[task.taskTypeId];
+        const hasConflict = (calendarConflictMap[task.id]?.length ?? 0) > 0;
+        const isProjectTinted = task.status === "NOT_DONE" || task.status === "DONE" && isAllDoneDay;
+        return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `calendar-day-detail-item ${task.status.toLowerCase()} ${isProjectTinted ? "project-tinted" : ""} ${isAllDoneDay ? "all-done-day" : ""} ${hasConflict ? "conflict" : ""}`,
+            style: isProjectTinted ? getCalendarDetailProjectStyle(project) : void 0,
+            onClick: () => openEditTask(task.id),
+            onContextMenu: (event) => openTaskContextMenu(event, task),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "calendar-day-detail-time", children: formatTaskTime(task, setting.timeFormat) }),
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: task.title }),
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { children: [
+                project?.name ?? "프로젝트 없음",
+                " · ",
+                taskType?.name ?? "종류 없음"
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "calendar-day-detail-badges", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: `status-badge ${task.status.toLowerCase()}`, children: STATUS_LABELS[task.status] }),
+                hasConflict ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "conflict-badge", children: "충돌" }) : null
+              ] })
+            ]
+          },
+          task.id
+        );
+      }) }) : null
+    ] });
+  }
   return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "dashboard-workspace", children: [
     /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: `dashboard-topbar compact-dashboard-topbar ${isTopbarExpanded ? "expanded" : "collapsed"}`, children: [
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
@@ -35633,103 +35784,19 @@ function DashboardPage() {
           /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "eyebrow", children: "CALENDAR" }),
           /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h3", { children: "일정 보드" })
         ] }) }),
-        calendarViewMode === "MONTH" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "dashboard-calendar-layout", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "dashboard-calendar-month", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
-            MonthCalendar,
-            {
-              selectedDate,
-              weekStartsOn: setting.weekStartsOn,
-              daySummaryByDate,
-              onSelectDate: setSelectedDate,
-              onDropTaskToDate: handleDropTaskToDate,
-              onCreateTaskAtDate: openCreateTask,
-              onDayContextMenu: openDateContextMenu
-            }
-          ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("aside", { className: "dashboard-agenda-panel", "aria-label": "선택한 날짜의 일정", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "eyebrow", children: "AGENDA" }),
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h4", { children: formatDateLabel(selectedDate) })
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { children: [
-                agendaTasks.length,
-                "/",
-                selectedDayTasks.length,
-                "개"
-              ] })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "agenda-stat-grid", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
-                "button",
-                {
-                  type: "button",
-                  className: `all ${agendaViewMode === "all" ? "active" : ""}`,
-                  onClick: () => {
-                    setAgendaViewPreference({ date: selectedDate, mode: agendaViewMode === "all" ? "priority" : "all" });
-                  },
-                  "aria-pressed": agendaViewMode === "all",
-                  children: [
-                    "전체 ",
-                    selectedDaySummary.total
-                  ]
-                }
-              ),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "not_done", children: [
-                "미완료 ",
-                selectedDaySummary.pending
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "on_hold", children: [
-                "보류 ",
-                selectedDaySummary.onHold
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "done", children: [
-                "완료 ",
-                selectedDaySummary.done
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "conflict", children: [
-                "충돌 ",
-                selectedDaySummary.conflicts
-              ] })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "agenda-timeline", children: [
-              agendaTasks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "agenda-empty", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: "이 날짜에는 일정이 없습니다." }),
-                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "달력의 날짜를 더블클릭하면 바로 일정을 추가할 수 있습니다." })
-              ] }) : null,
-              agendaTasks.map((task) => {
-                const project = projectMap[task.projectId];
-                const taskType = typeMap[task.taskTypeId];
-                const hasConflict = (calendarConflictMap[task.id]?.length ?? 0) > 0;
-                return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
-                  "button",
-                  {
-                    type: "button",
-                    className: `agenda-event-card ${task.status.toLowerCase()} ${hasConflict ? "conflict" : ""}`,
-                    style: { borderLeftColor: project?.color ?? "#6b7280" },
-                    onClick: () => openEditTask(task.id),
-                    onContextMenu: (event) => openTaskContextMenu(event, task),
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "agenda-event-time", children: formatTaskTime(task, setting.timeFormat) }),
-                      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: task.title }),
-                      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { children: [
-                        project?.name ?? "프로젝트 없음",
-                        " · ",
-                        taskType?.name ?? "종류 없음"
-                      ] }),
-                      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "agenda-event-badges", children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: `status-badge ${task.status.toLowerCase()}`, children: STATUS_LABELS[task.status] }),
-                        task.isMajor ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "major-tag", children: "중요" }) : null,
-                        hasConflict ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "conflict-badge", children: "충돌" }) : null
-                      ] })
-                    ]
-                  },
-                  task.id
-                );
-              })
-            ] })
-          ] })
-        ] }) : null,
+        calendarViewMode === "MONTH" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "dashboard-calendar-month", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          MonthCalendar,
+          {
+            selectedDate,
+            weekStartsOn: setting.weekStartsOn,
+            daySummaryByDate,
+            onSelectDate: handleCalendarDateSelect,
+            onDropTaskToDate: handleDropTaskToDate,
+            onCreateTaskAtDate: openCreateTask,
+            onDayContextMenu: openDateContextMenu,
+            renderSelectedDateDetails: datePopoverKey === selectedDate ? renderSelectedDatePopover : void 0
+          }
+        ) }) : null,
         calendarViewMode === "WEEK" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: "dashboard-schedule-view dashboard-week-view", "aria-label": "주간 일정", children: [
           /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { className: "schedule-view-header", children: [
             /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
