@@ -33496,11 +33496,11 @@ function AppShell() {
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "app-shell", children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("a", { className: "skip-link", href: "#main-content", children: "본문으로 건너뛰기" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: "app-top-nav", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "top-nav-brand", "aria-label": "AI Planner", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "brand-mark", children: "AP" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(NavLink, { className: "top-nav-brand", to: "/dashboard", "aria-label": "일정아이 대시보드로 이동", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "brand-mark", children: "AI" }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "eyebrow", children: "AI PLANNER" }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h1", { children: "업무 일정관리" })
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "eyebrow", children: "AI Planner" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h1", { children: "일정아이" })
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("nav", { className: "top-nav-list", "aria-label": "페이지 이동", children: NAV_ITEMS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(NavLink, { to: item.to, className: ({ isActive }) => `nav-link ${isActive ? "active" : ""}`, children: item.label }, item.to)) }),
@@ -35444,9 +35444,10 @@ function DashboardPage() {
       current.pending += task.status === "NOT_DONE" ? 1 : 0;
       current.onHold += task.status === "ON_HOLD" ? 1 : 0;
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
-      current.major += task.isMajor && isTaskActive(task.status) ? 1 : 0;
-      current.lunch += isTaskActive(task.status) && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
-      if (isTaskActive(task.status)) {
+      const isCanceled = isTaskCanceled(task.status);
+      current.major += task.isMajor && !isCanceled ? 1 : 0;
+      current.lunch += !isCanceled && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+      if (!isCanceled) {
         applyCalendarMarkerRules(current, task, { projectMap, typeMap });
       }
       if (isTaskVisibleOnBoard(task)) {
@@ -35696,20 +35697,18 @@ function DashboardPage() {
     const timeLabel = formatTaskTime(contextTask, setting.timeFormat);
     return [
       {
-        id: "complete-task",
-        label: "완료하기",
-        description: "일정을 완료 상태로 변경",
+        id: contextTask.status === "DONE" ? "reopen-task" : "complete-task",
+        label: contextTask.status === "DONE" ? "미완료로 변경" : "완료하기",
+        description: contextTask.status === "DONE" ? "완료된 일정을 미완료로 복구" : "일정을 완료 상태로 변경",
         tone: "primary",
-        disabled: contextTask.status === "DONE",
-        onSelect: () => changeTaskStatus(contextTask, "DONE")
+        onSelect: () => changeTaskStatus(contextTask, contextTask.status === "DONE" ? "NOT_DONE" : "DONE")
       },
       {
-        id: "cancel-task",
-        label: "취소하기",
-        description: "일정을 취소 상태로 변경",
-        tone: "danger",
-        disabled: contextTask.status === "CANCELED",
-        onSelect: () => changeTaskStatus(contextTask, "CANCELED")
+        id: contextTask.status === "CANCELED" ? "restore-task" : "cancel-task",
+        label: contextTask.status === "CANCELED" ? "미완료로 변경" : "취소하기",
+        description: contextTask.status === "CANCELED" ? "취소된 일정을 미완료로 복구" : "일정을 취소 상태로 변경",
+        tone: contextTask.status === "CANCELED" ? "default" : "danger",
+        onSelect: () => changeTaskStatus(contextTask, contextTask.status === "CANCELED" ? "NOT_DONE" : "CANCELED")
       },
       {
         id: "ai-edit-task",
@@ -37054,6 +37053,8 @@ function SettingsPage() {
   const [userContextDraft, setUserContextDraft] = (0, import_react12.useState)("");
   const [userContextMessage, setUserContextMessage] = (0, import_react12.useState)("");
   const [userContextError, setUserContextError] = (0, import_react12.useState)("");
+  const [aiConnectionStatus, setAiConnectionStatus] = (0, import_react12.useState)("idle");
+  const [aiConnectionMessage, setAiConnectionMessage] = (0, import_react12.useState)("");
   const [typeForm, setTypeForm] = (0, import_react12.useState)(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = (0, import_react12.useState)("");
   const [typeError, setTypeError] = (0, import_react12.useState)("");
@@ -37213,6 +37214,35 @@ function SettingsPage() {
       setUserContextError(contextResetError instanceof Error ? contextResetError.message : "user.md 초기화에 실패했습니다.");
     }
   }
+  async function handleCheckAiConnection() {
+    const startedAt = performance.now();
+    setAiConnectionStatus("checking");
+    setAiConnectionMessage("AI 연결을 확인하는 중입니다.");
+    try {
+      const response = await requestLlmResponse({
+        endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+        model: setting.llmModel ?? LLM_DEFAULT_MODEL,
+        apiKey: setting.llmApiKey ?? "",
+        messages: [
+          {
+            role: "system",
+            content: "You are a connection test endpoint. Reply with OK only."
+          },
+          {
+            role: "user",
+            content: "연결 확인"
+          }
+        ]
+      });
+      const elapsedMs = Math.max(1, Math.round(performance.now() - startedAt));
+      const modelName = (setting.llmModel ?? LLM_DEFAULT_MODEL).trim() || LLM_DEFAULT_MODEL;
+      setAiConnectionStatus("ok");
+      setAiConnectionMessage(`연결 성공 (${modelName}, ${elapsedMs}ms): ${response.slice(0, 80)}`);
+    } catch (connectionError) {
+      setAiConnectionStatus("error");
+      setAiConnectionMessage(connectionError instanceof Error ? connectionError.message : "AI 연결 확인에 실패했습니다.");
+    }
+  }
   async function handleTypeSubmit(event) {
     event.preventDefault();
     setTypeError("");
@@ -37370,10 +37400,24 @@ function SettingsPage() {
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "settings-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("header", { className: "settings-card-header", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "eyebrow", children: "AI" }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { children: "AI 연결" })
-        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "settings-card-header", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "eyebrow", children: "AI" }),
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { children: "AI 연결" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-soft",
+              onClick: () => {
+                void handleCheckAiConnection();
+              },
+              disabled: aiConnectionStatus === "checking",
+              children: aiConnectionStatus === "checking" ? "확인 중" : "연결 확인"
+            }
+          )
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "form-grid two-col", children: [
           /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { children: [
             "Endpoint 주소",
@@ -37421,7 +37465,8 @@ function SettingsPage() {
             )
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "description-text", children: "Endpoint, 모델명, API Key는 입력 즉시 저장됩니다." })
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "description-text", children: "Endpoint, 모델명, API Key는 입력 즉시 저장됩니다." }),
+        aiConnectionMessage ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: `endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`, role: "status", "aria-live": "polite", children: aiConnectionMessage }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "settings-card settings-context-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "settings-card-header", children: [

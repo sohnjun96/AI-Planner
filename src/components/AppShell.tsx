@@ -74,13 +74,13 @@ export function AppShell() {
       </a>
 
       <header className="app-top-nav">
-        <div className="top-nav-brand" aria-label="AI Planner">
-          <span className="brand-mark">AP</span>
+        <NavLink className="top-nav-brand" to="/dashboard" aria-label="일정아이 대시보드로 이동">
+          <span className="brand-mark">AI</span>
           <div>
-            <p className="eyebrow">AI PLANNER</p>
-            <h1>업무 일정관리</h1>
+            <p className="eyebrow">AI Planner</p>
+            <h1>일정아이</h1>
           </div>
-        </div>
+        </NavLink>
 
         <nav className="top-nav-list" aria-label="페이지 이동">
           {NAV_ITEMS.map((item) => (

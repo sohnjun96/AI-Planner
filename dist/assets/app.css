@@ -193,6 +193,9 @@ a {
   align-items: center;
   gap: 10px;
   min-width: 190px;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
 }
 .brand-mark {
   width: 28px;

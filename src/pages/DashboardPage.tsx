@@ -530,9 +530,10 @@ export function DashboardPage() {
       current.pending += task.status === "NOT_DONE" ? 1 : 0;
       current.onHold += task.status === "ON_HOLD" ? 1 : 0;
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
-      current.major += task.isMajor && isTaskActive(task.status) ? 1 : 0;
-      current.lunch += isTaskActive(task.status) && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
-      if (isTaskActive(task.status)) {
+      const isCanceled = isTaskCanceled(task.status);
+      current.major += task.isMajor && !isCanceled ? 1 : 0;
+      current.lunch += !isCanceled && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+      if (!isCanceled) {
         applyCalendarMarkerRules(current, task, { projectMap, typeMap });
       }
       if (isTaskVisibleOnBoard(task)) {
@@ -818,20 +819,18 @@ export function DashboardPage() {
 
     return [
       {
-        id: "complete-task",
-        label: "완료하기",
-        description: "일정을 완료 상태로 변경",
+        id: contextTask.status === "DONE" ? "reopen-task" : "complete-task",
+        label: contextTask.status === "DONE" ? "미완료로 변경" : "완료하기",
+        description: contextTask.status === "DONE" ? "완료된 일정을 미완료로 복구" : "일정을 완료 상태로 변경",
         tone: "primary",
-        disabled: contextTask.status === "DONE",
-        onSelect: () => changeTaskStatus(contextTask, "DONE"),
+        onSelect: () => changeTaskStatus(contextTask, contextTask.status === "DONE" ? "NOT_DONE" : "DONE"),
       },
       {
-        id: "cancel-task",
-        label: "취소하기",
-        description: "일정을 취소 상태로 변경",
-        tone: "danger",
-        disabled: contextTask.status === "CANCELED",
-        onSelect: () => changeTaskStatus(contextTask, "CANCELED"),
+        id: contextTask.status === "CANCELED" ? "restore-task" : "cancel-task",
+        label: contextTask.status === "CANCELED" ? "미완료로 변경" : "취소하기",
+        description: contextTask.status === "CANCELED" ? "취소된 일정을 미완료로 복구" : "일정을 취소 상태로 변경",
+        tone: contextTask.status === "CANCELED" ? "default" : "danger",
+        onSelect: () => changeTaskStatus(contextTask, contextTask.status === "CANCELED" ? "NOT_DONE" : "CANCELED"),
       },
       {
         id: "ai-edit-task",

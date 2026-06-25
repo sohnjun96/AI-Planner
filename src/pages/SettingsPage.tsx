@@ -9,6 +9,7 @@ import {
   pickRandomPresetColor,
 } from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { requestLlmResponse } from "../agent/llmClient";
 import { formatDateTime } from "../utils/date";
 
 interface TypeFormState {
@@ -30,6 +31,7 @@ function createEmptyTypeForm(): TypeFormState {
 }
 
 const TYPE_FORM_AUTOSAVE_DELAY_MS = 700;
+type AiConnectionStatus = "idle" | "checking" | "ok" | "error";
 
 interface TaskTypeInputPayload {
   id?: string;
@@ -90,6 +92,8 @@ export function SettingsPage() {
   const [userContextDraft, setUserContextDraft] = useState("");
   const [userContextMessage, setUserContextMessage] = useState("");
   const [userContextError, setUserContextError] = useState("");
+  const [aiConnectionStatus, setAiConnectionStatus] = useState<AiConnectionStatus>("idle");
+  const [aiConnectionMessage, setAiConnectionMessage] = useState("");
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -280,6 +284,37 @@ export function SettingsPage() {
     }
   }
 
+  async function handleCheckAiConnection() {
+    const startedAt = performance.now();
+    setAiConnectionStatus("checking");
+    setAiConnectionMessage("AI 연결을 확인하는 중입니다.");
+
+    try {
+      const response = await requestLlmResponse({
+        endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+        model: setting.llmModel ?? LLM_DEFAULT_MODEL,
+        apiKey: setting.llmApiKey ?? "",
+        messages: [
+          {
+            role: "system",
+            content: "You are a connection test endpoint. Reply with OK only.",
+          },
+          {
+            role: "user",
+            content: "연결 확인",
+          },
+        ],
+      });
+      const elapsedMs = Math.max(1, Math.round(performance.now() - startedAt));
+      const modelName = (setting.llmModel ?? LLM_DEFAULT_MODEL).trim() || LLM_DEFAULT_MODEL;
+      setAiConnectionStatus("ok");
+      setAiConnectionMessage(`연결 성공 (${modelName}, ${elapsedMs}ms): ${response.slice(0, 80)}`);
+    } catch (connectionError) {
+      setAiConnectionStatus("error");
+      setAiConnectionMessage(connectionError instanceof Error ? connectionError.message : "AI 연결 확인에 실패했습니다.");
+    }
+  }
+
   async function handleTypeSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTypeError("");
@@ -453,6 +488,16 @@ export function SettingsPage() {
               <p className="eyebrow">AI</p>
               <h3>AI 연결</h3>
             </div>
+            <button
+              type="button"
+              className="btn btn-soft"
+              onClick={() => {
+                void handleCheckAiConnection();
+              }}
+              disabled={aiConnectionStatus === "checking"}
+            >
+              {aiConnectionStatus === "checking" ? "확인 중" : "연결 확인"}
+            </button>
           </header>
 
           <div className="form-grid two-col">
@@ -497,6 +542,11 @@ export function SettingsPage() {
           </div>
 
           <p className="description-text">Endpoint, 모델명, API Key는 입력 즉시 저장됩니다.</p>
+          {aiConnectionMessage ? (
+            <p className={`endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`} role="status" aria-live="polite">
+              {aiConnectionMessage}
+            </p>
+          ) : null}
         </section>
 
         <section className="settings-card settings-context-card">

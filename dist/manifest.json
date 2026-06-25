@@ -1,10 +1,10 @@
 ﻿{
   "manifest_version": 3,
-  "name": "업무 일정관리",
-  "description": "달력, 프로젝트, 일정 종류와 AI 입력으로 업무 일정을 관리하는 확장 프로그램입니다.",
-  "version": "0.1.0",
+  "name": "일정아이",
+  "description": "달력, 프로젝트, 일정 종류와 AI 입력으로 일정을 관리하는 확장 프로그램입니다.",
+  "version": "1.0.0",
   "action": {
-    "default_title": "업무 일정관리 열기"
+    "default_title": "일정아이 열기"
   },
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": ["<all_urls>"],
