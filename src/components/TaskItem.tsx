@@ -161,6 +161,18 @@ export function TaskItem({
           >
             {STATUS_LABELS.DONE}
           </button>
+          <button
+            type="button"
+            className={`btn btn-soft ${task.status === "CANCELED" ? "is-active" : ""}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onStatusChange("CANCELED");
+            }}
+            aria-pressed={task.status === "CANCELED"}
+            aria-label="상태를 취소로 변경"
+          >
+            {STATUS_LABELS.CANCELED}
+          </button>
         </div>
       ) : null}
     </article>

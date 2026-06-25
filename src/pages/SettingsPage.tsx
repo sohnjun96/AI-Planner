@@ -102,9 +102,14 @@ export function SettingsPage() {
   const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
 
   useEffect(() => {
-    setUserContextDraft(userContext.markdown);
-    setUserContextMessage("");
-    setUserContextError("");
+    const timerId = window.setTimeout(() => {
+      setUserContextDraft(userContext.markdown);
+      setUserContextMessage("");
+      setUserContextError("");
+    }, 0);
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [userContext.markdown, userContext.updatedAt]);
 
   useEffect(() => {

@@ -8,6 +8,7 @@ import { useAppData } from "../context/AppDataContext";
 import type { Project, Task, TaskFormInput, TaskStatus } from "../models";
 import { addDays, compareByStartAtAsc, getDateKey } from "../utils/date";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
+import { isTaskActive, isTaskDone } from "../utils/taskStatus";
 
 interface ProjectFormState {
   id?: string;
@@ -135,9 +136,14 @@ function ProjectEditorPanel({ initialProject, createMode, onSaveProject, onDelet
   );
 
   useEffect(() => {
-    setForm(createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject));
-    setError("");
-    setSuccess("");
+    const timerId = window.setTimeout(() => {
+      setForm(createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject));
+      setError("");
+      setSuccess("");
+    }, 0);
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [createMode, initialProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -325,18 +331,21 @@ export function ProjectsPage() {
   const projectStats = useMemo(() => {
     const todayKey = getDateKey(new Date());
     const weekEndKey = getDateKey(addDays(new Date(), 7));
-    const map: Record<string, { total: number; active: number; done: number; week: number; conflicts: number; recent: Task[]; completion: number }> = {};
+    const map: Record<string, { total: number; active: number; done: number; canceled: number; week: number; conflicts: number; recent: Task[]; completion: number }> = {};
 
     for (const project of projects) {
-      map[project.id] = { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+      map[project.id] = { total: 0, active: 0, done: 0, canceled: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
     }
 
     for (const task of tasks) {
-      const stats = map[task.projectId] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+      const stats = map[task.projectId] ?? { total: 0, active: 0, done: 0, canceled: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
       stats.total += 1;
-      if (task.status === "DONE") {
+      if (isTaskDone(task.status)) {
         stats.done += 1;
-      } else {
+      } else if (task.status === "CANCELED") {
+        stats.canceled += 1;
+      }
+      if (isTaskActive(task.status)) {
         stats.active += 1;
       }
       const taskKey = getDateKey(task.startAt);
@@ -351,7 +360,8 @@ export function ProjectsPage() {
     }
 
     for (const stats of Object.values(map)) {
-      stats.completion = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
+      const completionBase = Math.max(0, stats.total - stats.canceled);
+      stats.completion = completionBase > 0 ? Math.round((stats.done / completionBase) * 100) : 0;
       stats.recent = stats.recent.sort(compareByStartAtAsc).slice(0, 2);
     }
 
@@ -374,11 +384,11 @@ export function ProjectsPage() {
         }
 
         if (overviewFilter === "active") {
-          return task.status !== "DONE";
+          return isTaskActive(task.status);
         }
 
         if (overviewFilter === "done") {
-          return task.status === "DONE";
+          return isTaskDone(task.status);
         }
 
         const taskKey = getDateKey(task.startAt);
@@ -511,7 +521,7 @@ export function ProjectsPage() {
         ) : null}
 
         {sortedProjects.map((project) => {
-          const stats = projectStats[project.id] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+          const stats = projectStats[project.id] ?? { total: 0, active: 0, done: 0, canceled: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
           return (
             <button
               key={project.id}
@@ -609,6 +619,7 @@ export function ProjectsPage() {
             <div className="overview-stat-row">
               <span>진행 {projectStats[selectedProject.id]?.active ?? 0}</span>
               <span>완료 {projectStats[selectedProject.id]?.done ?? 0}</span>
+              <span>취소 {projectStats[selectedProject.id]?.canceled ?? 0}</span>
               <span>이번 주 {projectStats[selectedProject.id]?.week ?? 0}</span>
               <span>충돌 {projectStats[selectedProject.id]?.conflicts ?? 0}</span>
             </div>

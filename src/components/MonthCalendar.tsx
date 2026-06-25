@@ -16,6 +16,7 @@ export interface CalendarDayMarker {
 export interface CalendarDaySummary {
   total: number;
   done: number;
+  canceled: number;
   pending: number;
   onHold: number;
   conflicts: number;
@@ -39,6 +40,7 @@ interface MonthCalendarProps {
 const EMPTY_SUMMARY: CalendarDaySummary = {
   total: 0,
   done: 0,
+  canceled: 0,
   pending: 0,
   onHold: 0,
   conflicts: 0,
@@ -134,6 +136,7 @@ export function MonthCalendar({
     let pending = 0;
     let onHold = 0;
     let done = 0;
+    let canceled = 0;
     let conflicts = 0;
 
     const lastDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
@@ -144,10 +147,11 @@ export function MonthCalendar({
       pending += summary.pending;
       onHold += summary.onHold;
       done += summary.done;
+      canceled += summary.canceled;
       conflicts += summary.conflicts;
     }
 
-    return { total, pending, onHold, done, conflicts };
+    return { total, pending, onHold, done, canceled, conflicts };
   }, [daySummaryByDate, visibleMonth]);
 
   function moveSelectionByDays(daysToMove: number) {
@@ -240,6 +244,7 @@ export function MonthCalendar({
         <span className="not_done">미완료 {monthStats.pending}건</span>
         <span className="on_hold">보류 {monthStats.onHold}건</span>
         <span className="done">완료 {monthStats.done}건</span>
+        <span className="canceled">취소 {monthStats.canceled}건</span>
         <span className="conflict">충돌 {monthStats.conflicts}건</span>
       </div>
 
@@ -258,7 +263,8 @@ export function MonthCalendar({
           const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
           const visibleIndicators = markers.filter((marker) => marker.tone !== "lunch");
           const density = getDensityLevel(summary.total);
-          const completionRatio = summary.total > 0 ? Math.round((summary.done / summary.total) * 100) : 0;
+          const completionBase = Math.max(0, summary.total - summary.canceled);
+          const completionRatio = completionBase > 0 ? Math.round((summary.done / completionBase) * 100) : 0;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
           const ariaLabel = [
@@ -266,6 +272,7 @@ export function MonthCalendar({
             summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
             summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
             summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
+            summary.canceled > 0 ? `취소 ${summary.canceled}건` : "",
             summary.lunch > 0 ? `점심 ${summary.lunch}건` : "",
             ...markers.map((marker) => `${marker.detailLabel ?? marker.label} ${marker.count}건`),
             summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
@@ -383,6 +390,7 @@ export function MonthCalendar({
                   ))}
                   {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
                   {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
+                  {summary.canceled > 0 ? <span className="calendar-indicator canceled">취소 {summary.canceled}</span> : null}
                   {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
                   {summary.conflicts > 0 ? <span className="calendar-indicator conflict">충돌 {summary.conflicts}</span> : null}
                 </div>

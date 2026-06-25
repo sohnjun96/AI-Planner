@@ -1,4 +1,4 @@
-export type TaskStatus = "NOT_DONE" | "ON_HOLD" | "DONE";
+export type TaskStatus = "NOT_DONE" | "ON_HOLD" | "DONE" | "CANCELED";
 export type RecurrencePattern = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
 
 export interface Task {
@@ -14,6 +14,7 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  canceledAt?: string;
   recurrencePattern?: RecurrencePattern;
   recurrenceGroupId?: string;
   recurrenceIndex?: number;

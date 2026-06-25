@@ -17,6 +17,7 @@ import {
   shiftIsoToDateKey,
 } from "../utils/date";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
+import { isTaskActive, isTaskCanceled, isTaskDone, isTaskVisibleOnBoard } from "../utils/taskStatus";
 
 const GLOBAL_MEMO_KEY = "global";
 
@@ -50,6 +51,7 @@ type DashboardContextMenu =
 const EMPTY_DAY_SUMMARY: CalendarDaySummary = {
   total: 0,
   done: 0,
+  canceled: 0,
   pending: 0,
   onHold: 0,
   conflicts: 0,
@@ -158,7 +160,18 @@ function getCalendarDetailProjectStyle(project?: Project): CSSProperties {
 }
 
 function compareByStatusThenStartAt(a: Task, b: Task): number {
-  const rank = (status: TaskStatus) => (status === "DONE" ? 1 : 0);
+  const rank = (status: TaskStatus) => {
+    if (status === "NOT_DONE") {
+      return 0;
+    }
+    if (status === "ON_HOLD") {
+      return 1;
+    }
+    if (status === "DONE") {
+      return 2;
+    }
+    return 3;
+  };
   const rankDiff = rank(a.status) - rank(b.status);
   if (rankDiff !== 0) {
     return rankDiff;
@@ -247,8 +260,15 @@ function addCalendarMarker(summary: CalendarDaySummary, rule: CalendarMarkerRule
     return;
   }
 
-  const { matches: _matches, ...marker } = rule;
-  summary.markers.push({ ...marker, count: 1 });
+  summary.markers.push({
+    id: rule.id,
+    label: rule.label,
+    detailLabel: rule.detailLabel,
+    tone: rule.tone,
+    cellClass: rule.cellClass,
+    priority: rule.priority,
+    count: 1,
+  });
 }
 
 function applyCalendarMarkerRules(
@@ -271,19 +291,22 @@ function getSchedulePriorityTasks(tasks: Task[], mode: AgendaViewMode): Task[] {
     return tasks;
   }
 
-  return tasks.filter((task) => task.status === "NOT_DONE" || task.status === "ON_HOLD");
+  return tasks.filter(isTaskVisibleOnBoard);
 }
 
 function summarizeTasks(tasks: Task[], conflictMap: Record<string, string[]>): CalendarDaySummary {
   return tasks.reduce<CalendarDaySummary>(
     (summary, task) => {
       summary.total += 1;
-      summary.done += task.status === "DONE" ? 1 : 0;
+      summary.done += isTaskDone(task.status) ? 1 : 0;
+      summary.canceled += isTaskCanceled(task.status) ? 1 : 0;
       summary.pending += task.status === "NOT_DONE" ? 1 : 0;
       summary.onHold += task.status === "ON_HOLD" ? 1 : 0;
       summary.conflicts += (conflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       summary.major += task.isMajor ? 1 : 0;
-      summary.titles.push(task.title);
+      if (isTaskVisibleOnBoard(task)) {
+        summary.titles.push(task.title);
+      }
       return summary;
     },
     { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] },
@@ -323,7 +346,10 @@ function compareByStatusGroupThenStartAt(a: Task, b: Task): number {
     if (status === "ON_HOLD") {
       return 1;
     }
-    return 2;
+    if (status === "DONE") {
+      return 2;
+    }
+    return 3;
   };
   const rankDiff = rank(a.status) - rank(b.status);
   if (rankDiff !== 0) {
@@ -382,7 +408,7 @@ function CompactTaskCard({
         </span>
 
         <div className="compact-status-row" aria-label={`${task.title} 상태 변경`}>
-          {(["NOT_DONE", "ON_HOLD", "DONE"] as TaskStatus[]).map((status) => (
+          {(["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"] as TaskStatus[]).map((status) => (
             <button
               key={status}
               type="button"
@@ -439,7 +465,7 @@ export function DashboardPage() {
   const calendarConflictMap = useMemo(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
 
   const todayTasks = useMemo(
-    () => tasks.filter((task) => getDateKey(task.startAt) === todayKey).sort(compareByStatusThenStartAt),
+    () => tasks.filter((task) => getDateKey(task.startAt) === todayKey && isTaskVisibleOnBoard(task)).sort(compareByStatusThenStartAt),
     [tasks, todayKey],
   );
 
@@ -447,12 +473,12 @@ export function DashboardPage() {
     () =>
       tasks
         .filter((task) => isSubmissionTaskType(task, typeMap))
-        .filter((task) => task.status !== "DONE" || getDateKey(task.startAt) >= todayKey)
+        .filter(isTaskVisibleOnBoard)
         .sort(compareByStatusThenStartAt),
-    [tasks, todayKey, typeMap],
+    [tasks, typeMap],
   );
 
-  const calendarListGroups = useMemo(() => groupTasksByDate(calendarTasks), [calendarTasks]);
+  const calendarListGroups = useMemo(() => groupTasksByDate(calendarTasks.filter(isTaskVisibleOnBoard)), [calendarTasks]);
   const upcomingCalendarListGroups = useMemo(
     () => calendarListGroups.filter((group) => group.dateKey >= todayKey),
     [calendarListGroups, todayKey],
@@ -466,7 +492,7 @@ export function DashboardPage() {
         return {
           date,
           key,
-          tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key).sort(compareByStartAtAsc),
+          tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key && isTaskVisibleOnBoard(task)).sort(compareByStartAtAsc),
         };
       }),
     [calendarTasks, weekStart],
@@ -499,14 +525,19 @@ export function DashboardPage() {
       const key = getDateKey(task.startAt);
       const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
       current.total += 1;
-      current.done += task.status === "DONE" ? 1 : 0;
+      current.done += isTaskDone(task.status) ? 1 : 0;
+      current.canceled += isTaskCanceled(task.status) ? 1 : 0;
       current.pending += task.status === "NOT_DONE" ? 1 : 0;
       current.onHold += task.status === "ON_HOLD" ? 1 : 0;
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
-      current.major += task.isMajor ? 1 : 0;
-      current.lunch += isLunchTask(task, typeMap, projectMap) ? 1 : 0;
-      applyCalendarMarkerRules(current, task, { projectMap, typeMap });
-      current.titles.push(task.title);
+      current.major += task.isMajor && isTaskActive(task.status) ? 1 : 0;
+      current.lunch += isTaskActive(task.status) && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+      if (isTaskActive(task.status)) {
+        applyCalendarMarkerRules(current, task, { projectMap, typeMap });
+      }
+      if (isTaskVisibleOnBoard(task)) {
+        current.titles.push(task.title);
+      }
       summaryMap[key] = current;
       return summaryMap;
     }, {});
@@ -552,7 +583,12 @@ export function DashboardPage() {
       return;
     }
     if ((daySummaryByDate[datePopoverKey]?.total ?? 0) === 0) {
-      setDatePopoverKey(null);
+      const timerId = window.setTimeout(() => {
+        setDatePopoverKey(null);
+      }, 0);
+      return () => {
+        window.clearTimeout(timerId);
+      };
     }
   }, [datePopoverKey, daySummaryByDate]);
 
@@ -634,6 +670,7 @@ export function DashboardPage() {
     return tasks.filter(
       (task) =>
         getDateKey(task.startAt) === dateKey &&
+        isTaskActive(task.status) &&
         isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"]),
     );
   }
@@ -776,28 +813,29 @@ export function DashboardPage() {
       return [];
     }
 
-    const nextStatus: TaskStatus = contextTask.status === "DONE" ? "ON_HOLD" : "DONE";
-    const statusLabel = contextTask.status === "DONE" ? "보류하기" : "완료하기";
     const dateLabel = formatContextDateLabel(getDateKey(contextTask.startAt));
     const timeLabel = formatTaskTime(contextTask, setting.timeFormat);
 
     return [
       {
-        id: "toggle-task-status",
-        label: statusLabel,
-        description: contextTask.status === "DONE" ? "완료된 일정을 보류로 변경" : "일정을 완료로 변경",
+        id: "complete-task",
+        label: "완료하기",
+        description: "일정을 완료 상태로 변경",
         tone: "primary",
-        onSelect: () => changeTaskStatus(contextTask, nextStatus),
+        disabled: contextTask.status === "DONE",
+        onSelect: () => changeTaskStatus(contextTask, "DONE"),
       },
       {
-        id: "edit-task",
-        label: "수정",
-        description: "일정 수정 모달 열기",
-        onSelect: () => openEditTask(contextTask.id),
+        id: "cancel-task",
+        label: "취소하기",
+        description: "일정을 취소 상태로 변경",
+        tone: "danger",
+        disabled: contextTask.status === "CANCELED",
+        onSelect: () => changeTaskStatus(contextTask, "CANCELED"),
       },
       {
         id: "ai-edit-task",
-        label: "AI로 수정",
+        label: "AI 일정 수정",
         description: "이 일정을 기준으로 수정 요청",
         onSelect: () =>
           openAiSchedule(
@@ -926,6 +964,7 @@ export function DashboardPage() {
         <span className="not_done">미완료 {summary.pending}</span>
         <span className="on_hold">보류 {summary.onHold}</span>
         <span className="done">완료 {summary.done}</span>
+        <span className="canceled">취소 {summary.canceled}</span>
         <span className="conflict">충돌 {summary.conflicts}</span>
       </div>
     );

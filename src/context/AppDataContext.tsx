@@ -23,9 +23,11 @@ import type {
   TaskFormInput,
   TaskType,
   UserContext,
+  UserContextRule,
   UserContextSuggestion,
 } from "../models";
 import { toIsoNow } from "../utils/date";
+import { isTaskActive, isTaskCanceled, isTaskDone } from "../utils/taskStatus";
 
 interface ProjectInput {
   id?: string;
@@ -134,10 +136,6 @@ function getId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-function isTaskStatusDone(status: Task["status"]): boolean {
-  return status === "DONE";
-}
-
 function trimTaskInput(input: TaskFormInput): TaskFormInput {
   return {
     ...input,
@@ -174,6 +172,7 @@ function shiftIsoByPattern(iso: string, pattern: RecurrencePattern, step: number
 }
 
 function toTaskCoreRecord(input: TaskFormInput): Omit<Task, "id" | "createdAt" | "updatedAt" | "recurrenceGroupId" | "recurrenceIndex"> {
+  const now = toIsoNow();
   return {
     title: input.title.trim(),
     content: input.content.trim(),
@@ -183,7 +182,8 @@ function toTaskCoreRecord(input: TaskFormInput): Omit<Task, "id" | "createdAt" |
     startAt: input.startAt,
     endAt: input.endAt || undefined,
     isMajor: input.isMajor,
-    completedAt: isTaskStatusDone(input.status) ? toIsoNow() : undefined,
+    completedAt: isTaskDone(input.status) ? now : undefined,
+    canceledAt: isTaskCanceled(input.status) ? now : undefined,
     recurrencePattern: undefined,
   };
 }
@@ -279,6 +279,140 @@ function buildUserContextSuggestionLine(
     suggestion.note ? compactText(suggestion.note, 90) : "",
   ].filter(Boolean);
   return `- ${parts.join(" / ")}`;
+}
+
+const AI_LEARNED_CONTEXT_HEADING = "## AI가 학습한 규칙";
+
+function normalizeContextToken(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function normalizeContextTriggers(items: string[]): string[] {
+  return items.map(normalizeContextToken).filter(Boolean);
+}
+
+function hasTriggerOverlap(left: string[], right: string[]): boolean {
+  const leftSet = new Set(normalizeContextTriggers(left));
+  return normalizeContextTriggers(right).some((item) => leftSet.has(item));
+}
+
+function isSameContextRule(rule: UserContextRule, suggestion: UserContextSuggestion): boolean {
+  return (
+    rule.category === suggestion.category &&
+    hasTriggerOverlap(rule.trigger, suggestion.trigger) &&
+    (rule.defaultTime ?? "") === (suggestion.defaultTime ?? "") &&
+    (rule.projectId ?? "") === (suggestion.projectId ?? "") &&
+    (rule.taskTypeId ?? "") === (suggestion.taskTypeId ?? "") &&
+    Boolean(rule.isMajor) === Boolean(suggestion.isMajor)
+  );
+}
+
+function isConflictingContextRule(rule: UserContextRule, suggestion: UserContextSuggestion): boolean {
+  if (!hasTriggerOverlap(rule.trigger, suggestion.trigger)) {
+    return false;
+  }
+
+  if (suggestion.defaultTime && rule.defaultTime) {
+    return true;
+  }
+
+  if (suggestion.projectId && rule.projectId) {
+    return suggestion.projectId === rule.projectId;
+  }
+
+  if (suggestion.taskTypeId && rule.taskTypeId) {
+    return suggestion.taskTypeId === rule.taskTypeId;
+  }
+
+  if (suggestion.isMajor !== undefined && rule.isMajor !== undefined) {
+    return true;
+  }
+
+  return rule.category === suggestion.category;
+}
+
+function lineHasTimeExpression(line: string): boolean {
+  return /\b\d{1,2}:\d{2}\b/.test(line) || /\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?/.test(line);
+}
+
+function lineHasAnyToken(line: string, tokens: string[]): boolean {
+  const normalizedLine = line.toLowerCase();
+  return tokens.some((token) => normalizedLine.includes(token));
+}
+
+function isConflictingContextLine(
+  line: string,
+  suggestion: UserContextSuggestion,
+  projectName: string | undefined,
+  taskTypeName: string | undefined,
+): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("-")) {
+    return false;
+  }
+
+  const triggerTokens = normalizeContextTriggers(suggestion.trigger);
+  const labelToken = normalizeContextToken(suggestion.label);
+  const hasTrigger = triggerTokens.length > 0 ? lineHasAnyToken(trimmed, triggerTokens) : Boolean(labelToken && trimmed.toLowerCase().includes(labelToken));
+  if (!hasTrigger) {
+    return false;
+  }
+
+  if (suggestion.defaultTime) {
+    return lineHasTimeExpression(trimmed) || trimmed.includes("기본 시간") || trimmed.includes("시간");
+  }
+
+  if (suggestion.projectId) {
+    return Boolean(projectName && trimmed.includes(projectName));
+  }
+
+  if (suggestion.taskTypeId) {
+    return Boolean(taskTypeName && trimmed.includes(taskTypeName));
+  }
+
+  if (suggestion.isMajor !== undefined) {
+    return trimmed.includes("중요");
+  }
+
+  return trimmed.includes(suggestion.category) || trimmed.includes("규칙");
+}
+
+function mergeUserContextSuggestionLine(
+  markdown: string,
+  suggestion: UserContextSuggestion,
+  line: string,
+  projectName: string | undefined,
+  taskTypeName: string | undefined,
+): string {
+  if (markdown.includes(line)) {
+    return markdown;
+  }
+
+  const lines = markdown.trimEnd().split(/\r?\n/);
+  const nextLines: string[] = [];
+  let replaced = false;
+
+  for (const existingLine of lines) {
+    if (isConflictingContextLine(existingLine, suggestion, projectName, taskTypeName)) {
+      if (!replaced) {
+        nextLines.push(line);
+        replaced = true;
+      }
+      continue;
+    }
+    nextLines.push(existingLine);
+  }
+
+  if (replaced) {
+    return `${nextLines.join("\n").trimEnd()}\n`;
+  }
+
+  const headingIndex = nextLines.findIndex((existingLine) => existingLine.trim() === AI_LEARNED_CONTEXT_HEADING);
+  if (headingIndex >= 0) {
+    return `${nextLines.join("\n").trimEnd()}\n${line}\n`;
+  }
+
+  return `${nextLines.join("\n").trimEnd()}\n\n${AI_LEARNED_CONTEXT_HEADING}\n${line}\n`;
 }
 
 function getChromeStorageLocal(): {
@@ -462,7 +596,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           isMajor: normalized.isMajor,
           createdAt: now,
           updatedAt: now,
-          completedAt: isTaskStatusDone(normalized.status) ? now : undefined,
+          completedAt: isTaskDone(normalized.status) ? now : undefined,
+          canceledAt: isTaskCanceled(normalized.status) ? now : undefined,
           recurrencePattern: effectivePattern,
           recurrenceGroupId,
           recurrenceIndex: effectivePattern === "NONE" ? undefined : index,
@@ -496,7 +631,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         recurrencePattern: existing.recurrencePattern,
         recurrenceGroupId: existing.recurrenceGroupId,
         recurrenceIndex: existing.recurrenceIndex,
-        completedAt: isTaskStatusDone(normalized.status) ? existing.completedAt ?? now : undefined,
+        completedAt: isTaskDone(normalized.status) ? existing.completedAt ?? now : undefined,
+        canceledAt: isTaskCanceled(normalized.status) ? existing.canceledAt ?? now : undefined,
         updatedAt: now,
       };
 
@@ -742,18 +878,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     const projectName = suggestion.projectId ? (await db.projects.get(suggestion.projectId))?.name : undefined;
     const taskTypeName = suggestion.taskTypeId ? (await db.taskTypes.get(suggestion.taskTypeId))?.name : undefined;
     const line = buildUserContextSuggestionLine(suggestion, projectName, taskTypeName);
-    const alreadyExists = current.markdown.includes(line);
-    const nextMarkdown = alreadyExists
-      ? current.markdown
-      : `${current.markdown.trim()}\n\n## AI가 학습한 규칙\n${line}\n`;
-    const normalizedTrigger = suggestion.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|");
-    const hasDuplicateRule = current.rules.some((rule) => (
-      rule.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|") === normalizedTrigger &&
-      (rule.defaultTime ?? "") === (suggestion.defaultTime ?? "") &&
-      (rule.projectId ?? "") === (suggestion.projectId ?? "") &&
-      (rule.taskTypeId ?? "") === (suggestion.taskTypeId ?? "") &&
-      Boolean(rule.isMajor) === Boolean(suggestion.isMajor)
-    ));
+    const nextMarkdown = mergeUserContextSuggestionLine(current.markdown, suggestion, line, projectName, taskTypeName);
     const nextRule = {
       id: getId("context-rule"),
       category: suggestion.category,
@@ -769,10 +894,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       createdAt: now,
       updatedAt: now,
     };
-    const defaultRules = current.rules.filter((rule) => rule.source === "default");
-    const customRules = current.rules.filter((rule) => rule.source !== "default");
-    const nextRules = hasDuplicateRule
-      ? current.rules
+    const retainedRules = current.rules.filter((rule) => !isConflictingContextRule(rule, suggestion) || isSameContextRule(rule, suggestion));
+    const hasSameRule = retainedRules.some((rule) => isSameContextRule(rule, suggestion));
+    const defaultRules = retainedRules.filter((rule) => rule.source === "default");
+    const customRules = retainedRules.filter((rule) => rule.source !== "default");
+    const nextRules = hasSameRule
+      ? retainedRules
       : [
           ...defaultRules,
           ...customRules.slice(Math.max(0, customRules.length - Math.max(0, 30 - defaultRules.length - 1))),
@@ -920,12 +1047,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         notificationsEnabled: Boolean(setting.notificationsEnabled),
         notifyBeforeMinutes: Math.max(0, Math.floor(setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES)),
       },
-      tasks: tasks.map((task) => ({
-        id: task.id,
-        title: task.title,
-        startAt: task.startAt,
-        status: task.status,
-      })),
+      tasks: tasks
+        .filter((task) => isTaskActive(task.status))
+        .map((task) => ({
+          id: task.id,
+          title: task.title,
+          startAt: task.startAt,
+          status: task.status,
+        })),
     });
   }, [tasks, setting.notificationsEnabled, setting.notifyBeforeMinutes]);
 

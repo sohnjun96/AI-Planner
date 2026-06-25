@@ -46,7 +46,7 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 function isTaskStatus(value: unknown): value is TaskStatus {
-  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
+  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
 }
 
 function toTaskInput(task: Task): TaskFormInput {

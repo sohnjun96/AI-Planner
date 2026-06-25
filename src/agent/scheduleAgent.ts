@@ -108,6 +108,7 @@ const MAX_TOOL_ROUNDS = 4;
 const NOT_DONE_STATUS_ALIASES = ["not_done", "notdone", "todo", "pending", "in_progress", "\ubbf8\uc644\ub8cc", "\ub300\uae30"] as const;
 const ON_HOLD_STATUS_ALIASES = ["on_hold", "hold", "paused", "\ubcf4\ub958", "\ud640\ub4dc"] as const;
 const DONE_STATUS_ALIASES = ["done", "complete", "completed", "\uc644\ub8cc", "\ub05d\ub0a8"] as const;
+const CANCELED_STATUS_ALIASES = ["canceled", "cancelled", "cancel", "cancel_task", "\ucde8\uc18c", "\ucde8\uc18c\ub428", "\ucde8\uc18c\ud558\uae30"] as const;
 
 const DIRECT_OPERATION_KEYS = [
   "operations",
@@ -189,7 +190,7 @@ Hard output rules:
 6. Never return a summary-only proposal when the user asked to create, update, or delete schedules. The actual draft must be in proposal.operations.
 7. If required information is missing or ambiguous, set needsUserInput to true, put one clear Korean question in userQuestion, set toolCalls to [], and set proposal.operations to [].
 8. Use only projectId values from knownChoices.projectList and taskTypeId values from knownChoices.taskTypeList. If the user gives a name, map it to the matching id. If it is unclear, ask a question.
-9. Use only these status values: NOT_DONE, ON_HOLD, DONE.
+9. Use only these status values: NOT_DONE, ON_HOLD, DONE, CANCELED. If the user asks to cancel an existing schedule, update its status to CANCELED instead of deleting it.
 10. Interpret user dates and times in Asia/Seoul using the input now value. For startAt/endAt, prefer local ISO without a timezone, for example 2026-02-11T09:00. The app will normalize it.
 11. For repeated schedules, create one create_task operation per occurrence unless the repeat rule is unclear.
 12. If the user asks for multiple schedules, return multiple operations in the same operations array.
@@ -248,7 +249,7 @@ contextSuggestions item schema:
 Allowed tools:
 - list_projects: {}
 - list_task_types: {}
-- search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE", "date"?: "YYYY-MM-DD", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "limit"?: number }
+- search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE"|"CANCELED", "date"?: "YYYY-MM-DD", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "limit"?: number }
 - get_task: { "taskId": string }
 - current_datetime: {}
 
@@ -346,7 +347,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isTaskStatus(value: unknown): value is TaskStatus {
-  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
+  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
 }
 
 function normalizeTaskStatus(value: unknown): TaskStatus | undefined {
@@ -368,6 +369,9 @@ function normalizeTaskStatus(value: unknown): TaskStatus | undefined {
   }
   if (DONE_STATUS_ALIASES.includes(normalized as (typeof DONE_STATUS_ALIASES)[number])) {
     return "DONE";
+  }
+  if (CANCELED_STATUS_ALIASES.includes(normalized as (typeof CANCELED_STATUS_ALIASES)[number])) {
+    return "CANCELED";
   }
   return undefined;
 }
@@ -1065,7 +1069,7 @@ function buildPromptMessages(input: RunScheduleAgentInput, toolResults: ToolExec
         note: rule.note ?? "",
       })),
     knownChoices: {
-      status: ["NOT_DONE", "ON_HOLD", "DONE"],
+      status: ["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"],
       projectList: input.projects.map((project) => ({
         id: project.id,
         name: project.name,

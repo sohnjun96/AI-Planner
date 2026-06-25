@@ -52,6 +52,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   NOT_DONE: "미완료",
   ON_HOLD: "보류",
   DONE: "완료",
+  CANCELED: "취소",
 };
 
 export const RECURRENCE_LABELS: Record<RecurrencePattern, string> = {

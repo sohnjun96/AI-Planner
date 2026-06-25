@@ -1,4 +1,5 @@
 import type { Task } from "../models";
+import { isTaskDone } from "./taskStatus";
 
 export function toIsoNow(): string {
   return new Date().toISOString();
@@ -49,7 +50,7 @@ export function isPastCompletedHidden(task: Task, showPastCompleted: boolean): b
   if (showPastCompleted) {
     return false;
   }
-  if (task.status !== "DONE") {
+  if (!isTaskDone(task.status)) {
     return false;
   }
   return new Date(task.startAt).getTime() < Date.now();

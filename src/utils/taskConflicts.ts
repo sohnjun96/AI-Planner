@@ -1,4 +1,5 @@
 import type { Task } from "../models";
+import { isTaskActive } from "./taskStatus";
 
 interface TimeRange {
   start: number;
@@ -27,7 +28,7 @@ function overlaps(a: TimeRange, b: TimeRange): boolean {
 }
 
 export function buildTaskConflictMap(tasks: Task[]): Record<string, string[]> {
-  const activeTasks = tasks.filter((task) => task.status !== "DONE");
+  const activeTasks = tasks.filter((task) => isTaskActive(task.status));
   const conflictMap: Record<string, Set<string>> = {};
   const timedTasks = activeTasks
     .map((task) => ({
@@ -72,7 +73,7 @@ export function findTaskConflictsForRange(
   }
 
   return tasks
-    .filter((task) => task.status !== "DONE")
+    .filter((task) => isTaskActive(task.status))
     .filter((task) => task.id !== excludeTaskId)
     .filter((task) => {
       const taskRange = toTimedRange(task.startAt, task.endAt);

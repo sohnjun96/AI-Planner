@@ -58,6 +58,10 @@
   --status-done-bg: #f1f5f9;
   --status-done-surface: #f8fafc;
   --status-done-border: rgba(100, 116, 139, 0.24);
+  --status-canceled-text: #6b7280;
+  --status-canceled-bg: #f3f4f6;
+  --status-canceled-surface: #f9fafb;
+  --status-canceled-border: rgba(107, 114, 128, 0.24);
   --status-conflict-text: #b91c1c;
   --status-conflict-bg: #fef2f2;
   --status-conflict-border: rgba(220, 38, 38, 0.24);
@@ -707,6 +711,13 @@ textarea:focus-visible,
   color: var(--status-done-text);
 }
 
+.calendar-kpi-row span.canceled,
+.badge-pill.canceled {
+  border-color: var(--status-canceled-border);
+  background: var(--status-canceled-bg);
+  color: var(--status-canceled-text);
+}
+
 .calendar-kpi-row span.conflict,
 .badge-pill.conflict {
   border-color: var(--status-conflict-border);
@@ -960,6 +971,12 @@ textarea:focus-visible,
   border-color: var(--status-on-hold-border);
   background: var(--status-on-hold-bg);
   color: var(--status-on-hold-text);
+}
+
+.calendar-indicator.canceled {
+  border-color: var(--status-canceled-border);
+  background: var(--status-canceled-bg);
+  color: var(--status-canceled-text);
 }
 
 .calendar-indicator.marker.lunch {
@@ -1255,6 +1272,12 @@ textarea:focus-visible,
   color: var(--status-done-text);
 }
 
+.status-badge.canceled {
+  border: 1px solid var(--status-canceled-border);
+  background: var(--status-canceled-bg);
+  color: var(--status-canceled-text);
+}
+
 .major-tag,
 .conflict-badge {
   background: var(--status-conflict-bg);
@@ -1451,6 +1474,12 @@ textarea:focus-visible,
   color: var(--status-done-text);
 }
 
+.status-toggle-btn.canceled {
+  border-color: var(--status-canceled-border);
+  background: var(--status-canceled-bg);
+  color: var(--status-canceled-text);
+}
+
 .status-toggle-btn.not_done.active {
   border-color: var(--status-not-done-text);
   box-shadow: inset 0 0 0 1px var(--status-not-done-text);
@@ -1464,6 +1493,11 @@ textarea:focus-visible,
 .status-toggle-btn.done.active {
   border-color: var(--status-done-text);
   box-shadow: inset 0 0 0 1px var(--status-done-text);
+}
+
+.status-toggle-btn.canceled.active {
+  border-color: var(--status-canceled-text);
+  box-shadow: inset 0 0 0 1px var(--status-canceled-text);
 }
 
 .entity-list,
@@ -3176,6 +3210,12 @@ textarea:focus-visible,
   color: var(--status-done-text);
 }
 
+.summary-chip.canceled {
+  border-color: var(--status-canceled-border);
+  background: var(--status-canceled-bg);
+  color: var(--status-canceled-text);
+}
+
 .summary-chip.conflict {
   border-color: var(--status-conflict-border);
   background: var(--status-conflict-bg);
@@ -3410,6 +3450,12 @@ textarea:focus-visible,
   border-color: var(--status-done-border);
   background: var(--status-done-bg);
   color: var(--status-done-text);
+}
+
+.agenda-stat-grid .canceled {
+  border-color: var(--status-canceled-border);
+  background: var(--status-canceled-bg);
+  color: var(--status-canceled-text);
 }
 
 .agenda-stat-grid .conflict {
@@ -3720,6 +3766,13 @@ textarea:focus-visible,
   opacity: 0.58;
 }
 
+.calendar-day-detail-item.canceled {
+  border-color: var(--status-canceled-border);
+  background: var(--status-canceled-surface);
+  color: var(--status-canceled-text);
+  opacity: 0.72;
+}
+
 .calendar-day-detail-item.done.project-tinted {
   border-color: var(--calendar-detail-project-border);
   background: var(--calendar-detail-project-bg);
@@ -3781,11 +3834,16 @@ textarea:focus-visible,
 .calendar-day-detail-item.done:not(.project-tinted) .calendar-day-detail-time,
 .calendar-day-detail-item.done:not(.project-tinted) strong,
 .calendar-day-detail-item.done:not(.project-tinted) small,
-.calendar-day-detail-item.done:not(.project-tinted) .status-badge {
+.calendar-day-detail-item.done:not(.project-tinted) .status-badge,
+.calendar-day-detail-item.canceled .calendar-day-detail-time,
+.calendar-day-detail-item.canceled strong,
+.calendar-day-detail-item.canceled small,
+.calendar-day-detail-item.canceled .status-badge {
   color: #94a3b8;
 }
 
-.calendar-day-detail-item.done:not(.project-tinted) strong {
+.calendar-day-detail-item.done:not(.project-tinted) strong,
+.calendar-day-detail-item.canceled strong {
   font-weight: 500;
 }
 
@@ -3939,6 +3997,11 @@ textarea:focus-visible,
   background: var(--status-done-surface);
 }
 
+.compact-task-card.canceled {
+  background: var(--status-canceled-surface);
+  opacity: 0.78;
+}
+
 .compact-task-main {
   display: grid;
   grid-template-columns: 86px minmax(0, 1fr) auto;
@@ -4049,6 +4112,13 @@ textarea:focus-visible,
   border-color: var(--status-done-border);
   background: var(--status-done-bg);
   color: var(--status-done-text);
+}
+
+.compact-status-button.canceled.active,
+.compact-status-button.canceled:hover {
+  border-color: var(--status-canceled-border);
+  background: var(--status-canceled-bg);
+  color: var(--status-canceled-text);
 }
 
 .attention-list {

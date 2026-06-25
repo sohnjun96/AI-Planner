@@ -30569,7 +30569,8 @@ function pickRandomPresetColor(excludeColor) {
 var STATUS_LABELS = {
   NOT_DONE: "미완료",
   ON_HOLD: "보류",
-  DONE: "완료"
+  DONE: "완료",
+  CANCELED: "취소"
 };
 var RECURRENCE_LABELS = {
   NONE: "반복 없음",
@@ -30769,6 +30770,20 @@ var DEFAULT_SETTING = {
   updatedAt: ""
 };
 
+// src/utils/taskStatus.ts
+function isTaskDone(status) {
+  return status === "DONE";
+}
+function isTaskCanceled(status) {
+  return status === "CANCELED";
+}
+function isTaskActive(status) {
+  return status === "NOT_DONE" || status === "ON_HOLD";
+}
+function isTaskVisibleOnBoard(task) {
+  return task.status === "NOT_DONE";
+}
+
 // src/utils/date.ts
 function toIsoNow() {
   return (/* @__PURE__ */ new Date()).toISOString();
@@ -30812,7 +30827,7 @@ function isPastCompletedHidden(task, showPastCompleted) {
   if (showPastCompleted) {
     return false;
   }
-  if (task.status !== "DONE") {
+  if (!isTaskDone(task.status)) {
     return false;
   }
   return new Date(task.startAt).getTime() < Date.now();
@@ -30962,9 +30977,6 @@ function getId(prefix) {
   }
   return `${prefix}-${Math.random().toString(36).slice(2, 12)}`;
 }
-function isTaskStatusDone(status) {
-  return status === "DONE";
-}
 function trimTaskInput(input) {
   return {
     ...input,
@@ -30995,6 +31007,7 @@ function shiftIsoByPattern(iso, pattern, step) {
   return date.toISOString();
 }
 function toTaskCoreRecord(input) {
+  const now = toIsoNow();
   return {
     title: input.title.trim(),
     content: input.content.trim(),
@@ -31004,7 +31017,8 @@ function toTaskCoreRecord(input) {
     startAt: input.startAt,
     endAt: input.endAt || void 0,
     isMajor: input.isMajor,
-    completedAt: isTaskStatusDone(input.status) ? toIsoNow() : void 0,
+    completedAt: isTaskDone(input.status) ? now : void 0,
+    canceledAt: isTaskCanceled(input.status) ? now : void 0,
     recurrencePattern: void 0
   };
 }
@@ -31075,6 +31089,103 @@ function buildUserContextSuggestionLine(suggestion, projectName, taskTypeName) {
     suggestion.note ? compactText(suggestion.note, 90) : ""
   ].filter(Boolean);
   return `- ${parts.join(" / ")}`;
+}
+var AI_LEARNED_CONTEXT_HEADING = "## AI가 학습한 규칙";
+function normalizeContextToken(value) {
+  return (value ?? "").trim().toLowerCase();
+}
+function normalizeContextTriggers(items) {
+  return items.map(normalizeContextToken).filter(Boolean);
+}
+function hasTriggerOverlap(left, right) {
+  const leftSet = new Set(normalizeContextTriggers(left));
+  return normalizeContextTriggers(right).some((item) => leftSet.has(item));
+}
+function isSameContextRule(rule, suggestion) {
+  return rule.category === suggestion.category && hasTriggerOverlap(rule.trigger, suggestion.trigger) && (rule.defaultTime ?? "") === (suggestion.defaultTime ?? "") && (rule.projectId ?? "") === (suggestion.projectId ?? "") && (rule.taskTypeId ?? "") === (suggestion.taskTypeId ?? "") && Boolean(rule.isMajor) === Boolean(suggestion.isMajor);
+}
+function isConflictingContextRule(rule, suggestion) {
+  if (!hasTriggerOverlap(rule.trigger, suggestion.trigger)) {
+    return false;
+  }
+  if (suggestion.defaultTime && rule.defaultTime) {
+    return true;
+  }
+  if (suggestion.projectId && rule.projectId) {
+    return suggestion.projectId === rule.projectId;
+  }
+  if (suggestion.taskTypeId && rule.taskTypeId) {
+    return suggestion.taskTypeId === rule.taskTypeId;
+  }
+  if (suggestion.isMajor !== void 0 && rule.isMajor !== void 0) {
+    return true;
+  }
+  return rule.category === suggestion.category;
+}
+function lineHasTimeExpression(line) {
+  return /\b\d{1,2}:\d{2}\b/.test(line) || /\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?/.test(line);
+}
+function lineHasAnyToken(line, tokens) {
+  const normalizedLine = line.toLowerCase();
+  return tokens.some((token) => normalizedLine.includes(token));
+}
+function isConflictingContextLine(line, suggestion, projectName, taskTypeName) {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("-")) {
+    return false;
+  }
+  const triggerTokens = normalizeContextTriggers(suggestion.trigger);
+  const labelToken = normalizeContextToken(suggestion.label);
+  const hasTrigger = triggerTokens.length > 0 ? lineHasAnyToken(trimmed, triggerTokens) : Boolean(labelToken && trimmed.toLowerCase().includes(labelToken));
+  if (!hasTrigger) {
+    return false;
+  }
+  if (suggestion.defaultTime) {
+    return lineHasTimeExpression(trimmed) || trimmed.includes("기본 시간") || trimmed.includes("시간");
+  }
+  if (suggestion.projectId) {
+    return Boolean(projectName && trimmed.includes(projectName));
+  }
+  if (suggestion.taskTypeId) {
+    return Boolean(taskTypeName && trimmed.includes(taskTypeName));
+  }
+  if (suggestion.isMajor !== void 0) {
+    return trimmed.includes("중요");
+  }
+  return trimmed.includes(suggestion.category) || trimmed.includes("규칙");
+}
+function mergeUserContextSuggestionLine(markdown, suggestion, line, projectName, taskTypeName) {
+  if (markdown.includes(line)) {
+    return markdown;
+  }
+  const lines = markdown.trimEnd().split(/\r?\n/);
+  const nextLines = [];
+  let replaced = false;
+  for (const existingLine of lines) {
+    if (isConflictingContextLine(existingLine, suggestion, projectName, taskTypeName)) {
+      if (!replaced) {
+        nextLines.push(line);
+        replaced = true;
+      }
+      continue;
+    }
+    nextLines.push(existingLine);
+  }
+  if (replaced) {
+    return `${nextLines.join("\n").trimEnd()}
+`;
+  }
+  const headingIndex = nextLines.findIndex((existingLine) => existingLine.trim() === AI_LEARNED_CONTEXT_HEADING);
+  if (headingIndex >= 0) {
+    return `${nextLines.join("\n").trimEnd()}
+${line}
+`;
+  }
+  return `${nextLines.join("\n").trimEnd()}
+
+${AI_LEARNED_CONTEXT_HEADING}
+${line}
+`;
 }
 function getChromeStorageLocal() {
   const maybeChrome = globalThis.chrome;
@@ -31200,7 +31311,8 @@ function AppDataProvider({ children }) {
           isMajor: normalized.isMajor,
           createdAt: now,
           updatedAt: now,
-          completedAt: isTaskStatusDone(normalized.status) ? now : void 0,
+          completedAt: isTaskDone(normalized.status) ? now : void 0,
+          canceledAt: isTaskCanceled(normalized.status) ? now : void 0,
           recurrencePattern: effectivePattern,
           recurrenceGroupId,
           recurrenceIndex: effectivePattern === "NONE" ? void 0 : index
@@ -31230,7 +31342,8 @@ function AppDataProvider({ children }) {
         recurrencePattern: existing.recurrencePattern,
         recurrenceGroupId: existing.recurrenceGroupId,
         recurrenceIndex: existing.recurrenceIndex,
-        completedAt: isTaskStatusDone(normalized.status) ? existing.completedAt ?? now : void 0,
+        completedAt: isTaskDone(normalized.status) ? existing.completedAt ?? now : void 0,
+        canceledAt: isTaskCanceled(normalized.status) ? existing.canceledAt ?? now : void 0,
         updatedAt: now
       };
       if (serializeTaskForEquality(existing) === serializeTaskForEquality(nextTask)) {
@@ -31424,14 +31537,7 @@ function AppDataProvider({ children }) {
     const projectName = suggestion.projectId ? (await db.projects.get(suggestion.projectId))?.name : void 0;
     const taskTypeName = suggestion.taskTypeId ? (await db.taskTypes.get(suggestion.taskTypeId))?.name : void 0;
     const line = buildUserContextSuggestionLine(suggestion, projectName, taskTypeName);
-    const alreadyExists = current.markdown.includes(line);
-    const nextMarkdown = alreadyExists ? current.markdown : `${current.markdown.trim()}
-
-## AI가 학습한 규칙
-${line}
-`;
-    const normalizedTrigger = suggestion.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|");
-    const hasDuplicateRule = current.rules.some((rule) => rule.trigger.map((item) => item.trim().toLowerCase()).filter(Boolean).sort().join("|") === normalizedTrigger && (rule.defaultTime ?? "") === (suggestion.defaultTime ?? "") && (rule.projectId ?? "") === (suggestion.projectId ?? "") && (rule.taskTypeId ?? "") === (suggestion.taskTypeId ?? "") && Boolean(rule.isMajor) === Boolean(suggestion.isMajor));
+    const nextMarkdown = mergeUserContextSuggestionLine(current.markdown, suggestion, line, projectName, taskTypeName);
     const nextRule = {
       id: getId("context-rule"),
       category: suggestion.category,
@@ -31447,9 +31553,11 @@ ${line}
       createdAt: now,
       updatedAt: now
     };
-    const defaultRules = current.rules.filter((rule) => rule.source === "default");
-    const customRules = current.rules.filter((rule) => rule.source !== "default");
-    const nextRules = hasDuplicateRule ? current.rules : [
+    const retainedRules = current.rules.filter((rule) => !isConflictingContextRule(rule, suggestion) || isSameContextRule(rule, suggestion));
+    const hasSameRule = retainedRules.some((rule) => isSameContextRule(rule, suggestion));
+    const defaultRules = retainedRules.filter((rule) => rule.source === "default");
+    const customRules = retainedRules.filter((rule) => rule.source !== "default");
+    const nextRules = hasSameRule ? retainedRules : [
       ...defaultRules,
       ...customRules.slice(Math.max(0, customRules.length - Math.max(0, 30 - defaultRules.length - 1))),
       nextRule
@@ -31577,7 +31685,7 @@ ${line}
         notificationsEnabled: Boolean(setting.notificationsEnabled),
         notifyBeforeMinutes: Math.max(0, Math.floor(setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES))
       },
-      tasks: tasks.map((task) => ({
+      tasks: tasks.filter((task) => isTaskActive(task.status)).map((task) => ({
         id: task.id,
         title: task.title,
         startAt: task.startAt,
@@ -31724,6 +31832,7 @@ var MAX_TOOL_ROUNDS = 4;
 var NOT_DONE_STATUS_ALIASES = ["not_done", "notdone", "todo", "pending", "in_progress", "미완료", "대기"];
 var ON_HOLD_STATUS_ALIASES = ["on_hold", "hold", "paused", "보류", "홀드"];
 var DONE_STATUS_ALIASES = ["done", "complete", "completed", "완료", "끝남"];
+var CANCELED_STATUS_ALIASES = ["canceled", "cancelled", "cancel", "cancel_task", "취소", "취소됨", "취소하기"];
 var DIRECT_OPERATION_KEYS = [
   "operations",
   "tasks",
@@ -31800,7 +31909,7 @@ Hard output rules:
 6. Never return a summary-only proposal when the user asked to create, update, or delete schedules. The actual draft must be in proposal.operations.
 7. If required information is missing or ambiguous, set needsUserInput to true, put one clear Korean question in userQuestion, set toolCalls to [], and set proposal.operations to [].
 8. Use only projectId values from knownChoices.projectList and taskTypeId values from knownChoices.taskTypeList. If the user gives a name, map it to the matching id. If it is unclear, ask a question.
-9. Use only these status values: NOT_DONE, ON_HOLD, DONE.
+9. Use only these status values: NOT_DONE, ON_HOLD, DONE, CANCELED. If the user asks to cancel an existing schedule, update its status to CANCELED instead of deleting it.
 10. Interpret user dates and times in Asia/Seoul using the input now value. For startAt/endAt, prefer local ISO without a timezone, for example 2026-02-11T09:00. The app will normalize it.
 11. For repeated schedules, create one create_task operation per occurrence unless the repeat rule is unclear.
 12. If the user asks for multiple schedules, return multiple operations in the same operations array.
@@ -31859,7 +31968,7 @@ contextSuggestions item schema:
 Allowed tools:
 - list_projects: {}
 - list_task_types: {}
-- search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE", "date"?: "YYYY-MM-DD", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "limit"?: number }
+- search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE"|"CANCELED", "date"?: "YYYY-MM-DD", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "limit"?: number }
 - get_task: { "taskId": string }
 - current_datetime: {}
 
@@ -31955,7 +32064,7 @@ function isRecord(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function isTaskStatus(value) {
-  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
+  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
 }
 function normalizeTaskStatus(value) {
   if (isTaskStatus(value)) {
@@ -31976,6 +32085,9 @@ function normalizeTaskStatus(value) {
   }
   if (DONE_STATUS_ALIASES.includes(normalized)) {
     return "DONE";
+  }
+  if (CANCELED_STATUS_ALIASES.includes(normalized)) {
+    return "CANCELED";
   }
   return void 0;
 }
@@ -32580,7 +32692,7 @@ function buildPromptMessages(input, toolResults) {
       note: rule.note ?? ""
     })),
     knownChoices: {
-      status: ["NOT_DONE", "ON_HOLD", "DONE"],
+      status: ["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"],
       projectList: input.projects.map((project) => ({
         id: project.id,
         name: project.name,
@@ -32659,7 +32771,7 @@ var FIELD_LABELS = {
   isMajor: "중요"
 };
 function isTaskStatus2(value) {
-  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
+  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
 }
 function toTaskInput(task) {
   return {
@@ -34111,6 +34223,7 @@ var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
 var EMPTY_SUMMARY = {
   total: 0,
   done: 0,
+  canceled: 0,
   pending: 0,
   onHold: 0,
   conflicts: 0,
@@ -34194,6 +34307,7 @@ function MonthCalendar({
     let pending = 0;
     let onHold = 0;
     let done = 0;
+    let canceled = 0;
     let conflicts = 0;
     const lastDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
     for (let day = 1; day <= lastDay; day += 1) {
@@ -34203,9 +34317,10 @@ function MonthCalendar({
       pending += summary.pending;
       onHold += summary.onHold;
       done += summary.done;
+      canceled += summary.canceled;
       conflicts += summary.conflicts;
     }
-    return { total, pending, onHold, done, conflicts };
+    return { total, pending, onHold, done, canceled, conflicts };
   }, [daySummaryByDate, visibleMonth]);
   function moveSelectionByDays(daysToMove) {
     const next = addDays(new Date(selectedDate), daysToMove);
@@ -34306,6 +34421,11 @@ function MonthCalendar({
         monthStats.done,
         "건"
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "canceled", children: [
+        "취소 ",
+        monthStats.canceled,
+        "건"
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "conflict", children: [
         "충돌 ",
         monthStats.conflicts,
@@ -34321,13 +34441,15 @@ function MonthCalendar({
       const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
       const visibleIndicators = markers.filter((marker) => marker.tone !== "lunch");
       const density = getDensityLevel(summary.total);
-      const completionRatio = summary.total > 0 ? Math.round(summary.done / summary.total * 100) : 0;
+      const completionBase = Math.max(0, summary.total - summary.canceled);
+      const completionRatio = completionBase > 0 ? Math.round(summary.done / completionBase * 100) : 0;
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
       const ariaLabel = [
         `${key}`,
         summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
         summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
         summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
+        summary.canceled > 0 ? `취소 ${summary.canceled}건` : "",
         summary.lunch > 0 ? `점심 ${summary.lunch}건` : "",
         ...markers.map((marker) => `${marker.detailLabel ?? marker.label} ${marker.count}건`),
         summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
@@ -34432,6 +34554,10 @@ function MonthCalendar({
                   "보류 ",
                   summary.onHold
                 ] }) : null,
+                summary.canceled > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator canceled", children: [
+                  "취소 ",
+                  summary.canceled
+                ] }) : null,
                 summary.major > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator major", children: [
                   "중요 ",
                   summary.major
@@ -34473,7 +34599,7 @@ function overlaps(a, b) {
   return a.start <= b.end && b.start <= a.end;
 }
 function buildTaskConflictMap(tasks) {
-  const activeTasks = tasks.filter((task) => task.status !== "DONE");
+  const activeTasks = tasks.filter((task) => isTaskActive(task.status));
   const conflictMap = {};
   const timedTasks = activeTasks.map((task) => ({
     task,
@@ -34502,7 +34628,7 @@ function findTaskConflictsForRange(tasks, rangeStartAt, rangeEndAt, excludeTaskI
   if (!targetRange) {
     return [];
   }
-  return tasks.filter((task) => task.status !== "DONE").filter((task) => task.id !== excludeTaskId).filter((task) => {
+  return tasks.filter((task) => isTaskActive(task.status)).filter((task) => task.id !== excludeTaskId).filter((task) => {
     const taskRange = toTimedRange(task.startAt, task.endAt);
     return taskRange ? overlaps(targetRange, taskRange) : false;
   }).sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
@@ -34931,6 +35057,7 @@ var GLOBAL_MEMO_KEY = "global";
 var EMPTY_DAY_SUMMARY = {
   total: 0,
   done: 0,
+  canceled: 0,
   pending: 0,
   onHold: 0,
   conflicts: 0,
@@ -35020,7 +35147,18 @@ function getCalendarDetailProjectStyle(project) {
   };
 }
 function compareByStatusThenStartAt(a, b) {
-  const rank = (status) => status === "DONE" ? 1 : 0;
+  const rank = (status) => {
+    if (status === "NOT_DONE") {
+      return 0;
+    }
+    if (status === "ON_HOLD") {
+      return 1;
+    }
+    if (status === "DONE") {
+      return 2;
+    }
+    return 3;
+  };
   const rankDiff = rank(a.status) - rank(b.status);
   if (rankDiff !== 0) {
     return rankDiff;
@@ -35077,13 +35215,20 @@ var CALENDAR_MARKER_RULES = [
   }
 ];
 function addCalendarMarker(summary, rule) {
-  const existing = summary.markers.find((marker2) => marker2.id === rule.id);
+  const existing = summary.markers.find((marker) => marker.id === rule.id);
   if (existing) {
     existing.count += 1;
     return;
   }
-  const { matches: _matches, ...marker } = rule;
-  summary.markers.push({ ...marker, count: 1 });
+  summary.markers.push({
+    id: rule.id,
+    label: rule.label,
+    detailLabel: rule.detailLabel,
+    tone: rule.tone,
+    cellClass: rule.cellClass,
+    priority: rule.priority,
+    count: 1
+  });
 }
 function applyCalendarMarkerRules(summary, task, maps) {
   for (const rule of CALENDAR_MARKER_RULES) {
@@ -35096,18 +35241,21 @@ function getSchedulePriorityTasks(tasks, mode) {
   if (mode === "all") {
     return tasks;
   }
-  return tasks.filter((task) => task.status === "NOT_DONE" || task.status === "ON_HOLD");
+  return tasks.filter(isTaskVisibleOnBoard);
 }
 function summarizeTasks(tasks, conflictMap) {
   return tasks.reduce(
     (summary, task) => {
       summary.total += 1;
-      summary.done += task.status === "DONE" ? 1 : 0;
+      summary.done += isTaskDone(task.status) ? 1 : 0;
+      summary.canceled += isTaskCanceled(task.status) ? 1 : 0;
       summary.pending += task.status === "NOT_DONE" ? 1 : 0;
       summary.onHold += task.status === "ON_HOLD" ? 1 : 0;
       summary.conflicts += (conflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       summary.major += task.isMajor ? 1 : 0;
-      summary.titles.push(task.title);
+      if (isTaskVisibleOnBoard(task)) {
+        summary.titles.push(task.title);
+      }
       return summary;
     },
     { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] }
@@ -35140,7 +35288,10 @@ function compareByStatusGroupThenStartAt(a, b) {
     if (status === "ON_HOLD") {
       return 1;
     }
-    return 2;
+    if (status === "DONE") {
+      return 2;
+    }
+    return 3;
   };
   const rankDiff = rank(a.status) - rank(b.status);
   if (rankDiff !== 0) {
@@ -35185,7 +35336,7 @@ function CompactTaskCard({
             task.isMajor ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "compact-major", children: "중요" }) : null,
             hasConflict ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "compact-conflict", children: "충돌" }) : null
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "compact-status-row", "aria-label": `${task.title} 상태 변경`, children: ["NOT_DONE", "ON_HOLD", "DONE"].map((status) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "compact-status-row", "aria-label": `${task.title} 상태 변경`, children: ["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"].map((status) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
             "button",
             {
               type: "button",
@@ -35237,14 +35388,14 @@ function DashboardPage() {
   const conflictMap = (0, import_react10.useMemo)(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
   const calendarConflictMap = (0, import_react10.useMemo)(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
   const todayTasks = (0, import_react10.useMemo)(
-    () => tasks.filter((task) => getDateKey(task.startAt) === todayKey).sort(compareByStatusThenStartAt),
+    () => tasks.filter((task) => getDateKey(task.startAt) === todayKey && isTaskVisibleOnBoard(task)).sort(compareByStatusThenStartAt),
     [tasks, todayKey]
   );
   const submissionTasks = (0, import_react10.useMemo)(
-    () => tasks.filter((task) => isSubmissionTaskType(task, typeMap)).filter((task) => task.status !== "DONE" || getDateKey(task.startAt) >= todayKey).sort(compareByStatusThenStartAt),
-    [tasks, todayKey, typeMap]
+    () => tasks.filter((task) => isSubmissionTaskType(task, typeMap)).filter(isTaskVisibleOnBoard).sort(compareByStatusThenStartAt),
+    [tasks, typeMap]
   );
-  const calendarListGroups = (0, import_react10.useMemo)(() => groupTasksByDate(calendarTasks), [calendarTasks]);
+  const calendarListGroups = (0, import_react10.useMemo)(() => groupTasksByDate(calendarTasks.filter(isTaskVisibleOnBoard)), [calendarTasks]);
   const upcomingCalendarListGroups = (0, import_react10.useMemo)(
     () => calendarListGroups.filter((group) => group.dateKey >= todayKey),
     [calendarListGroups, todayKey]
@@ -35257,7 +35408,7 @@ function DashboardPage() {
       return {
         date,
         key,
-        tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key).sort(compareByStartAtAsc)
+        tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key && isTaskVisibleOnBoard(task)).sort(compareByStartAtAsc)
       };
     }),
     [calendarTasks, weekStart]
@@ -35288,14 +35439,19 @@ function DashboardPage() {
       const key = getDateKey(task.startAt);
       const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
       current.total += 1;
-      current.done += task.status === "DONE" ? 1 : 0;
+      current.done += isTaskDone(task.status) ? 1 : 0;
+      current.canceled += isTaskCanceled(task.status) ? 1 : 0;
       current.pending += task.status === "NOT_DONE" ? 1 : 0;
       current.onHold += task.status === "ON_HOLD" ? 1 : 0;
       current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
-      current.major += task.isMajor ? 1 : 0;
-      current.lunch += isLunchTask(task, typeMap, projectMap) ? 1 : 0;
-      applyCalendarMarkerRules(current, task, { projectMap, typeMap });
-      current.titles.push(task.title);
+      current.major += task.isMajor && isTaskActive(task.status) ? 1 : 0;
+      current.lunch += isTaskActive(task.status) && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+      if (isTaskActive(task.status)) {
+        applyCalendarMarkerRules(current, task, { projectMap, typeMap });
+      }
+      if (isTaskVisibleOnBoard(task)) {
+        current.titles.push(task.title);
+      }
       summaryMap[key] = current;
       return summaryMap;
     }, {});
@@ -35336,7 +35492,12 @@ function DashboardPage() {
       return;
     }
     if ((daySummaryByDate[datePopoverKey]?.total ?? 0) === 0) {
-      setDatePopoverKey(null);
+      const timerId = window.setTimeout(() => {
+        setDatePopoverKey(null);
+      }, 0);
+      return () => {
+        window.clearTimeout(timerId);
+      };
     }
   }, [datePopoverKey, daySummaryByDate]);
   (0, import_react10.useEffect)(() => {
@@ -35406,7 +35567,7 @@ function DashboardPage() {
   }
   function getLeaveTasksForDate(dateKey) {
     return tasks.filter(
-      (task) => getDateKey(task.startAt) === dateKey && isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"])
+      (task) => getDateKey(task.startAt) === dateKey && isTaskActive(task.status) && isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"])
     );
   }
   function handleCalendarDateSelect(dateKey) {
@@ -35531,27 +35692,28 @@ function DashboardPage() {
     if (!contextTask) {
       return [];
     }
-    const nextStatus = contextTask.status === "DONE" ? "ON_HOLD" : "DONE";
-    const statusLabel = contextTask.status === "DONE" ? "보류하기" : "완료하기";
     const dateLabel = formatContextDateLabel(getDateKey(contextTask.startAt));
     const timeLabel = formatTaskTime(contextTask, setting.timeFormat);
     return [
       {
-        id: "toggle-task-status",
-        label: statusLabel,
-        description: contextTask.status === "DONE" ? "완료된 일정을 보류로 변경" : "일정을 완료로 변경",
+        id: "complete-task",
+        label: "완료하기",
+        description: "일정을 완료 상태로 변경",
         tone: "primary",
-        onSelect: () => changeTaskStatus(contextTask, nextStatus)
+        disabled: contextTask.status === "DONE",
+        onSelect: () => changeTaskStatus(contextTask, "DONE")
       },
       {
-        id: "edit-task",
-        label: "수정",
-        description: "일정 수정 모달 열기",
-        onSelect: () => openEditTask(contextTask.id)
+        id: "cancel-task",
+        label: "취소하기",
+        description: "일정을 취소 상태로 변경",
+        tone: "danger",
+        disabled: contextTask.status === "CANCELED",
+        onSelect: () => changeTaskStatus(contextTask, "CANCELED")
       },
       {
         id: "ai-edit-task",
-        label: "AI로 수정",
+        label: "AI 일정 수정",
         description: "이 일정을 기준으로 수정 요청",
         onSelect: () => openAiSchedule(
           `다음 기존 일정을 수정해줘.
@@ -35670,6 +35832,10 @@ function DashboardPage() {
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "done", children: [
         "완료 ",
         summary.done
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "canceled", children: [
+        "취소 ",
+        summary.canceled
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "conflict", children: [
         "충돌 ",
@@ -36159,6 +36325,20 @@ function TaskItem({
               "aria-label": "상태를 완료로 변경",
               children: STATUS_LABELS.DONE
             }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+            "button",
+            {
+              type: "button",
+              className: `btn btn-soft ${task.status === "CANCELED" ? "is-active" : ""}`,
+              onClick: (event) => {
+                event.stopPropagation();
+                onStatusChange("CANCELED");
+              },
+              "aria-pressed": task.status === "CANCELED",
+              "aria-label": "상태를 취소로 변경",
+              children: STATUS_LABELS.CANCELED
+            }
           )
         ] }) : null
       ]
@@ -36239,9 +36419,14 @@ function ProjectEditorPanel({ initialProject, createMode, onSaveProject, onDelet
     })()
   );
   (0, import_react11.useEffect)(() => {
-    setForm(createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject));
-    setError("");
-    setSuccess("");
+    const timerId = window.setTimeout(() => {
+      setForm(createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject));
+      setError("");
+      setSuccess("");
+    }, 0);
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [createMode, initialProject?.id]);
   (0, import_react11.useEffect)(() => {
     if (createMode || !form.id) {
@@ -36405,14 +36590,17 @@ function ProjectsPage() {
     const weekEndKey = getDateKey(addDays(/* @__PURE__ */ new Date(), 7));
     const map = {};
     for (const project of projects) {
-      map[project.id] = { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+      map[project.id] = { total: 0, active: 0, done: 0, canceled: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
     }
     for (const task of tasks) {
-      const stats = map[task.projectId] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+      const stats = map[task.projectId] ?? { total: 0, active: 0, done: 0, canceled: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
       stats.total += 1;
-      if (task.status === "DONE") {
+      if (isTaskDone(task.status)) {
         stats.done += 1;
-      } else {
+      } else if (task.status === "CANCELED") {
+        stats.canceled += 1;
+      }
+      if (isTaskActive(task.status)) {
         stats.active += 1;
       }
       const taskKey = getDateKey(task.startAt);
@@ -36426,7 +36614,8 @@ function ProjectsPage() {
       map[task.projectId] = stats;
     }
     for (const stats of Object.values(map)) {
-      stats.completion = stats.total > 0 ? Math.round(stats.done / stats.total * 100) : 0;
+      const completionBase = Math.max(0, stats.total - stats.canceled);
+      stats.completion = completionBase > 0 ? Math.round(stats.done / completionBase * 100) : 0;
       stats.recent = stats.recent.sort(compareByStartAtAsc).slice(0, 2);
     }
     return map;
@@ -36443,10 +36632,10 @@ function ProjectsPage() {
         return true;
       }
       if (overviewFilter === "active") {
-        return task.status !== "DONE";
+        return isTaskActive(task.status);
       }
       if (overviewFilter === "done") {
-        return task.status === "DONE";
+        return isTaskDone(task.status);
       }
       const taskKey = getDateKey(task.startAt);
       return taskKey >= todayKey && taskKey <= weekEndKey;
@@ -36554,7 +36743,7 @@ function ProjectsPage() {
         /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "검색어를 줄이거나 새 프로젝트를 추가하세요." })
       ] }) : null,
       sortedProjects.map((project) => {
-        const stats = projectStats[project.id] ?? { total: 0, active: 0, done: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
+        const stats = projectStats[project.id] ?? { total: 0, active: 0, done: 0, canceled: 0, week: 0, conflicts: 0, recent: [], completion: 0 };
         return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
           "button",
           {
@@ -36689,6 +36878,10 @@ function ProjectsPage() {
         /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
           "완료 ",
           projectStats[selectedProject.id]?.done ?? 0
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+          "취소 ",
+          projectStats[selectedProject.id]?.canceled ?? 0
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
           "이번 주 ",
@@ -36870,9 +37063,14 @@ function SettingsPage() {
   const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
   const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
   (0, import_react12.useEffect)(() => {
-    setUserContextDraft(userContext.markdown);
-    setUserContextMessage("");
-    setUserContextError("");
+    const timerId = window.setTimeout(() => {
+      setUserContextDraft(userContext.markdown);
+      setUserContextMessage("");
+      setUserContextError("");
+    }, 0);
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [userContext.markdown, userContext.updatedAt]);
   (0, import_react12.useEffect)(() => {
     void refreshAutoBackups();
