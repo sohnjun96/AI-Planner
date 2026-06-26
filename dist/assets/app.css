@@ -830,14 +830,6 @@ textarea:focus-visible,
   background: #fff7ed;
   box-shadow: inset 0 0 0 2px #fed7aa;
 }
-.calendar-special-mark.lunch::after {
-  content: "";
-  width: 2px;
-  height: 11px;
-  border-radius: 999px;
-  background: #fb923c;
-  box-shadow: 4px 0 0 -0.5px #fb923c;
-}
 .calendar-special-mark.leave {
   border-color: var(--marker-leave-border);
   background: var(--marker-leave-bg);
@@ -898,11 +890,6 @@ textarea:focus-visible,
   background: var(--status-on-hold-bg);
   color: var(--status-on-hold-text);
 }
-.calendar-indicator.canceled {
-  border-color: var(--status-canceled-border);
-  background: var(--status-canceled-bg);
-  color: var(--status-canceled-text);
-}
 .calendar-indicator.major,
 .calendar-indicator.conflict {
   color: var(--status-conflict-text);
@@ -910,9 +897,14 @@ textarea:focus-visible,
   background: var(--status-conflict-bg);
 }
 .calendar-indicator.major {
+  min-height: 20px;
+  padding: 3px 7px;
   color: var(--status-major-text);
   border-color: var(--status-major-border);
   background: var(--status-major-bg);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 .global-memo-panel {
   background: var(--canvas-parchment);

@@ -392,7 +392,6 @@ export function MonthCalendar({
                     </span>
                   ))}
                   {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
-                  {summary.canceled > 0 ? <span className="calendar-indicator canceled">취소 {summary.canceled}</span> : null}
                   {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
                   {summary.conflicts > 0 ? <span className="calendar-indicator conflict">충돌 {summary.conflicts}</span> : null}
                 </div>

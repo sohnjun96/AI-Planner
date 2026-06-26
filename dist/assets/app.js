@@ -34553,10 +34553,6 @@ function MonthCalendar({
                   "보류 ",
                   summary.onHold
                 ] }) : null,
-                summary.canceled > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator canceled", children: [
-                  "취소 ",
-                  summary.canceled
-                ] }) : null,
                 summary.major > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator major", children: [
                   "중요 ",
                   summary.major
