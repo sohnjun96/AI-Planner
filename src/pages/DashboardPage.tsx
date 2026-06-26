@@ -478,7 +478,7 @@ export function DashboardPage() {
     [tasks, typeMap],
   );
 
-  const calendarListGroups = useMemo(() => groupTasksByDate(calendarTasks.filter(isTaskVisibleOnBoard)), [calendarTasks]);
+  const calendarListGroups = useMemo(() => groupTasksByDate(calendarTasks), [calendarTasks]);
   const upcomingCalendarListGroups = useMemo(
     () => calendarListGroups.filter((group) => group.dateKey >= todayKey),
     [calendarListGroups, todayKey],
@@ -492,7 +492,7 @@ export function DashboardPage() {
         return {
           date,
           key,
-          tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key && isTaskVisibleOnBoard(task)).sort(compareByStartAtAsc),
+          tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key).sort(compareByStartAtAsc),
         };
       }),
     [calendarTasks, weekStart],

@@ -34636,7 +34636,6 @@ function findTaskConflictsForRange(tasks, rangeStartAt, rangeEndAt, excludeTaskI
 
 // src/components/TaskForm.tsx
 var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
-var AUTOSAVE_DELAY_MS = 700;
 function buildDefaultState(projects, taskTypes, defaultStartDate) {
   const now = /* @__PURE__ */ new Date();
   const date = defaultStartDate ?? getDateKey(now);
@@ -34709,10 +34708,8 @@ function buildInputFromForm(form, fixedProjectId) {
     }
   };
 }
-function serializeTaskInput(input) {
+function serializeTaskMetadataInput(input) {
   return JSON.stringify({
-    title: input.title.trim(),
-    content: input.content.trim(),
     taskTypeId: input.taskTypeId,
     projectId: input.projectId,
     status: input.status,
@@ -34720,6 +34717,22 @@ function serializeTaskInput(input) {
     endAt: input.endAt ?? "",
     isMajor: input.isMajor
   });
+}
+function buildMetadataInputFromForm(form, initialTask, fixedProjectId) {
+  if (!initialTask) {
+    return { error: "수정할 일정이 없습니다." };
+  }
+  const built = buildInputFromForm(form, fixedProjectId);
+  if (!built.input) {
+    return built;
+  }
+  return {
+    input: {
+      ...built.input,
+      title: initialTask.title,
+      content: initialTask.content
+    }
+  };
 }
 function TaskForm({
   projects,
@@ -34767,36 +34780,31 @@ function TaskForm({
       autoSaveSnapshotRef.current = "";
       return;
     }
-    const built = buildInputFromForm(form, fixedProjectId);
+    const built = buildMetadataInputFromForm(form, initialTask, fixedProjectId);
     if (built.input) {
-      autoSaveSnapshotRef.current = serializeTaskInput(built.input);
+      autoSaveSnapshotRef.current = serializeTaskMetadataInput(built.input);
     }
   }, [isEdit, initialTask?.id]);
   (0, import_react9.useEffect)(() => {
     if (!isEdit) {
       return;
     }
-    const built = buildInputFromForm(form, fixedProjectId);
+    const built = buildMetadataInputFromForm(form, initialTask, fixedProjectId);
     if (!built.input) {
       return;
     }
-    const snapshot = serializeTaskInput(built.input);
+    const snapshot = serializeTaskMetadataInput(built.input);
     if (snapshot === autoSaveSnapshotRef.current) {
       return;
     }
-    const timerId = window.setTimeout(() => {
-      void onSubmit(built.input).then(() => {
-        autoSaveSnapshotRef.current = snapshot;
-        setAutoSaveMessage("자동 저장됨");
-        setError("");
-      }).catch((submitError) => {
-        setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
-      });
-    }, AUTOSAVE_DELAY_MS);
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [isEdit, form, fixedProjectId, onSubmit]);
+    autoSaveSnapshotRef.current = snapshot;
+    void onSubmit(built.input).then(() => {
+      setAutoSaveMessage("자동 저장됨");
+      setError("");
+    }).catch((submitError) => {
+      setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
+    });
+  }, [isEdit, form, fixedProjectId, initialTask, onSubmit]);
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
@@ -34808,7 +34816,7 @@ function TaskForm({
     setIsSubmitting(true);
     try {
       await onSubmit(built.input);
-      autoSaveSnapshotRef.current = serializeTaskInput(built.input);
+      autoSaveSnapshotRef.current = serializeTaskMetadataInput(built.input);
       setAutoSaveMessage("저장됨");
       if (!isEdit) {
         setForm(buildDefaultState(projects, taskTypes, defaultStartDate));
@@ -35395,7 +35403,7 @@ function DashboardPage() {
     () => tasks.filter((task) => isSubmissionTaskType(task, typeMap)).filter(isTaskVisibleOnBoard).sort(compareByStatusThenStartAt),
     [tasks, typeMap]
   );
-  const calendarListGroups = (0, import_react10.useMemo)(() => groupTasksByDate(calendarTasks.filter(isTaskVisibleOnBoard)), [calendarTasks]);
+  const calendarListGroups = (0, import_react10.useMemo)(() => groupTasksByDate(calendarTasks), [calendarTasks]);
   const upcomingCalendarListGroups = (0, import_react10.useMemo)(
     () => calendarListGroups.filter((group) => group.dateKey >= todayKey),
     [calendarListGroups, todayKey]
@@ -35408,7 +35416,7 @@ function DashboardPage() {
       return {
         date,
         key,
-        tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key && isTaskVisibleOnBoard(task)).sort(compareByStartAtAsc)
+        tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key).sort(compareByStartAtAsc)
       };
     }),
     [calendarTasks, weekStart]
