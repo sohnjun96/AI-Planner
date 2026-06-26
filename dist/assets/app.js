@@ -34438,12 +34438,15 @@ function MonthCalendar({
       const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
       const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
       const markers = sortCalendarMarkers(summary.markers ?? []);
+      const topMarkers = markers.filter((marker) => marker.tone !== "lunch");
+      const lunchMarkers = markers.filter((marker) => marker.tone === "lunch");
       const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
-      const visibleIndicators = markers.filter((marker) => marker.tone !== "lunch");
       const density = getDensityLevel(summary.total);
       const completionBase = Math.max(0, summary.total - summary.canceled);
       const completionRatio = completionBase > 0 ? Math.round(summary.done / completionBase * 100) : 0;
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+      const visibleTitleCount = summary.titles.length;
+      const hiddenTitleCount = Math.max(0, visibleTitleCount - 3);
       const ariaLabel = [
         `${key}`,
         summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
@@ -34529,7 +34532,7 @@ function MonthCalendar({
               /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-day-number", children: date.getDate() }),
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-day-top-meta", children: [
-                  markers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-special-mark ${marker.tone}`, children: formatMarkerCount(marker) }, marker.id)),
+                  topMarkers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-special-mark ${marker.tone}`, children: formatMarkerCount(marker) }, marker.id)),
                   summary.total > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-day-count", children: [
                     summary.total,
                     "건"
@@ -34539,17 +34542,13 @@ function MonthCalendar({
               /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "calendar-progress", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { width: `${completionRatio}%` } }) }),
               /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-event-stack", children: [
                 summary.titles.slice(0, 3).map((title, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "calendar-event-line", title, children: title }, `${key}-title-${index}`)),
-                summary.total > 3 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-event-more", children: [
+                hiddenTitleCount > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-event-more", children: [
                   "+",
-                  summary.total - 3
+                  hiddenTitleCount
                 ] }) : null
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "calendar-indicators", children: [
-                visibleIndicators.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-indicator marker ${marker.tone}`, children: formatMarkerCount(marker, true) }, marker.id)),
-                summary.pending > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator pending", children: [
-                  "미완료 ",
-                  summary.pending
-                ] }) : null,
+                lunchMarkers.map((marker) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `calendar-special-mark ${marker.tone}`, children: formatMarkerCount(marker) }, marker.id)),
                 summary.onHold > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "calendar-indicator hold", children: [
                   "보류 ",
                   summary.onHold

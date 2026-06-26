@@ -964,12 +964,6 @@ textarea:focus-visible,
   font-weight: 400;
 }
 
-.calendar-indicator.pending {
-  border-color: var(--status-not-done-border);
-  background: var(--status-not-done-bg);
-  color: var(--status-not-done-text);
-}
-
 .calendar-indicator.hold {
   border-color: var(--status-on-hold-border);
   background: var(--status-on-hold-bg);
@@ -980,24 +974,6 @@ textarea:focus-visible,
   border-color: var(--status-canceled-border);
   background: var(--status-canceled-bg);
   color: var(--status-canceled-text);
-}
-
-.calendar-indicator.marker.lunch {
-  display: none;
-}
-
-.calendar-indicator.marker.leave {
-  border-color: var(--marker-leave-border);
-  background: var(--marker-leave-bg);
-  color: var(--marker-leave-text);
-  font-weight: 700;
-}
-
-.calendar-indicator.marker.trip {
-  border-color: var(--marker-trip-border);
-  background: var(--marker-trip-bg);
-  color: var(--marker-trip-text);
-  font-weight: 700;
 }
 
 .calendar-indicator.major,

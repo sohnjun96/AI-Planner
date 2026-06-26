@@ -260,12 +260,15 @@ export function MonthCalendar({
           const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
           const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
           const markers = sortCalendarMarkers(summary.markers ?? []);
+          const topMarkers = markers.filter((marker) => marker.tone !== "lunch");
+          const lunchMarkers = markers.filter((marker) => marker.tone === "lunch");
           const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
-          const visibleIndicators = markers.filter((marker) => marker.tone !== "lunch");
           const density = getDensityLevel(summary.total);
           const completionBase = Math.max(0, summary.total - summary.canceled);
           const completionRatio = completionBase > 0 ? Math.round((summary.done / completionBase) * 100) : 0;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+          const visibleTitleCount = summary.titles.length;
+          const hiddenTitleCount = Math.max(0, visibleTitleCount - 3);
 
           const ariaLabel = [
             `${key}`,
@@ -360,7 +363,7 @@ export function MonthCalendar({
                 <div className="calendar-day-top">
                   <span className="calendar-day-number">{date.getDate()}</span>
                   <div className="calendar-day-top-meta">
-                    {markers.map((marker) => (
+                    {topMarkers.map((marker) => (
                       <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
                         {formatMarkerCount(marker)}
                       </span>
@@ -379,16 +382,15 @@ export function MonthCalendar({
                       {title}
                     </span>
                   ))}
-                  {summary.total > 3 ? <span className="calendar-event-more">+{summary.total - 3}</span> : null}
+                  {hiddenTitleCount > 0 ? <span className="calendar-event-more">+{hiddenTitleCount}</span> : null}
                 </div>
 
                 <div className="calendar-indicators">
-                  {visibleIndicators.map((marker) => (
-                    <span key={marker.id} className={`calendar-indicator marker ${marker.tone}`}>
-                      {formatMarkerCount(marker, true)}
+                  {lunchMarkers.map((marker) => (
+                    <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
+                      {formatMarkerCount(marker)}
                     </span>
                   ))}
-                  {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
                   {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
                   {summary.canceled > 0 ? <span className="calendar-indicator canceled">취소 {summary.canceled}</span> : null}
                   {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
