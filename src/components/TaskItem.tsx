@@ -1,3 +1,4 @@
+import { type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { STATUS_LABELS } from "../constants";
 import type { Project, Task, TaskStatus, TaskType } from "../models";
@@ -17,6 +18,7 @@ interface TaskItemProps {
   selectable?: boolean;
   selectedForBulk?: boolean;
   onToggleSelect?: (checked: boolean) => void;
+  onContextMenu?: (event: MouseEvent<HTMLElement>, task: Task) => void;
 }
 
 export function TaskItem({
@@ -33,16 +35,22 @@ export function TaskItem({
   selectable = false,
   selectedForBulk = false,
   onToggleSelect,
+  onContextMenu,
 }: TaskItemProps) {
   const navigate = useNavigate();
 
   return (
     <article
-      className={`task-item ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${hasConflict ? "conflict" : ""} ${
+      className={`task-item ${task.status.toLowerCase()} ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${
+        hasConflict ? "conflict" : ""
+      } ${
         draggableTask ? "draggable" : ""
       }`}
       style={{ borderLeftColor: project?.color ?? "#94a3b8" }}
       onClick={onClick}
+      onContextMenu={(event) => {
+        onContextMenu?.(event, task);
+      }}
       draggable={draggableTask}
       onDragStart={(event) => {
         if (!draggableTask) {

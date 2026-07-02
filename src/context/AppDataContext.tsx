@@ -4,11 +4,14 @@ import { useLiveQuery } from "dexie-react-hooks";
 import {
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
+  DEFAULT_NOTE_AI_ACTIONS,
   DEFAULT_NOTIFY_BEFORE_MINUTES,
   DEFAULT_PROJECT_IDS,
   DEFAULT_SETTING,
   DEFAULT_USER_CONTEXT,
   MAX_AI_CONTEXT_MAX_LENGTH,
+  MAX_AUTOSAVE_NOTE_VERSIONS,
+  MAX_MANUAL_NOTE_VERSIONS,
   MIN_AI_CONTEXT_MAX_LENGTH,
   SETTINGS_ID,
   USER_CONTEXT_ID,
@@ -17,7 +20,14 @@ import { bootstrapDatabase, db } from "../db";
 import type {
   AppSetting,
   Memo,
+  Note,
+  NoteFormInput,
+  NoteTaskLink,
+  NoteTaskLinkSource,
+  NoteVersion,
+  NoteVersionEditType,
   Project,
+  ProjectSubcategory,
   RecurrencePattern,
   Task,
   TaskFormInput,
@@ -56,6 +66,10 @@ interface AppDataContextValue {
   projects: Project[];
   taskTypes: TaskType[];
   memos: Memo[];
+  notes: Note[];
+  noteVersions: NoteVersion[];
+  noteTaskLinks: NoteTaskLink[];
+  projectSubcategories: ProjectSubcategory[];
   setting: AppSetting;
   userContext: UserContext;
   isReady: boolean;
@@ -66,6 +80,15 @@ interface AppDataContextValue {
   updateTask: (id: string, input: TaskFormInput) => Promise<void>;
   removeTask: (id: string) => Promise<void>;
   undoLastChange: () => Promise<void>;
+  createNote: (input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<string>;
+  updateNote: (id: string, input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<void>;
+  removeNote: (id: string) => Promise<void>;
+  restoreNoteVersion: (noteId: string, versionId: string) => Promise<void>;
+  linkNoteToTask: (noteId: string, taskId: string, source?: NoteTaskLinkSource) => Promise<void>;
+  unlinkNoteFromTask: (noteId: string, taskId: string) => Promise<void>;
+  createSubcategory: (projectId: string, name: string) => Promise<string>;
+  renameSubcategory: (id: string, name: string) => Promise<void>;
+  deleteSubcategory: (id: string) => Promise<void>;
   upsertProject: (input: ProjectInput) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   upsertTaskType: (input: TaskTypeInput) => Promise<void>;
@@ -86,6 +109,7 @@ interface AppDataContextValue {
         | "autoBackupEnabled"
         | "autoBackupIntervalMinutes"
         | "aiContextMaxLength"
+        | "noteAiActions"
       >
     >,
   ) => Promise<void>;
@@ -209,6 +233,10 @@ function validateImportPayload(payload: unknown): payload is {
   memos: Memo[];
   settings: AppSetting[];
   userContexts?: UserContext[];
+  notes?: Note[];
+  noteVersions?: NoteVersion[];
+  noteTaskLinks?: NoteTaskLink[];
+  projectSubcategories?: ProjectSubcategory[];
 } {
   if (!payload || typeof payload !== "object") {
     return false;
@@ -220,7 +248,11 @@ function validateImportPayload(payload: unknown): payload is {
     Array.isArray(candidate.taskTypes) &&
     Array.isArray(candidate.memos) &&
     Array.isArray(candidate.settings) &&
-    (candidate.userContexts === undefined || Array.isArray(candidate.userContexts))
+    (candidate.userContexts === undefined || Array.isArray(candidate.userContexts)) &&
+    (candidate.notes === undefined || Array.isArray(candidate.notes)) &&
+    (candidate.noteVersions === undefined || Array.isArray(candidate.noteVersions)) &&
+    (candidate.noteTaskLinks === undefined || Array.isArray(candidate.noteTaskLinks)) &&
+    (candidate.projectSubcategories === undefined || Array.isArray(candidate.projectSubcategories))
   );
 }
 
@@ -242,6 +274,10 @@ function normalizeSetting(setting: AppSetting): AppSetting {
     llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
     llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
     aiContextMaxLength: clampAiContextMaxLength(setting.aiContextMaxLength),
+    noteAiActions:
+      Array.isArray(setting.noteAiActions) && setting.noteAiActions.length > 0
+        ? setting.noteAiActions
+        : DEFAULT_NOTE_AI_ACTIONS,
   };
 }
 
@@ -541,6 +577,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const projects = useLiveQuery(() => db.projects.toArray(), [], []);
   const taskTypes = useLiveQuery(() => db.taskTypes.orderBy("order").toArray(), [], []);
   const memos = useLiveQuery(() => db.memos.toArray(), [], []);
+  const notes = useLiveQuery(() => db.notes.toArray(), [], []);
+  const noteVersions = useLiveQuery(() => db.noteVersions.toArray(), [], []);
+  const noteTaskLinks = useLiveQuery(() => db.noteTaskLinks.toArray(), [], []);
+  const projectSubcategories = useLiveQuery(() => db.projectSubcategories.toArray(), [], []);
   const rawSetting = useLiveQuery(() => db.settings.get(SETTINGS_ID), [], undefined);
   const rawUserContext = useLiveQuery(() => db.userContexts.get(USER_CONTEXT_ID), [], undefined);
 
@@ -670,6 +710,252 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     },
     [pushUndo],
   );
+
+  const pruneNoteVersions = useCallback(async (noteId: string) => {
+    const versions = await db.noteVersions.where("noteId").equals(noteId).sortBy("createdAt");
+    const autosave = versions.filter((version) => version.editType === "autosave");
+    const others = versions.filter((version) => version.editType !== "autosave");
+    const toDelete: string[] = [];
+    if (autosave.length > MAX_AUTOSAVE_NOTE_VERSIONS) {
+      toDelete.push(...autosave.slice(0, autosave.length - MAX_AUTOSAVE_NOTE_VERSIONS).map((version) => version.id));
+    }
+    if (others.length > MAX_MANUAL_NOTE_VERSIONS) {
+      toDelete.push(...others.slice(0, others.length - MAX_MANUAL_NOTE_VERSIONS).map((version) => version.id));
+    }
+    if (toDelete.length > 0) {
+      await db.noteVersions.bulkDelete(toDelete);
+    }
+  }, []);
+
+  const createNote = useCallback(
+    async (input: NoteFormInput, editType: NoteVersionEditType = "manual", aiPrompt?: string) => {
+      const now = toIsoNow();
+      const id = getId("note");
+      const title = input.title.trim() || "제목 없는 노트";
+      const note: Note = {
+        id,
+        title,
+        content: input.content,
+        projectId: input.projectId,
+        subcategoryId: input.subcategoryId,
+        tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
+        status: input.status,
+        isPinned: input.isPinned,
+        linkedTaskIds: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      await db.notes.add(note);
+      await db.noteVersions.add({
+        id: getId("noteversion"),
+        noteId: id,
+        title,
+        content: input.content,
+        editType,
+        aiPrompt,
+        createdAt: now,
+      });
+      return id;
+    },
+    [],
+  );
+
+  const updateNote = useCallback(
+    async (id: string, input: NoteFormInput, editType: NoteVersionEditType = "manual", aiPrompt?: string) => {
+      const existing = await db.notes.get(id);
+      if (!existing) {
+        return;
+      }
+      const now = toIsoNow();
+      const nextTitle = input.title.trim() || "제목 없는 노트";
+      const nextTags = input.tags.map((tag) => tag.trim()).filter(Boolean);
+      const contentChanged = existing.content !== input.content || existing.title !== nextTitle;
+      const metaChanged =
+        existing.projectId !== input.projectId ||
+        (existing.subcategoryId ?? "") !== (input.subcategoryId ?? "") ||
+        existing.status !== input.status ||
+        existing.isPinned !== input.isPinned ||
+        JSON.stringify(existing.tags) !== JSON.stringify(nextTags);
+
+      if (!contentChanged && !metaChanged) {
+        return;
+      }
+
+      await db.notes.put({
+        ...existing,
+        title: nextTitle,
+        content: input.content,
+        projectId: input.projectId,
+        subcategoryId: input.subcategoryId,
+        tags: nextTags,
+        status: input.status,
+        isPinned: input.isPinned,
+        updatedAt: now,
+      });
+
+      if (contentChanged) {
+        await db.noteVersions.add({
+          id: getId("noteversion"),
+          noteId: id,
+          title: nextTitle,
+          content: input.content,
+          editType,
+          aiPrompt,
+          createdAt: now,
+        });
+        await pruneNoteVersions(id);
+      }
+    },
+    [pruneNoteVersions],
+  );
+
+  const removeNote = useCallback(async (id: string) => {
+    await db.transaction("rw", [db.notes, db.tasks, db.noteTaskLinks, db.noteVersions], async () => {
+      const note = await db.notes.get(id);
+      if (!note) {
+        return;
+      }
+      for (const taskId of note.linkedTaskIds ?? []) {
+        await db.tasks
+          .where("id")
+          .equals(taskId)
+          .modify((task) => {
+            task.linkedNoteIds = (task.linkedNoteIds ?? []).filter((noteId) => noteId !== id);
+          });
+      }
+      await db.noteTaskLinks.where("noteId").equals(id).delete();
+      await db.noteVersions.where("noteId").equals(id).delete();
+      await db.notes.delete(id);
+    });
+  }, []);
+
+  const restoreNoteVersion = useCallback(
+    async (noteId: string, versionId: string) => {
+      const [note, version] = await Promise.all([db.notes.get(noteId), db.noteVersions.get(versionId)]);
+      if (!note || !version) {
+        return;
+      }
+      const now = toIsoNow();
+      await db.notes.put({
+        ...note,
+        title: version.title,
+        content: version.content,
+        updatedAt: now,
+      });
+      await db.noteVersions.add({
+        id: getId("noteversion"),
+        noteId,
+        title: version.title,
+        content: version.content,
+        editType: "restore",
+        createdAt: now,
+      });
+      await pruneNoteVersions(noteId);
+    },
+    [pruneNoteVersions],
+  );
+
+  const linkNoteToTask = useCallback(
+    async (noteId: string, taskId: string, source: NoteTaskLinkSource = "manual") => {
+      const now = toIsoNow();
+      await db.transaction("rw", [db.notes, db.tasks, db.noteTaskLinks], async () => {
+        const [note, task] = await Promise.all([db.notes.get(noteId), db.tasks.get(taskId)]);
+        if (!note || !task) {
+          return;
+        }
+        const existingLink = await db.noteTaskLinks.where("[noteId+taskId]").equals([noteId, taskId]).first();
+        if (!existingLink) {
+          await db.noteTaskLinks.add({
+            id: getId("notelink"),
+            noteId,
+            taskId,
+            source,
+            createdAt: now,
+          });
+        }
+        await db.notes
+          .where("id")
+          .equals(noteId)
+          .modify((current) => {
+            current.linkedTaskIds = Array.from(new Set([...(current.linkedTaskIds ?? []), taskId]));
+            current.updatedAt = now;
+          });
+        await db.tasks
+          .where("id")
+          .equals(taskId)
+          .modify((current) => {
+            current.linkedNoteIds = Array.from(new Set([...(current.linkedNoteIds ?? []), noteId]));
+            current.updatedAt = now;
+          });
+      });
+    },
+    [],
+  );
+
+  const unlinkNoteFromTask = useCallback(async (noteId: string, taskId: string) => {
+    const now = toIsoNow();
+    await db.transaction("rw", [db.notes, db.tasks, db.noteTaskLinks], async () => {
+      await db.noteTaskLinks.where("[noteId+taskId]").equals([noteId, taskId]).delete();
+      await db.notes
+        .where("id")
+        .equals(noteId)
+        .modify((current) => {
+          current.linkedTaskIds = (current.linkedTaskIds ?? []).filter((id) => id !== taskId);
+          current.updatedAt = now;
+        });
+      await db.tasks
+        .where("id")
+        .equals(taskId)
+        .modify((current) => {
+          current.linkedNoteIds = (current.linkedNoteIds ?? []).filter((id) => id !== noteId);
+          current.updatedAt = now;
+        });
+    });
+  }, []);
+
+  const createSubcategory = useCallback(async (projectId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new Error("세부 항목 이름을 입력해 주세요.");
+    }
+    const now = toIsoNow();
+    const id = getId("subcat");
+    const highest = await db.projectSubcategories.where("projectId").equals(projectId).count();
+    await db.projectSubcategories.add({
+      id,
+      projectId,
+      name: trimmed,
+      order: highest,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
+  }, []);
+
+  const renameSubcategory = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new Error("세부 항목 이름을 입력해 주세요.");
+    }
+    const existing = await db.projectSubcategories.get(id);
+    if (!existing) {
+      return;
+    }
+    await db.projectSubcategories.put({ ...existing, name: trimmed, updatedAt: toIsoNow() });
+  }, []);
+
+  const deleteSubcategory = useCallback(async (id: string) => {
+    await db.transaction("rw", [db.projectSubcategories, db.notes], async () => {
+      await db.projectSubcategories.delete(id);
+      // 해당 세부 항목에 속한 노트는 미분류로 되돌린다.
+      await db.notes
+        .where("subcategoryId")
+        .equals(id)
+        .modify((note) => {
+          note.subcategoryId = undefined;
+        });
+    });
+  }, []);
 
   const undoLastChange = useCallback(async () => {
     let target: UndoEntry | undefined;
@@ -918,13 +1204,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const exportData = useCallback(async () => {
     const data = {
       exportedAt: toIsoNow(),
-      version: 2,
+      version: 3,
       tasks: await db.tasks.toArray(),
       projects: await db.projects.toArray(),
       taskTypes: await db.taskTypes.toArray(),
       memos: await db.memos.toArray(),
       settings: await db.settings.toArray(),
       userContexts: await db.userContexts.toArray(),
+      notes: await db.notes.toArray(),
+      noteVersions: await db.noteVersions.toArray(),
+      noteTaskLinks: await db.noteTaskLinks.toArray(),
+      projectSubcategories: await db.projectSubcategories.toArray(),
     };
     return JSON.stringify(data, null, 2);
   }, []);
@@ -941,33 +1231,64 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       throw new Error("가져오기 데이터 형식이 맞지 않습니다.");
     }
 
-    await db.transaction("rw", [db.tasks, db.projects, db.taskTypes, db.memos, db.settings, db.userContexts], async () => {
-      await db.tasks.clear();
-      await db.projects.clear();
-      await db.taskTypes.clear();
-      await db.memos.clear();
-      await db.settings.clear();
-      await db.userContexts.clear();
+    await db.transaction(
+      "rw",
+      [
+        db.tasks,
+        db.projects,
+        db.taskTypes,
+        db.memos,
+        db.settings,
+        db.userContexts,
+        db.notes,
+        db.noteVersions,
+        db.noteTaskLinks,
+        db.projectSubcategories,
+      ],
+      async () => {
+        await db.tasks.clear();
+        await db.projects.clear();
+        await db.taskTypes.clear();
+        await db.memos.clear();
+        await db.settings.clear();
+        await db.userContexts.clear();
+        await db.notes.clear();
+        await db.noteVersions.clear();
+        await db.noteTaskLinks.clear();
+        await db.projectSubcategories.clear();
 
-      if (parsed.tasks.length > 0) {
-        await db.tasks.bulkAdd(parsed.tasks);
-      }
-      if (parsed.projects.length > 0) {
-        await db.projects.bulkAdd(parsed.projects);
-      }
-      if (parsed.taskTypes.length > 0) {
-        await db.taskTypes.bulkAdd(parsed.taskTypes);
-      }
-      if (parsed.memos.length > 0) {
-        await db.memos.bulkAdd(parsed.memos);
-      }
-      if (parsed.settings.length > 0) {
-        await db.settings.bulkAdd(parsed.settings.map(normalizeSetting));
-      }
-      if (parsed.userContexts && parsed.userContexts.length > 0) {
-        await db.userContexts.bulkAdd(parsed.userContexts.map(normalizeUserContext));
-      }
-    });
+        if (parsed.tasks.length > 0) {
+          await db.tasks.bulkAdd(parsed.tasks);
+        }
+        if (parsed.projects.length > 0) {
+          await db.projects.bulkAdd(parsed.projects);
+        }
+        if (parsed.taskTypes.length > 0) {
+          await db.taskTypes.bulkAdd(parsed.taskTypes);
+        }
+        if (parsed.memos.length > 0) {
+          await db.memos.bulkAdd(parsed.memos);
+        }
+        if (parsed.settings.length > 0) {
+          await db.settings.bulkAdd(parsed.settings.map(normalizeSetting));
+        }
+        if (parsed.userContexts && parsed.userContexts.length > 0) {
+          await db.userContexts.bulkAdd(parsed.userContexts.map(normalizeUserContext));
+        }
+        if (parsed.notes && parsed.notes.length > 0) {
+          await db.notes.bulkAdd(parsed.notes);
+        }
+        if (parsed.noteVersions && parsed.noteVersions.length > 0) {
+          await db.noteVersions.bulkAdd(parsed.noteVersions);
+        }
+        if (parsed.noteTaskLinks && parsed.noteTaskLinks.length > 0) {
+          await db.noteTaskLinks.bulkAdd(parsed.noteTaskLinks);
+        }
+        if (parsed.projectSubcategories && parsed.projectSubcategories.length > 0) {
+          await db.projectSubcategories.bulkAdd(parsed.projectSubcategories);
+        }
+      },
+    );
 
     setUndoStack([]);
     await bootstrapDatabase();
@@ -1066,6 +1387,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       projects,
       taskTypes,
       memos,
+      notes,
+      noteVersions,
+      noteTaskLinks,
+      projectSubcategories,
       setting,
       userContext,
       isReady,
@@ -1076,6 +1401,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       updateTask,
       removeTask,
       undoLastChange,
+      createNote,
+      updateNote,
+      removeNote,
+      restoreNoteVersion,
+      linkNoteToTask,
+      unlinkNoteFromTask,
+      createSubcategory,
+      renameSubcategory,
+      deleteSubcategory,
       upsertProject,
       deleteProject,
       upsertTaskType,
@@ -1097,6 +1431,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       projects,
       taskTypes,
       memos,
+      notes,
+      noteVersions,
+      noteTaskLinks,
+      projectSubcategories,
       setting,
       userContext,
       isReady,
@@ -1106,6 +1444,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       updateTask,
       removeTask,
       undoLastChange,
+      createNote,
+      updateNote,
+      removeNote,
+      restoreNoteVersion,
+      linkNoteToTask,
+      unlinkNoteFromTask,
+      createSubcategory,
+      renameSubcategory,
+      deleteSubcategory,
       upsertProject,
       deleteProject,
       upsertTaskType,

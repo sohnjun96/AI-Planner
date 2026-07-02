@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { DEFAULT_PROJECT_ID } from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { deriveNoteTitle } from "../utils/noteTitle";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
+import { NoteQuickAddModal } from "./NoteQuickAddModal";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
+  { to: "/notes", label: "노트" },
   { to: "/projects", label: "프로젝트" },
   { to: "/archive", label: "보관함" },
   { to: "/settings", label: "설정" },
@@ -15,9 +19,33 @@ type AiScheduleOpenDetail = {
 };
 
 export function AppShell() {
-  const { canUndo, undoLastChange, undoDescription } = useAppData();
+  const { canUndo, undoLastChange, undoDescription, projects, createNote } = useAppData();
+  const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
   const [aiInitialDraft, setAiInitialDraft] = useState("");
+  const [isNoteAddOpen, setIsNoteAddOpen] = useState(false);
+
+  const activeProjectId = useMemo(
+    () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
+    [projects],
+  );
+
+  async function handleQuickCreateNote(title: string, content: string) {
+    const id = await createNote({
+      title: title.trim() || deriveNoteTitle(content) || "새 노트",
+      content,
+      projectId: activeProjectId,
+      subcategoryId: undefined,
+      tags: [],
+      status: "draft",
+      isPinned: false,
+    });
+    setIsNoteAddOpen(false);
+    navigate("/notes");
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("ai-planner:focus-note", { detail: { noteId: id } }));
+    }, 80);
+  }
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -103,6 +131,10 @@ export function AppShell() {
             되돌리기
           </button>
 
+          <button type="button" className="btn btn-soft" onClick={() => setIsNoteAddOpen(true)} aria-label="노트 추가">
+            노트 추가
+          </button>
+
           <button
             type="button"
             className="btn btn-primary"
@@ -168,6 +200,10 @@ export function AppShell() {
             />
           </section>
         </div>
+      ) : null}
+
+      {isNoteAddOpen ? (
+        <NoteQuickAddModal onCreate={handleQuickCreateNote} onClose={() => setIsNoteAddOpen(false)} />
       ) : null}
     </div>
   );

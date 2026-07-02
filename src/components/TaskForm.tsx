@@ -18,6 +18,8 @@ interface TaskFormProps {
   defaultStartDate?: string;
   fixedProjectId?: string;
   timeFormat: "24h" | "12h";
+  linkedNotes?: Array<{ id: string; title: string }>;
+  onOpenNote?: (noteId: string) => void;
   onSubmit: (input: TaskFormInput) => Promise<void>;
   onDelete?: () => Promise<void>;
   onCancel?: () => void;
@@ -160,6 +162,8 @@ export function TaskForm({
   defaultStartDate,
   fixedProjectId,
   timeFormat,
+  linkedNotes = [],
+  onOpenNote,
   onSubmit,
   onDelete,
   onCancel,
@@ -432,6 +436,25 @@ export function TaskForm({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {isEdit && linkedNotes.length > 0 ? (
+        <div className="task-linked-notes">
+          <span className="task-linked-notes-label">연결된 노트</span>
+          <div className="task-linked-notes-chips">
+            {linkedNotes.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                className="task-linked-note-chip"
+                onClick={() => onOpenNote?.(note.id)}
+                title="노트로 이동"
+              >
+                📄 {note.title}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
@@ -401,8 +402,10 @@ function CompactTaskCard({
 
       <div className="compact-task-footer">
         <span className="compact-task-meta">
-          <span style={{ color: project?.color ?? "#475569" }}>{project?.name ?? "프로젝트 없음"}</span>
-          <span>{taskType?.name ?? "종류 없음"}</span>
+          <span className="compact-project" style={{ color: project?.color ?? "#475569" }}>
+            {project?.name ?? "프로젝트 없음"}
+          </span>
+          <span className="compact-type">{taskType?.name ?? "종류 없음"}</span>
           {task.isMajor ? <span className="compact-major">중요</span> : null}
           {hasConflict ? <span className="compact-conflict">충돌</span> : null}
         </span>
@@ -429,7 +432,8 @@ function CompactTaskCard({
 }
 
 export function DashboardPage() {
-  const { tasks, projects, taskTypes, memos, setting, createTask, updateTask, removeTask, saveMemo } = useAppData();
+  const { tasks, projects, taskTypes, memos, notes, setting, createTask, updateTask, removeTask, saveMemo } = useAppData();
+  const navigate = useNavigate();
   const [memoSaved, setMemoSaved] = useState("");
   const [memoError, setMemoError] = useState("");
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
@@ -578,6 +582,18 @@ export function DashboardPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [activeTaskModalState]);
+
+  // 노트 탭에서 "일정 열기"로 넘어오면 해당 일정 수정창을 연다.
+  useEffect(() => {
+    const handleFocusTask = (event: Event) => {
+      const detail = (event as CustomEvent<{ taskId?: string }>).detail;
+      if (detail?.taskId) {
+        setTaskModalState({ mode: "edit", taskId: detail.taskId });
+      }
+    };
+    window.addEventListener("ai-planner:focus-task", handleFocusTask);
+    return () => window.removeEventListener("ai-planner:focus-task", handleFocusTask);
+  }, []);
 
   useEffect(() => {
     if (!datePopoverKey) {
@@ -1251,6 +1267,16 @@ export function DashboardPage() {
                 allTasks={tasks}
                 initialTask={editingTask}
                 timeFormat={setting.timeFormat}
+                linkedNotes={notes
+                  .filter((note) => (editingTask.linkedNoteIds ?? []).includes(note.id))
+                  .map((note) => ({ id: note.id, title: note.title }))}
+                onOpenNote={(noteId) => {
+                  setTaskModalState(null);
+                  navigate("/notes");
+                  window.setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent("ai-planner:focus-note", { detail: { noteId } }));
+                  }, 80);
+                }}
                 onSubmit={handleUpdateTask}
                 onDelete={handleDeleteTask}
                 onCancel={() => setTaskModalState(null)}

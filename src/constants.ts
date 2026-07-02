@@ -1,4 +1,4 @@
-﻿import type { AppSetting, Project, RecurrencePattern, TaskStatus, TaskType } from "./models";
+﻿import type { AppSetting, NoteAiAction, NoteStatus, Project, RecurrencePattern, TaskStatus, TaskType } from "./models";
 
 import type { UserContext } from "./models";
 
@@ -15,6 +15,27 @@ export const DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES = 360;
 export const DEFAULT_AI_CONTEXT_MAX_LENGTH = 2000;
 export const MIN_AI_CONTEXT_MAX_LENGTH = 500;
 export const MAX_AI_CONTEXT_MAX_LENGTH = 8000;
+
+// AI 노트 관련 상수
+export const NOTE_AUTOSAVE_DEBOUNCE_MS = 5 * 60 * 1000; // 자동저장 5분 디바운스 (버전 폭발 방지)
+export const MAX_MANUAL_NOTE_VERSIONS = 100; // 수동/AI 버전 보관 개수
+export const MAX_AUTOSAVE_NOTE_VERSIONS = 20; // 자동저장 버전 보관 개수
+export const MAX_NOTE_TASK_SUGGESTIONS = 5; // 관련 일정 추천 개수
+export const NOTE_SUGGESTION_DATE_WINDOW_DAYS = 3; // 일정 추천 시 노트 생성일 ±N일
+
+export const NOTE_STATUS_LABELS: Record<NoteStatus, string> = {
+  draft: "초안",
+  active: "활성",
+  archived: "보관",
+};
+
+export const DEFAULT_NOTE_AI_ACTIONS: NoteAiAction[] = [
+  { id: "polish", label: "다듬기", prompt: "맞춤법과 어색한 문장을 자연스럽게 다듬어줘. 내용과 구조는 유지해." },
+  { id: "summary", label: "요약", prompt: "핵심만 간결하게 요약해줘." },
+  { id: "structure", label: "구조화", prompt: "제목과 소제목, 목록을 활용해 읽기 쉽게 구조화해줘." },
+  { id: "checklist", label: "체크리스트", prompt: "할 일 항목을 마크다운 체크리스트로 정리해줘." },
+  { id: "expand", label: "구체화", prompt: "각 항목을 더 구체적이고 실행 가능하게 확장해줘." },
+];
 
 export const COLOR_PRESETS = [
   "#ef4444",
@@ -257,5 +278,6 @@ export const DEFAULT_SETTING: AppSetting = {
   autoBackupEnabled: true,
   autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   aiContextMaxLength: DEFAULT_AI_CONTEXT_MAX_LENGTH,
+  noteAiActions: DEFAULT_NOTE_AI_ACTIONS,
   updatedAt: "",
 };

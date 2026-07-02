@@ -3,6 +3,7 @@ import { ColorSelector } from "../components/ColorSelector";
 import {
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  DEFAULT_NOTE_AI_ACTIONS,
   LLM_DEFAULT_MODEL,
   MAX_AI_CONTEXT_MAX_LENGTH,
   MIN_AI_CONTEXT_MAX_LENGTH,
@@ -10,7 +11,70 @@ import {
 } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { requestLlmResponse } from "../agent/llmClient";
+import type { NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
+
+function makeActionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `action-${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `action-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+interface NoteAiActionManagerProps {
+  actions: NoteAiAction[];
+  onChange: (actions: NoteAiAction[]) => void;
+}
+
+function NoteAiActionManager({ actions, onChange }: NoteAiActionManagerProps) {
+  function update(id: string, patch: Partial<NoteAiAction>) {
+    onChange(actions.map((action) => (action.id === id ? { ...action, ...patch } : action)));
+  }
+  function remove(id: string) {
+    onChange(actions.filter((action) => action.id !== id));
+  }
+  function add() {
+    onChange([...actions, { id: makeActionId(), label: "새 기능", prompt: "" }]);
+  }
+
+  return (
+    <div className="ai-action-manager">
+      {actions.length === 0 ? <p className="empty-text">등록된 AI 편집 기능이 없습니다.</p> : null}
+      {actions.map((action) => (
+        <div key={action.id} className="ai-action-row">
+          <div className="ai-action-fields">
+            <input
+              className="ai-action-label"
+              value={action.label}
+              onChange={(event) => update(action.id, { label: event.target.value })}
+              placeholder="버튼 이름"
+              aria-label="기능 이름"
+            />
+            <textarea
+              className="ai-action-prompt"
+              value={action.prompt}
+              onChange={(event) => update(action.id, { prompt: event.target.value })}
+              placeholder="AI에게 보낼 프롬프트"
+              rows={2}
+              aria-label="프롬프트"
+            />
+          </div>
+          <button type="button" className="btn btn-outline btn-compact" onClick={() => remove(action.id)}>
+            삭제
+          </button>
+        </div>
+      ))}
+      <div className="button-row">
+        <button type="button" className="btn btn-soft" onClick={add}>
+          + 기능 추가
+        </button>
+        <button type="button" className="btn btn-soft" onClick={() => onChange(DEFAULT_NOTE_AI_ACTIONS)}>
+          기본값 복원
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface TypeFormState {
   id?: string;
@@ -94,6 +158,10 @@ export function SettingsPage() {
   const [userContextError, setUserContextError] = useState("");
   const [aiConnectionStatus, setAiConnectionStatus] = useState<AiConnectionStatus>("idle");
   const [aiConnectionMessage, setAiConnectionMessage] = useState("");
+  const [noteAiActionsDraft, setNoteAiActionsDraft] = useState<NoteAiAction[]>(
+    () => setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS,
+  );
+  const [aiActionMessage, setAiActionMessage] = useState("");
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -119,6 +187,23 @@ export function SettingsPage() {
   useEffect(() => {
     void refreshAutoBackups();
   }, [refreshAutoBackups]);
+
+  useEffect(() => {
+    setNoteAiActionsDraft(setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS);
+  }, [setting.noteAiActions]);
+
+  async function handleSaveAiActions() {
+    setAiActionMessage("");
+    const cleaned = noteAiActionsDraft
+      .map((action) => ({ ...action, label: action.label.trim() || "기능", prompt: action.prompt.trim() }))
+      .filter((action) => action.prompt);
+    try {
+      await updateSetting({ noteAiActions: cleaned.length > 0 ? cleaned : DEFAULT_NOTE_AI_ACTIONS });
+      setAiActionMessage("AI 편집 기능을 저장했습니다.");
+    } catch (saveError) {
+      setAiActionMessage(saveError instanceof Error ? saveError.message : "저장에 실패했습니다.");
+    }
+  }
 
   useEffect(() => {
     if (!isBackupListOpen) {
@@ -547,6 +632,26 @@ export function SettingsPage() {
               {aiConnectionMessage}
             </p>
           ) : null}
+        </section>
+
+        <section className="settings-card settings-ai-actions-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">NOTE AI</p>
+              <h3>노트 AI 편집 기능</h3>
+            </div>
+            <button type="button" className="btn btn-primary" onClick={() => void handleSaveAiActions()}>
+              저장
+            </button>
+          </header>
+
+          <p className="description-text">
+            노트 편집 화면의 AI 버튼과 우클릭 메뉴에 나타납니다. 각 기능의 이름과 프롬프트를 자유롭게 수정하거나 추가하세요.
+          </p>
+
+          <NoteAiActionManager actions={noteAiActionsDraft} onChange={setNoteAiActionsDraft} />
+
+          {aiActionMessage ? <p className="success-text">{aiActionMessage}</p> : null}
         </section>
 
         <section className="settings-card settings-context-card">

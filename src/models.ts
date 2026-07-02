@@ -18,6 +18,68 @@ export interface Task {
   recurrencePattern?: RecurrencePattern;
   recurrenceGroupId?: string;
   recurrenceIndex?: number;
+  linkedNoteIds?: string[];
+}
+
+export type NoteStatus = "draft" | "active" | "archived";
+export type NoteVersionEditType = "manual" | "ai_full" | "ai_inline" | "autosave" | "restore";
+export type NoteTaskLinkSource = "auto_suggest" | "manual";
+
+export interface ProjectSubcategory {
+  id: string;
+  projectId: string;
+  name: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  projectId: string;
+  subcategoryId?: string;
+  tags: string[];
+  status: NoteStatus;
+  isPinned: boolean;
+  linkedTaskIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoteVersion {
+  id: string;
+  noteId: string;
+  title: string;
+  content: string;
+  editType: NoteVersionEditType;
+  aiPrompt?: string;
+  createdAt: string;
+}
+
+export interface NoteTaskLink {
+  id: string;
+  noteId: string;
+  taskId: string;
+  source: NoteTaskLinkSource;
+  createdAt: string;
+}
+
+export interface NoteFormInput {
+  title: string;
+  content: string;
+  projectId: string;
+  subcategoryId?: string;
+  tags: string[];
+  status: NoteStatus;
+  isPinned: boolean;
+}
+
+export interface NoteTaskSuggestion {
+  taskId: string;
+  score: number;
+  reason: string;
 }
 
 export interface Project {
@@ -48,6 +110,12 @@ export interface Memo {
   updatedAt: string;
 }
 
+export interface NoteAiAction {
+  id: string;
+  label: string;
+  prompt: string;
+}
+
 export interface AppSetting {
   id: string;
   showPastCompleted: boolean;
@@ -61,6 +129,7 @@ export interface AppSetting {
   autoBackupEnabled?: boolean;
   autoBackupIntervalMinutes?: number;
   aiContextMaxLength?: number;
+  noteAiActions?: NoteAiAction[];
   updatedAt: string;
 }
 

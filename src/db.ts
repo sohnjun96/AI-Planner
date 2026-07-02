@@ -1,6 +1,17 @@
 import Dexie, { type Table } from "dexie";
 import { DEFAULT_PROJECTS, DEFAULT_SETTING, DEFAULT_TASK_TYPES, DEFAULT_USER_CONTEXT, SETTINGS_ID, USER_CONTEXT_ID } from "./constants";
-import type { AppSetting, Memo, Project, Task, TaskType, UserContext } from "./models";
+import type {
+  AppSetting,
+  Memo,
+  Note,
+  NoteTaskLink,
+  NoteVersion,
+  Project,
+  ProjectSubcategory,
+  Task,
+  TaskType,
+  UserContext,
+} from "./models";
 import { toIsoNow } from "./utils/date";
 
 class ScheduleDB extends Dexie {
@@ -10,6 +21,10 @@ class ScheduleDB extends Dexie {
   memos!: Table<Memo, string>;
   settings!: Table<AppSetting, string>;
   userContexts!: Table<UserContext, string>;
+  notes!: Table<Note, string>;
+  noteVersions!: Table<NoteVersion, string>;
+  noteTaskLinks!: Table<NoteTaskLink, string>;
+  projectSubcategories!: Table<ProjectSubcategory, string>;
 
   constructor() {
     super("schedule-manager-db");
@@ -27,6 +42,29 @@ class ScheduleDB extends Dexie {
       memos: "id, date, updatedAt",
       settings: "id, updatedAt",
       userContexts: "id, updatedAt",
+    });
+    this.version(3).stores({
+      tasks: "id, startAt, status, projectId, taskTypeId, isMajor, updatedAt",
+      projects: "id, name, isActive, updatedAt",
+      taskTypes: "id, name, isDefault, isActive, order, updatedAt",
+      memos: "id, date, updatedAt",
+      settings: "id, updatedAt",
+      userContexts: "id, updatedAt",
+      notes: "id, projectId, status, isPinned, updatedAt, createdAt",
+      noteVersions: "id, noteId, editType, createdAt",
+      noteTaskLinks: "id, noteId, taskId, [noteId+taskId], createdAt",
+    });
+    this.version(4).stores({
+      tasks: "id, startAt, status, projectId, taskTypeId, isMajor, updatedAt",
+      projects: "id, name, isActive, updatedAt",
+      taskTypes: "id, name, isDefault, isActive, order, updatedAt",
+      memos: "id, date, updatedAt",
+      settings: "id, updatedAt",
+      userContexts: "id, updatedAt",
+      notes: "id, projectId, subcategoryId, status, isPinned, updatedAt, createdAt",
+      noteVersions: "id, noteId, editType, createdAt",
+      noteTaskLinks: "id, noteId, taskId, [noteId+taskId], createdAt",
+      projectSubcategories: "id, projectId, order, updatedAt",
     });
   }
 }
