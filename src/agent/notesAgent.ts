@@ -390,6 +390,51 @@ export function suggestTasksForNote(params: {
   return scored;
 }
 
+/**
+ * 관련 노트 자동 탐색 (LLM 없이 로컬 점수 계산).
+ * 키워드 겹침 + 같은 프로젝트 + 공통 태그 기준.
+ */
+export function suggestRelatedNotes(params: {
+  note: { id: string; title: string; content: string; projectId: string; tags: string[] };
+  notes: Note[];
+  limit: number;
+}): Array<{ noteId: string; score: number; reason: string }> {
+  const keywords = extractKeywords(`${params.note.title} ${params.note.content}`);
+  const tagSet = new Set(params.note.tags.map((tag) => tag.toLowerCase()));
+
+  return params.notes
+    .filter((note) => note.id !== params.note.id)
+    .map((note) => {
+      let score = 0;
+      const reasons: string[] = [];
+      const haystack = `${note.title} ${note.content}`.toLowerCase();
+
+      let matched = 0;
+      for (const keyword of keywords) {
+        if (haystack.includes(keyword)) {
+          matched += 1;
+        }
+      }
+      if (matched > 0) {
+        score += Math.min(6, matched);
+        reasons.push("키워드");
+      }
+      if (note.projectId === params.note.projectId) {
+        score += 2;
+        reasons.push("같은 프로젝트");
+      }
+      if (note.tags.some((tag) => tagSet.has(tag.toLowerCase()))) {
+        score += 2;
+        reasons.push("공통 태그");
+      }
+
+      return { noteId: note.id, score, reason: reasons.join(", ") };
+    })
+    .filter((item) => item.score >= 3)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, params.limit);
+}
+
 const STOP_TOKENS = new Set([
   "그리고",
   "하지만",

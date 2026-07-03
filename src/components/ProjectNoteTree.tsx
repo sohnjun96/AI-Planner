@@ -4,6 +4,7 @@ import type { Note, Project, ProjectSubcategory } from "../models";
 export type NoteFilterNode =
   | { kind: "all" }
   | { kind: "pinned" }
+  | { kind: "checklist" }
   | { kind: "project"; projectId: string }
   | { kind: "subcategory"; projectId: string; subcategoryId: string }
   | { kind: "uncategorized"; projectId: string };
@@ -28,12 +29,13 @@ interface ProjectNoteTreeProps {
   projects: Project[];
   subcategories: ProjectSubcategory[];
   notes: Note[];
+  openChecklistCount: number;
   selected: NoteFilterNode;
   onSelect: (node: NoteFilterNode) => void;
   onAddSubcategory: (projectId: string, name: string) => void;
 }
 
-export function ProjectNoteTree({ projects, subcategories, notes, selected, onSelect, onAddSubcategory }: ProjectNoteTreeProps) {
+export function ProjectNoteTree({ projects, subcategories, notes, openChecklistCount, selected, onSelect, onAddSubcategory }: ProjectNoteTreeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const set = new Set<string>();
     for (const note of notes) {
@@ -103,6 +105,14 @@ export function ProjectNoteTree({ projects, subcategories, notes, selected, onSe
       >
         <span className="note-tree-label">📌 고정됨</span>
         <span className="note-tree-count">{counts.pinned}</span>
+      </button>
+      <button
+        type="button"
+        className={`note-tree-row root ${selected.kind === "checklist" ? "active" : ""}`}
+        onClick={() => onSelect({ kind: "checklist" })}
+      >
+        <span className="note-tree-label">✓ 전체 체크리스트</span>
+        <span className="note-tree-count">{openChecklistCount}</span>
       </button>
 
       <div className="note-tree-divider" />

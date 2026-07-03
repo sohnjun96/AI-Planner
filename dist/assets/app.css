@@ -939,9 +939,14 @@ textarea:focus-visible,
 .markdown-renderer h1,
 .markdown-renderer h2,
 .markdown-renderer h3,
+.markdown-renderer h4,
+.markdown-renderer h5,
+.markdown-renderer h6,
 .markdown-renderer p,
 .markdown-renderer ul,
-.markdown-renderer pre {
+.markdown-renderer ol,
+.markdown-renderer pre,
+.markdown-renderer blockquote {
   margin: 0;
 }
 .markdown-renderer h1,
@@ -956,19 +961,59 @@ textarea:focus-visible,
   font-weight: 600;
   letter-spacing: -0.24px;
 }
+.markdown-renderer h2 {
+  font-size: 23px;
+}
 .markdown-renderer h3 {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
+}
+.markdown-renderer h4 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.markdown-renderer h5 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.markdown-renderer h6 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--body-muted);
 }
 .markdown-renderer p,
 .markdown-renderer li {
   color: var(--ink-muted-80);
   line-height: 1.47;
 }
-.markdown-renderer ul {
+.markdown-renderer p {
+  white-space: pre-wrap;
+}
+.markdown-renderer ul,
+.markdown-renderer ol {
   display: grid;
   gap: 6px;
-  padding-left: 20px;
+  padding-left: 22px;
+}
+.markdown-renderer ol {
+  list-style: decimal;
+}
+.markdown-renderer strong {
+  font-weight: 700;
+  color: var(--link-blue);
+}
+.markdown-renderer del {
+  color: var(--body-muted);
+}
+.markdown-renderer blockquote {
+  padding: 4px 14px;
+  border-left: 3px solid var(--hairline-strong);
+  color: var(--body-muted);
+}
+.markdown-renderer hr {
+  border: none;
+  border-top: 1px solid var(--hairline);
+  margin: 4px 0;
 }
 .markdown-checklist {
   list-style: none;
@@ -5366,4 +5411,125 @@ textarea:focus-visible,
   font-size: 14px;
   line-height: 1.7;
   resize: vertical;
+}
+.diff-ins {
+  color: var(--link-blue);
+  text-decoration: underline;
+  text-decoration-color: var(--link-blue);
+  text-underline-offset: 2px;
+}
+.diff-del {
+  color: var(--danger);
+  text-decoration: line-through;
+}
+.note-inline-diff {
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--canvas);
+}
+.note-inline-diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--tint-lavender);
+}
+.note-inline-diff-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-weight: 600;
+  font-size: 14px;
+}
+.note-inline-diff-stats {
+  font-size: 12px;
+}
+.note-inline-diff-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.note-diff-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--canvas);
+}
+.note-diff-view-toggle button {
+  border: none;
+  background: none;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--body-muted);
+}
+.note-diff-view-toggle button.active {
+  background: var(--primary);
+  color: var(--body-on-dark);
+}
+.note-inline-diff-body {
+  padding: var(--space-md);
+  max-height: 460px;
+  overflow-y: auto;
+}
+.note-inline-diff-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.7;
+  font-size: 14px;
+}
+.note-inline-diff-legend {
+  margin: 0;
+  padding: var(--space-xxs) var(--space-sm) var(--space-xs);
+  font-size: 11px;
+  color: var(--body-muted);
+}
+.notes-checklist-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  overflow-y: auto;
+}
+.global-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+}
+.global-check-item input[type=checkbox] {
+  margin-top: 3px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.global-check-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  border-left: 3px solid var(--note-project-color, var(--body-muted));
+  padding-left: var(--space-xs);
+  min-width: 0;
+  flex: 1;
+}
+.global-check-text {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.global-check-note {
+  font-size: 11px;
+  color: var(--body-muted);
+}
+.note-connection-chip.related {
+  border-style: dashed;
 }

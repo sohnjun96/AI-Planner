@@ -1,5 +1,5 @@
 import { STATUS_LABELS } from "../constants";
-import type { Task } from "../models";
+import type { Note, Task } from "../models";
 import { formatDateTime } from "../utils/date";
 
 interface SuggestedTask {
@@ -7,11 +7,18 @@ interface SuggestedTask {
   reason: string;
 }
 
+interface RelatedNote {
+  note: Note;
+  reason: string;
+}
+
 interface NoteConnectionsProps {
   linkedTasks: Task[];
   suggestions: SuggestedTask[];
+  relatedNotes: RelatedNote[];
   timeFormat: "24h" | "12h";
   onOpenTask: (taskId: string) => void;
+  onOpenNote: (noteId: string) => void;
   onLink: (taskId: string) => void;
   onUnlink: (taskId: string) => void;
   isBusy?: boolean;
@@ -20,14 +27,16 @@ interface NoteConnectionsProps {
 export function NoteConnections({
   linkedTasks,
   suggestions,
+  relatedNotes,
   timeFormat,
   onOpenTask,
+  onOpenNote,
   onLink,
   onUnlink,
   isBusy,
 }: NoteConnectionsProps) {
-  // 연결된 일정도 추천도 없으면 아무것도 렌더링하지 않는다.
-  if (linkedTasks.length === 0 && suggestions.length === 0) {
+  // 연결·추천·관련 노트가 모두 없으면 아무것도 렌더링하지 않는다.
+  if (linkedTasks.length === 0 && suggestions.length === 0 && relatedNotes.length === 0) {
     return null;
   }
 
@@ -75,6 +84,25 @@ export function NoteConnections({
               >
                 + {task.title}
                 <small>{formatDateTime(task.startAt, timeFormat)}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {relatedNotes.length > 0 ? (
+        <div className="note-connection-group">
+          <span className="note-connection-label">관련 노트</span>
+          <div className="note-connection-chips">
+            {relatedNotes.map(({ note, reason }) => (
+              <button
+                key={note.id}
+                type="button"
+                className="note-connection-chip related"
+                onClick={() => onOpenNote(note.id)}
+                title={reason}
+              >
+                {note.title}
               </button>
             ))}
           </div>

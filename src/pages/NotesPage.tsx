@@ -1,21 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { NoteCard } from "../components/NoteCard";
 import { NoteConnections } from "../components/NoteConnections";
-import { NoteDiffView } from "../components/NoteDiffView";
-import { NoteEditor } from "../components/NoteEditor";
+import { NoteEditor, type NoteEditorOverlay } from "../components/NoteEditor";
 import { NoteHistoryPanel } from "../components/NoteHistoryPanel";
 import { NoteMetaModal } from "../components/NoteMetaModal";
 import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteTree";
-import { runNotesAgent, suggestTasksForNote } from "../agent/notesAgent";
+import { runNotesAgent, suggestRelatedNotes, suggestTasksForNote } from "../agent/notesAgent";
 import {
   DEFAULT_PROJECT_ID,
   MAX_NOTE_TASK_SUGGESTIONS,
   NOTE_SUGGESTION_DATE_WINDOW_DAYS,
 } from "../constants";
 import { useAppData } from "../context/AppDataContext";
-import type { Note, NoteAiAction, NoteFormInput, NoteVersion, NoteVersionEditType } from "../models";
+import type { Note, NoteAiAction, NoteFormInput, NoteStatus, NoteVersion, NoteVersionEditType } from "../models";
 import { deriveNoteTitle, isAutoTitle, isFollowingTitle } from "../utils/noteTitle";
 
 interface AiProposal {
@@ -79,6 +78,7 @@ export function NotesPage() {
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [aiMenu, setAiMenu] = useState<{ x: number; y: number } | null>(null);
+  const [cardMenu, setCardMenu] = useState<{ x: number; y: number; noteId: string } | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const loadedNoteIdRef = useRef<string | null>(null);
@@ -159,10 +159,35 @@ export function NotesPage() {
             }
           }
 
-          // 자동 분류: 미분류 + 세부항목명이 본문에 있으면 배정
-          if (!note.subcategoryId) {
-            const subs = projectSubcategories.filter((sub) => sub.projectId === note.projectId && sub.name.trim());
-            const haystack = `${note.title} ${note.content}`.toLowerCase();
+          const haystack = `${note.title} ${note.content}`.toLowerCase();
+
+          // 자동 프로젝트 분류: 기본(일반) 프로젝트에 있는 노트에 다른 프로젝트명이 있으면 이동
+          let effectiveProjectId = note.projectId;
+          if (note.projectId === DEFAULT_PROJECT_ID) {
+            const match = projects.find(
+              (project) =>
+                project.id !== DEFAULT_PROJECT_ID &&
+                project.isActive &&
+                project.name.trim().length >= 2 &&
+                haystack.includes(project.name.toLowerCase()),
+            );
+            if (match) {
+              patch.projectId = match.id;
+              patch.subcategoryId = undefined;
+              effectiveProjectId = match.id;
+            }
+          }
+
+          // 자동 세부항목 분류: 미분류 + 세부항목명이 본문에 있으면 배정
+          if (!note.subcategoryId && !patch.projectId) {
+            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
+            const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
+            if (match) {
+              patch.subcategoryId = match.id;
+            }
+          } else if (patch.projectId) {
+            // 프로젝트가 바뀌면 새 프로젝트의 세부항목으로 다시 매칭
+            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
             const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
             if (match) {
               patch.subcategoryId = match.id;
@@ -176,7 +201,28 @@ export function NotesPage() {
       })();
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [notes, projectSubcategories, selectedNoteId, updateNote]);
+  }, [notes, projects, projectSubcategories, selectedNoteId, updateNote]);
+
+  // 모든 노트의 미완료 체크리스트 항목 집계
+  const openChecklistItems = useMemo(() => {
+    const items: Array<{ noteId: string; noteTitle: string; projectColor: string; lineIndex: number; text: string }> = [];
+    for (const note of notes) {
+      const lines = note.content.replace(/\r\n/g, "\n").split("\n");
+      lines.forEach((line, lineIndex) => {
+        const match = line.match(/^\s*[-*+]\s+\[ \]\s+(.+)$/);
+        if (match) {
+          items.push({
+            noteId: note.id,
+            noteTitle: note.title,
+            projectColor: projectMap[note.projectId]?.color ?? "var(--body-muted)",
+            lineIndex,
+            text: match[1].trim().replace(/(\*\*|__|~~|`)/g, ""),
+          });
+        }
+      });
+    }
+    return items;
+  }, [notes, projectMap]);
 
   const filteredNotes = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -188,6 +234,8 @@ export function NotesPage() {
           case "pinned":
             if (!note.isPinned) return false;
             break;
+          case "checklist":
+            return false;
           case "project":
             if (note.projectId !== filterNode.projectId) return false;
             break;
@@ -240,6 +288,14 @@ export function NotesPage() {
       .filter((item): item is { task: NonNullable<typeof item.task>; reason: string } => Boolean(item.task));
   }, [selectedNote, tasks, taskMap]);
 
+  const relatedNotes = useMemo(() => {
+    if (!selectedNote) return [];
+    const noteMap = Object.fromEntries(notes.map((note) => [note.id, note]));
+    return suggestRelatedNotes({ note: selectedNote, notes, limit: 5 })
+      .map((item) => ({ note: noteMap[item.noteId], reason: item.reason }))
+      .filter((item): item is { note: Note; reason: string } => Boolean(item.note));
+  }, [selectedNote, notes]);
+
   const isDirty = useMemo(() => {
     if (!selectedNote || !draft) return false;
     return (
@@ -255,6 +311,28 @@ export function NotesPage() {
 
   const currentSubcategoryName = draft?.subcategoryId ? subMap[draft.subcategoryId]?.name : undefined;
   const currentProject = draft ? projectMap[draft.projectId] : undefined;
+
+  const editorOverlay: NoteEditorOverlay | null = useMemo(() => {
+    if (!selectedNote) return null;
+    if (aiProposal) {
+      return {
+        previous: selectedNote.content,
+        next: aiProposal.content,
+        headline: aiProposal.headline,
+        mode: "proposal",
+        isApplying: isSaving,
+      };
+    }
+    if (compareVersion) {
+      return {
+        previous: compareVersion.content,
+        next: selectedNote.content,
+        headline: "선택 버전 → 현재",
+        mode: "compare",
+      };
+    }
+    return null;
+  }, [selectedNote, aiProposal, compareVersion, isSaving]);
 
   async function handleCreateNote() {
     const base: NoteFormInput = {
@@ -309,6 +387,108 @@ export function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
+  }
+
+  // 체크박스 토글 → 해당 노트 본문 반영 + 저장 (선택 노트/집계 뷰 공용)
+  async function toggleChecklistLine(noteId: string, lineIndex: number, checked: boolean) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    const lines = note.content.replace(/\r\n/g, "\n").split("\n");
+    const line = lines[lineIndex];
+    if (line == null) return;
+    const replaced = line.replace(/^(\s*[-*+]\s+\[)[ xX](\]\s+)/, `$1${checked ? "x" : " "}$2`);
+    if (replaced === line) return;
+    lines[lineIndex] = replaced;
+    const nextContent = lines.join("\n");
+    if (noteId === selectedNoteId && draft) {
+      setDraft({ ...draft, content: nextContent });
+    }
+    try {
+      await updateNote(noteId, { ...noteToInput(note), content: nextContent });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "저장에 실패했습니다.");
+    }
+  }
+
+  function handleToggleChecklist(lineIndex: number, checked: boolean) {
+    if (!selectedNoteId) return;
+    void toggleChecklistLine(selectedNoteId, lineIndex, checked);
+  }
+
+  async function setNoteStatus(noteId: string, status: NoteStatus) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    await updateNote(noteId, { ...noteToInput(note), status });
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
+    await removeNote(noteId);
+    if (selectedNoteId === noteId) setSelectedNoteId(null);
+  }
+
+  async function handleSummarizeNote(noteId: string) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    setIsAiRunning(true);
+    setAiError("");
+    try {
+      const result = await runNotesAgent({
+        mode: "summarize",
+        userMessage: "이 노트를 요약해줘",
+        targetNotes: [{ id: note.id, title: note.title, content: note.content }],
+        notes,
+        tasks,
+        projects,
+        taskTypes: [],
+        endpoint: setting.llmEndpoint,
+        apiKey: setting.llmApiKey ?? "",
+        model: setting.llmModel,
+      });
+      if (result.proposedContent) {
+        const id = await createNote(
+          {
+            title: result.proposedTitle?.trim() || `요약: ${note.title}`,
+            content: result.proposedContent,
+            projectId: note.projectId,
+            subcategoryId: note.subcategoryId,
+            tags: ["요약"],
+            status: "active",
+            isPinned: false,
+          },
+          "ai_full",
+          "노트 요약",
+        );
+        setSelectedNoteId(id);
+      } else {
+        setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
+      }
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : "요약에 실패했습니다.");
+    } finally {
+      setIsAiRunning(false);
+    }
+  }
+
+  function buildCardMenuItems(noteId: string): ContextMenuItem[] {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return [];
+    const items: ContextMenuItem[] = [
+      { id: "open", label: "열기", onSelect: () => setSelectedNoteId(noteId) },
+      { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
+      { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) },
+    ];
+    if (note.status !== "active") {
+      items.push({ id: "activate", label: "활성화", onSelect: () => void setNoteStatus(noteId, "active") });
+    }
+    if (note.status !== "draft") {
+      items.push({ id: "draft", label: "초안으로", onSelect: () => void setNoteStatus(noteId, "draft") });
+    }
+    if (note.status !== "archived") {
+      items.push({ id: "archive", label: "보관", onSelect: () => void setNoteStatus(noteId, "archived") });
+    }
+    items.push({ id: "delete", label: "삭제", tone: "danger", onSelect: () => void handleDeleteNote(noteId) });
+    return items;
   }
 
   const runEditAgent = useCallback(
@@ -568,6 +748,8 @@ export function NotesPage() {
         return "전체 노트";
       case "pinned":
         return "고정된 노트";
+      case "checklist":
+        return "전체 체크리스트";
       case "project":
         return projectMap[filterNode.projectId]?.name ?? "프로젝트";
       case "subcategory":
@@ -597,6 +779,7 @@ export function NotesPage() {
           projects={projects}
           subcategories={projectSubcategories}
           notes={notes}
+          openChecklistCount={openChecklistItems.length}
           selected={filterNode}
           onSelect={(node) => {
             setFilterNode(node);
@@ -631,30 +814,63 @@ export function NotesPage() {
           </div>
         ) : null}
 
-        <div className="notes-list">
-          {filteredNotes.length === 0 ? (
-            <p className="empty-text">노트가 없습니다. "새 노트"로 시작하세요.</p>
-          ) : (
-            filteredNotes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                project={projectMap[note.projectId]}
-                isSelected={note.id === selectedNoteId}
-                isChecked={checkedIds.has(note.id)}
-                linkedTaskCount={note.linkedTaskIds.length}
-                onSelect={() => setSelectedNoteId(note.id)}
-                onToggleCheck={(checked) => toggleCheck(note.id, checked)}
-              />
-            ))
-          )}
-        </div>
+        {filterNode.kind === "checklist" ? (
+          <div className="notes-checklist-view">
+            {openChecklistItems.length === 0 ? (
+              <p className="empty-text">미완료 체크리스트 항목이 없습니다.</p>
+            ) : (
+              openChecklistItems.map((item) => (
+                <div key={`${item.noteId}-${item.lineIndex}`} className="global-check-item">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    aria-label={`${item.text} 완료`}
+                    onChange={() => void toggleChecklistLine(item.noteId, item.lineIndex, true)}
+                  />
+                  <button
+                    type="button"
+                    className="global-check-body"
+                    onClick={() => setSelectedNoteId(item.noteId)}
+                    style={{ "--note-project-color": item.projectColor } as CSSProperties}
+                  >
+                    <span className="global-check-text">{item.text}</span>
+                    <small className="global-check-note">{item.noteTitle}</small>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="notes-list">
+            {filteredNotes.length === 0 ? (
+              <p className="empty-text">노트가 없습니다. "새 노트"로 시작하세요.</p>
+            ) : (
+              filteredNotes.map((note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  project={projectMap[note.projectId]}
+                  isSelected={note.id === selectedNoteId}
+                  isChecked={checkedIds.has(note.id)}
+                  linkedTaskCount={note.linkedTaskIds.length}
+                  onSelect={() => setSelectedNoteId(note.id)}
+                  onToggleCheck={(checked) => toggleCheck(note.id, checked)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setCardMenu({ x: event.clientX, y: event.clientY, noteId: note.id });
+                  }}
+                />
+              ))
+            )}
+          </div>
+        )}
       </section>
 
       <main className="notes-detail-pane">
         {selectedNote && draft && currentProject ? (
           <>
             <NoteEditor
+              key={selectedNote.id}
               draft={draft}
               projectName={currentProject.name}
               projectColor={currentProject.color}
@@ -662,6 +878,13 @@ export function NotesPage() {
               aiActions={aiActions}
               aiEnabled={hasApiConfig}
               isAiRunning={isAiRunning}
+              overlay={editorOverlay}
+              onAcceptOverlay={() => void acceptProposal()}
+              onRejectOverlay={() => {
+                setAiProposal(null);
+                setCompareVersion(null);
+              }}
+              onToggleChecklist={(lineIndex, checked) => void handleToggleChecklist(lineIndex, checked)}
               onRunAiAction={(prompt) => void runEditAgent(prompt)}
               onInlineAssist={() => void runInlineAssist()}
               onCustomAi={() => {
@@ -699,32 +922,13 @@ export function NotesPage() {
             {isAiRunning ? <p className="description-text note-ai-running">AI가 처리 중입니다…</p> : null}
             {aiError ? <p className="error-text">{aiError}</p> : null}
 
-            {aiProposal ? (
-              <NoteDiffView
-                previous={selectedNote.content}
-                next={aiProposal.content}
-                headline={aiProposal.headline}
-                isApplying={isSaving}
-                onAccept={() => void acceptProposal()}
-                onReject={() => setAiProposal(null)}
-              />
-            ) : null}
-
-            {compareVersion ? (
-              <NoteDiffView
-                previous={compareVersion.content}
-                next={selectedNote.content}
-                headline="선택한 버전 → 현재"
-                onAccept={() => setCompareVersion(null)}
-                onReject={() => setCompareVersion(null)}
-              />
-            ) : null}
-
             <NoteConnections
               linkedTasks={linkedTasks}
               suggestions={suggestions}
+              relatedNotes={relatedNotes}
               timeFormat={setting.timeFormat}
               onOpenTask={handleOpenTask}
+              onOpenNote={(noteId) => setSelectedNoteId(noteId)}
               onLink={(taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest")}
               onUnlink={(taskId) => void unlinkNoteFromTask(selectedNote.id, taskId)}
               isBusy={isSaving}
@@ -771,6 +975,16 @@ export function NotesPage() {
           title="AI 편집"
           items={buildAiMenuItems()}
           onClose={() => setAiMenu(null)}
+        />
+      ) : null}
+
+      {cardMenu ? (
+        <ContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          title="노트"
+          items={buildCardMenuItems(cardMenu.noteId)}
+          onClose={() => setCardMenu(null)}
         />
       ) : null}
     </div>

@@ -10,6 +10,7 @@ interface NoteCardProps {
   linkedTaskCount: number;
   onSelect: () => void;
   onToggleCheck: (checked: boolean) => void;
+  onContextMenu: (event: MouseEvent<HTMLElement>) => void;
 }
 
 function toSnippet(content: string): string {
@@ -21,7 +22,7 @@ function toSnippet(content: string): string {
   return plain.slice(0, 90);
 }
 
-export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck }: NoteCardProps) {
+export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck, onContextMenu }: NoteCardProps) {
   const snippet = toSnippet(note.content);
 
   function handleCheckClick(event: MouseEvent<HTMLInputElement>) {
@@ -33,6 +34,7 @@ export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount
       className={`note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""}`}
       style={{ "--note-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       role="button"
       tabIndex={0}
       onKeyDown={(event) => {

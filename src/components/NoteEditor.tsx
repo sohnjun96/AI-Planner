@@ -2,6 +2,15 @@ import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "re
 import { NOTE_STATUS_LABELS } from "../constants";
 import type { NoteAiAction, NoteFormInput } from "../models";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { NoteInlineDiff } from "./NoteInlineDiff";
+
+export interface NoteEditorOverlay {
+  previous: string;
+  next: string;
+  headline?: string;
+  mode: "proposal" | "compare";
+  isApplying?: boolean;
+}
 
 interface NoteEditorProps {
   draft: NoteFormInput;
@@ -11,12 +20,16 @@ interface NoteEditorProps {
   aiActions: NoteAiAction[];
   aiEnabled: boolean;
   isAiRunning: boolean;
+  overlay?: NoteEditorOverlay | null;
+  onAcceptOverlay: () => void;
+  onRejectOverlay: () => void;
   onRunAiAction: (prompt: string) => void;
   onInlineAssist: () => void;
   onCustomAi: () => void;
   onManageAi: () => void;
   onChangeTitle: (value: string) => void;
   onChangeContent: (value: string) => void;
+  onToggleChecklist: (lineIndex: number, checked: boolean) => void;
   onSave: () => void;
   onOpenMeta: () => void;
   onOpenHistory: () => void;
@@ -38,12 +51,16 @@ export function NoteEditor({
   aiActions,
   aiEnabled,
   isAiRunning,
+  overlay,
+  onAcceptOverlay,
+  onRejectOverlay,
   onRunAiAction,
   onInlineAssist,
   onCustomAi,
   onManageAi,
   onChangeTitle,
   onChangeContent,
+  onToggleChecklist,
   onSave,
   onOpenMeta,
   onOpenHistory,
@@ -56,7 +73,7 @@ export function NoteEditor({
   errorMessage,
   historyCount,
 }: NoteEditorProps) {
-  const [mode, setMode] = useState<"edit" | "read">("edit");
+  const [mode, setMode] = useState<"edit" | "read">("read");
   const containerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -162,7 +179,17 @@ export function NoteEditor({
         {isAiRunning ? <span className="note-ai-bar-status">처리 중…</span> : null}
       </div>
 
-      {mode === "edit" ? (
+      {overlay ? (
+        <NoteInlineDiff
+          previous={overlay.previous}
+          next={overlay.next}
+          headline={overlay.headline}
+          mode={overlay.mode}
+          isApplying={overlay.isApplying}
+          onAccept={onAcceptOverlay}
+          onReject={onRejectOverlay}
+        />
+      ) : mode === "edit" ? (
         <textarea
           ref={textareaRef}
           className="note-content-textarea"
@@ -173,8 +200,17 @@ export function NoteEditor({
           rows={18}
         />
       ) : (
-        <div className="note-read-view" onContextMenu={onContentContextMenu}>
-          <MarkdownRenderer content={draft.content} emptyText="작성된 내용이 없습니다." />
+        <div
+          className="note-read-view"
+          onContextMenu={onContentContextMenu}
+          onDoubleClick={() => setMode("edit")}
+          title="더블클릭하면 편집 모드로 전환됩니다"
+        >
+          <MarkdownRenderer
+            content={draft.content}
+            emptyText="작성된 내용이 없습니다. 더블클릭해서 편집하세요."
+            onChecklistToggle={onToggleChecklist}
+          />
         </div>
       )}
 

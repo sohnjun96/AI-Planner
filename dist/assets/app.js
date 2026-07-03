@@ -34445,7 +34445,7 @@ function isSafeUrl(url) {
 }
 function renderInline(text, keyPrefix) {
   const nodes = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/g;
   let cursor = 0;
   let match;
   while ((match = pattern.exec(text)) !== null) {
@@ -34456,9 +34456,11 @@ function renderInline(text, keyPrefix) {
     const key = `${keyPrefix}-${match.index}`;
     if (token.startsWith("`")) {
       nodes.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("code", { children: token.slice(1, -1) }, key));
-    } else if (token.startsWith("**")) {
+    } else if (token.startsWith("**") || token.startsWith("__")) {
       nodes.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: token.slice(2, -2) }, key));
-    } else if (token.startsWith("*")) {
+    } else if (token.startsWith("~~")) {
+      nodes.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("del", { children: token.slice(2, -2) }, key));
+    } else if (token.startsWith("*") || token.startsWith("_")) {
       nodes.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("em", { children: token.slice(1, -1) }, key));
     } else {
       const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
@@ -34474,6 +34476,11 @@ function renderInline(text, keyPrefix) {
     nodes.push(text.slice(cursor));
   }
   return nodes;
+}
+function leadingIndent(line) {
+  const match = line.match(/^(\s*)/);
+  const spaces = match ? match[1].replace(/\t/g, "  ").length : 0;
+  return Math.min(4, Math.floor(spaces / 2));
 }
 function MarkdownRenderer({
   content,
@@ -34493,6 +34500,7 @@ function MarkdownRenderer({
     }
     if (trimmed.startsWith("```")) {
       const codeLines = [];
+      const fenceKey = index;
       index += 1;
       while (index < lines.length && !(lines[index] ?? "").trim().startsWith("```")) {
         codeLines.push(lines[index] ?? "");
@@ -34500,42 +34508,55 @@ function MarkdownRenderer({
       }
       index += 1;
       elements.push(
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("code", { children: codeLines.join("\n") }) }, `code-${index}`)
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("code", { children: codeLines.join("\n") }) }, `code-${fenceKey}`)
       );
       continue;
     }
-    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      const body = renderInline(headingMatch[2], `heading-${index}`);
-      if (level === 1) {
-        elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h1", { children: body }, `heading-${index}`));
-      } else if (level === 2) {
-        elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: body }, `heading-${index}`));
-      } else {
-        elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: body }, `heading-${index}`));
-      }
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("hr", {}, `hr-${index}`));
       index += 1;
       continue;
     }
-    if (/^-\s+\[[ xX]\]\s+/.test(trimmed)) {
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const body = renderInline(headingMatch[2], `heading-${index}`);
+      const Tag = `h${level}`;
+      elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Tag, { children: body }, `heading-${index}`));
+      index += 1;
+      continue;
+    }
+    if (trimmed.startsWith(">")) {
+      const quoteLines = [];
+      while (index < lines.length && (lines[index] ?? "").trim().startsWith(">")) {
+        quoteLines.push((lines[index] ?? "").trim().replace(/^>\s?/, ""));
+        index += 1;
+      }
+      elements.push(
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("blockquote", { children: renderInline(quoteLines.join(" "), `quote-${index}`) }, `quote-${index}`)
+      );
+      continue;
+    }
+    if (/^[-*+]\s+\[[ xX]\]\s+/.test(trimmed)) {
       const items = [];
+      const listKey = index;
       while (index < lines.length) {
-        const candidate = (lines[index] ?? "").trim();
-        const match = candidate.match(/^-\s+\[([ xX])\]\s+(.+)$/);
+        const raw = lines[index] ?? "";
+        const candidate = raw.trim();
+        const match = candidate.match(/^[-*+]\s+\[([ xX])\]\s+(.+)$/);
         if (!match) {
           break;
         }
         const checked = match[1].toLowerCase() === "x";
         const lineIndex = index;
+        const indent = leadingIndent(raw);
         items.push(
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: checked ? "checked" : "", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: checked ? "checked" : "", style: indent ? { marginLeft: indent * 16 } : void 0, children: [
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               "input",
               {
                 type: "checkbox",
                 checked,
-                readOnly: !onChecklistToggle,
                 disabled: checklistDisabled,
                 onChange: (event) => onChecklistToggle?.(lineIndex, event.target.checked)
               }
@@ -34546,25 +34567,61 @@ function MarkdownRenderer({
         index += 1;
       }
       elements.push(
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { className: "markdown-checklist", children: items }, `check-list-${index}`)
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { className: "markdown-checklist", children: items }, `check-list-${listKey}`)
       );
       continue;
     }
-    if (trimmed.startsWith("- ")) {
+    if (/^\d+[.)]\s+/.test(trimmed)) {
       const items = [];
+      const listKey = index;
       while (index < lines.length) {
-        const candidate = (lines[index] ?? "").trim();
-        if (!candidate.startsWith("- ")) {
+        const raw = lines[index] ?? "";
+        const candidate = raw.trim();
+        const match = candidate.match(/^\d+[.)]\s+(.+)$/);
+        if (!match) {
           break;
         }
-        items.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("li", { children: renderInline(candidate.slice(2), `list-${index}`) }, `list-${index}`));
+        const indent = leadingIndent(raw);
+        items.push(
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("li", { style: indent ? { marginLeft: indent * 16 } : void 0, children: renderInline(match[1], `ol-${index}`) }, `ol-${index}`)
+        );
         index += 1;
       }
-      elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { children: items }, `list-${index}`));
+      elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ol", { children: items }, `ol-list-${listKey}`));
       continue;
     }
-    elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: renderInline(trimmed, `paragraph-${index}`) }, `paragraph-${index}`));
+    if (/^[-*+]\s+/.test(trimmed)) {
+      const items = [];
+      const listKey = index;
+      while (index < lines.length) {
+        const raw = lines[index] ?? "";
+        const candidate = raw.trim();
+        const match = candidate.match(/^[-*+]\s+(.+)$/);
+        if (!match || /^[-*+]\s+\[[ xX]\]\s+/.test(candidate)) {
+          break;
+        }
+        const indent = leadingIndent(raw);
+        items.push(
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("li", { style: indent ? { marginLeft: indent * 16 } : void 0, children: renderInline(match[1], `list-${index}`) }, `list-${index}`)
+        );
+        index += 1;
+      }
+      elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { children: items }, `list-${listKey}`));
+      continue;
+    }
+    const paragraphLines = [trimmed];
+    const paraKey = index;
     index += 1;
+    while (index < lines.length) {
+      const raw = lines[index] ?? "";
+      const candidate = raw.trim();
+      if (!candidate || candidate.startsWith("```") || candidate.startsWith(">") || candidate.startsWith("#") || /^[-*+]\s+/.test(candidate) || /^\d+[.)]\s+/.test(candidate) || /^([-*_])\1{2,}$/.test(candidate)) {
+        break;
+      }
+      paragraphLines.push(candidate);
+      index += 1;
+    }
+    elements.push(/* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: renderInline(paragraphLines.join("\n"), `paragraph-${paraKey}`) }, `paragraph-${paraKey}`));
   }
   if (elements.length === 0) {
     return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "empty-text", children: emptyText });
@@ -36644,7 +36701,7 @@ function toSnippet(content) {
   const plain = content.replace(/```[\s\S]*?```/g, " ").replace(/[#>*`_\-[\]()]/g, " ").replace(/\s+/g, " ").trim();
   return plain.slice(0, 90);
 }
-function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck }) {
+function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck, onContextMenu }) {
   const snippet = toSnippet(note.content);
   function handleCheckClick(event) {
     event.stopPropagation();
@@ -36655,6 +36712,7 @@ function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSel
       className: `note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""}`,
       style: { "--note-project-color": project?.color ?? "var(--body-muted)" },
       onClick: onSelect,
+      onContextMenu,
       role: "button",
       tabIndex: 0,
       onKeyDown: (event) => {
@@ -36704,13 +36762,15 @@ var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
 function NoteConnections({
   linkedTasks,
   suggestions,
+  relatedNotes,
   timeFormat,
   onOpenTask,
+  onOpenNote,
   onLink,
   onUnlink,
   isBusy
 }) {
-  if (linkedTasks.length === 0 && suggestions.length === 0) {
+  if (linkedTasks.length === 0 && suggestions.length === 0 && relatedNotes.length === 0) {
     return null;
   }
   return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "note-connections", children: [
@@ -36756,11 +36816,28 @@ function NoteConnections({
         },
         task.id
       )) })
+    ] }) : null,
+    relatedNotes.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "note-connection-group", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "note-connection-label", children: "관련 노트" }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "note-connection-chips", children: relatedNotes.map(({ note, reason }) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "note-connection-chip related",
+          onClick: () => onOpenNote(note.id),
+          title: reason,
+          children: note.title
+        },
+        note.id
+      )) })
     ] }) : null
   ] });
 }
 
-// src/components/NoteDiffView.tsx
+// src/components/NoteEditor.tsx
+var import_react13 = __toESM(require_react(), 1);
+
+// src/components/NoteInlineDiff.tsx
 var import_react12 = __toESM(require_react(), 1);
 
 // src/utils/lineDiff.ts
@@ -36821,44 +36898,115 @@ function summarizeDiff(lines) {
     { added: 0, removed: 0 }
   );
 }
+function tokenize(value) {
+  const normalized = value.replace(/\r\n/g, "\n");
+  return normalized.match(/\n|[^\S\n]+|[^\s]+/g) ?? [];
+}
+function diffWords(previous, next) {
+  const a = tokenize(previous);
+  const b = tokenize(next);
+  const rows = a.length;
+  const cols = b.length;
+  const lcs = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(0));
+  for (let i2 = rows - 1; i2 >= 0; i2 -= 1) {
+    for (let j2 = cols - 1; j2 >= 0; j2 -= 1) {
+      lcs[i2][j2] = a[i2] === b[j2] ? lcs[i2 + 1][j2 + 1] + 1 : Math.max(lcs[i2 + 1][j2], lcs[i2][j2 + 1]);
+    }
+  }
+  const result = [];
+  let i = 0;
+  let j = 0;
+  while (i < rows && j < cols) {
+    if (a[i] === b[j]) {
+      result.push({ type: "equal", text: a[i] });
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      result.push({ type: "remove", text: a[i] });
+      i += 1;
+    } else {
+      result.push({ type: "add", text: b[j] });
+      j += 1;
+    }
+  }
+  while (i < rows) {
+    result.push({ type: "remove", text: a[i] });
+    i += 1;
+  }
+  while (j < cols) {
+    result.push({ type: "add", text: b[j] });
+    j += 1;
+  }
+  return result;
+}
 
-// src/components/NoteDiffView.tsx
+// src/components/NoteInlineDiff.tsx
 var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
-function NoteDiffView({ previous, next, onAccept, onReject, isApplying, headline }) {
-  const lines = (0, import_react12.useMemo)(() => diffLines(previous, next), [previous, next]);
-  const stats = (0, import_react12.useMemo)(() => summarizeDiff(lines), [lines]);
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "note-diff-view", "aria-label": "AI 제안 변경 내용", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "note-diff-header", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "eyebrow", children: "AI 제안" }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { children: headline ?? "변경 내용을 확인하세요" }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("small", { className: "note-diff-stats", children: [
+function renderInlineDiff(previous, next) {
+  const tokens = diffWords(previous, next);
+  const nodes = [];
+  tokens.forEach((token, i) => {
+    if (token.text === "\n") {
+      nodes.push(/* @__PURE__ */ (0, import_jsx_runtime15.jsx)("br", {}, `br-${i}`));
+      return;
+    }
+    if (token.type === "equal") {
+      nodes.push(/* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: token.text }, i));
+    } else if (token.type === "add") {
+      nodes.push(
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "diff-ins", children: token.text }, i)
+      );
+    } else {
+      nodes.push(
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "diff-del", children: token.text }, i)
+      );
+    }
+  });
+  return nodes;
+}
+function NoteInlineDiff({ previous, next, headline, mode, isApplying, onAccept, onReject }) {
+  const [view, setView] = (0, import_react12.useState)("diff");
+  const stats = (0, import_react12.useMemo)(() => summarizeDiff(diffLines(previous, next)), [previous, next]);
+  const inlineNodes = (0, import_react12.useMemo)(() => renderInlineDiff(previous, next), [previous, next]);
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "note-inline-diff", "aria-label": "변경 내용", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "note-inline-diff-header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "note-inline-diff-title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "note-inline-diff-headline", children: headline ?? "변경 내용" }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "note-inline-diff-stats", children: [
           /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "diff-added", children: [
             "+",
             stats.added
           ] }),
           " ",
           /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "diff-removed", children: [
-            "-",
+            "−",
             stats.removed
-          ] }),
-          " 줄 변경"
+          ] })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "button-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "btn btn-outline", onClick: onReject, disabled: isApplying, children: "거절" }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "btn btn-primary", onClick: onAccept, disabled: isApplying, children: isApplying ? "적용 중" : "적용" })
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "note-inline-diff-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "note-diff-view-toggle", role: "group", "aria-label": "보기 전환", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: view === "diff" ? "active" : "", onClick: () => setView("diff"), children: "변경" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: view === "original" ? "active" : "", onClick: () => setView("original"), children: "원본" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: view === "proposed" ? "active" : "", onClick: () => setView("proposed"), children: "제안" })
+        ] }),
+        mode === "proposal" ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_jsx_runtime15.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "btn btn-outline btn-compact", onClick: onReject, disabled: isApplying, children: "거절" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "btn btn-primary btn-compact", onClick: onAccept, disabled: isApplying, children: isApplying ? "적용 중" : "적용" })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "btn btn-soft btn-compact", onClick: onReject, children: "닫기" })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "note-diff-body", role: "list", children: lines.map((line, index) => /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: `note-diff-line diff-${line.type}`, role: "listitem", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "note-diff-gutter", "aria-hidden": "true", children: line.type === "add" ? "+" : line.type === "remove" ? "-" : "" }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "note-diff-text", children: line.text || " " })
-    ] }, index)) })
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "note-inline-diff-body", children: view === "diff" ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "note-inline-diff-text", children: inlineNodes }) : view === "original" ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MarkdownRenderer, { content: previous, emptyText: "원본이 비어 있습니다." }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MarkdownRenderer, { content: next, emptyText: "제안 내용이 비어 있습니다." }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "note-inline-diff-legend", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "diff-ins", children: "파란 밑줄" }),
+      " 추가 · ",
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "diff-del", children: "빨간 취소선" }),
+      " 삭제"
+    ] })
   ] });
 }
 
 // src/components/NoteEditor.tsx
-var import_react13 = __toESM(require_react(), 1);
 var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
 function NoteEditor({
   draft,
@@ -36868,12 +37016,16 @@ function NoteEditor({
   aiActions,
   aiEnabled,
   isAiRunning,
+  overlay,
+  onAcceptOverlay,
+  onRejectOverlay,
   onRunAiAction,
   onInlineAssist,
   onCustomAi,
   onManageAi,
   onChangeTitle,
   onChangeContent,
+  onToggleChecklist,
   onSave,
   onOpenMeta,
   onOpenHistory,
@@ -36886,7 +37038,7 @@ function NoteEditor({
   errorMessage,
   historyCount
 }) {
-  const [mode, setMode] = (0, import_react13.useState)("edit");
+  const [mode, setMode] = (0, import_react13.useState)("read");
   const containerRef = (0, import_react13.useRef)(null);
   (0, import_react13.useEffect)(() => {
     const handleKeyDown = (event) => {
@@ -36988,7 +37140,18 @@ function NoteEditor({
       /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", className: "note-ai-manage", onClick: onManageAi, title: "AI 편집 기능 관리", children: "관리" }),
       isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "note-ai-bar-status", children: "처리 중…" }) : null
     ] }),
-    mode === "edit" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+    overlay ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+      NoteInlineDiff,
+      {
+        previous: overlay.previous,
+        next: overlay.next,
+        headline: overlay.headline,
+        mode: overlay.mode,
+        isApplying: overlay.isApplying,
+        onAccept: onAcceptOverlay,
+        onReject: onRejectOverlay
+      }
+    ) : mode === "edit" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
       "textarea",
       {
         ref: textareaRef,
@@ -36999,7 +37162,23 @@ function NoteEditor({
         placeholder: "내용을 입력하세요. 우클릭하면 AI 편집 메뉴가 열립니다.",
         rows: 18
       }
-    ) : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "note-read-view", onContextMenu: onContentContextMenu, children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(MarkdownRenderer, { content: draft.content, emptyText: "작성된 내용이 없습니다." }) }),
+    ) : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+      "div",
+      {
+        className: "note-read-view",
+        onContextMenu: onContentContextMenu,
+        onDoubleClick: () => setMode("edit"),
+        title: "더블클릭하면 편집 모드로 전환됩니다",
+        children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+          MarkdownRenderer,
+          {
+            content: draft.content,
+            emptyText: "작성된 내용이 없습니다. 더블클릭해서 편집하세요.",
+            onChecklistToggle: onToggleChecklist
+          }
+        )
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("footer", { className: "note-editor-footer", children: [
       /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "note-editor-footer-left", children: [
         /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("button", { type: "button", className: "note-text-button", onClick: onOpenHistory, children: [
@@ -37180,7 +37359,7 @@ function NoteMetaModal({ draft, projects, subcategories, onApply, onClose }) {
 // src/components/ProjectNoteTree.tsx
 var import_react15 = __toESM(require_react(), 1);
 var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
-function ProjectNoteTree({ projects, subcategories, notes, selected, onSelect, onAddSubcategory }) {
+function ProjectNoteTree({ projects, subcategories, notes, openChecklistCount, selected, onSelect, onAddSubcategory }) {
   const [expanded, setExpanded] = (0, import_react15.useState)(() => {
     const set = /* @__PURE__ */ new Set();
     for (const note of notes) {
@@ -37250,6 +37429,18 @@ function ProjectNoteTree({ projects, subcategories, notes, selected, onSelect, o
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "note-tree-label", children: "📌 고정됨" }),
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "note-tree-count", children: counts.pinned })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: `note-tree-row root ${selected.kind === "checklist" ? "active" : ""}`,
+        onClick: () => onSelect({ kind: "checklist" }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "note-tree-label", children: "✓ 전체 체크리스트" }),
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "note-tree-count", children: openChecklistCount })
         ]
       }
     ),
@@ -37661,6 +37852,34 @@ function suggestTasksForNote(params) {
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, params.limit);
   return scored;
 }
+function suggestRelatedNotes(params) {
+  const keywords = extractKeywords(`${params.note.title} ${params.note.content}`);
+  const tagSet = new Set(params.note.tags.map((tag) => tag.toLowerCase()));
+  return params.notes.filter((note) => note.id !== params.note.id).map((note) => {
+    let score = 0;
+    const reasons = [];
+    const haystack = `${note.title} ${note.content}`.toLowerCase();
+    let matched = 0;
+    for (const keyword of keywords) {
+      if (haystack.includes(keyword)) {
+        matched += 1;
+      }
+    }
+    if (matched > 0) {
+      score += Math.min(6, matched);
+      reasons.push("키워드");
+    }
+    if (note.projectId === params.note.projectId) {
+      score += 2;
+      reasons.push("같은 프로젝트");
+    }
+    if (note.tags.some((tag) => tagSet.has(tag.toLowerCase()))) {
+      score += 2;
+      reasons.push("공통 태그");
+    }
+    return { noteId: note.id, score, reason: reasons.join(", ") };
+  }).filter((item) => item.score >= 3).sort((a, b) => b.score - a.score).slice(0, params.limit);
+}
 var STOP_TOKENS = /* @__PURE__ */ new Set([
   "그리고",
   "하지만",
@@ -37733,6 +37952,7 @@ function NotesPage() {
   const [metaModalOpen, setMetaModalOpen] = (0, import_react16.useState)(false);
   const [historyOpen, setHistoryOpen] = (0, import_react16.useState)(false);
   const [aiMenu, setAiMenu] = (0, import_react16.useState)(null);
+  const [cardMenu, setCardMenu] = (0, import_react16.useState)(null);
   const textareaRef = (0, import_react16.useRef)(null);
   const loadedNoteIdRef = (0, import_react16.useRef)(null);
   const selectionRef = (0, import_react16.useRef)({ start: 0, end: 0 });
@@ -37799,9 +38019,26 @@ function NotesPage() {
               patch.title = derived;
             }
           }
-          if (!note.subcategoryId) {
-            const subs = projectSubcategories.filter((sub) => sub.projectId === note.projectId && sub.name.trim());
-            const haystack = `${note.title} ${note.content}`.toLowerCase();
+          const haystack = `${note.title} ${note.content}`.toLowerCase();
+          let effectiveProjectId = note.projectId;
+          if (note.projectId === DEFAULT_PROJECT_ID) {
+            const match = projects.find(
+              (project) => project.id !== DEFAULT_PROJECT_ID && project.isActive && project.name.trim().length >= 2 && haystack.includes(project.name.toLowerCase())
+            );
+            if (match) {
+              patch.projectId = match.id;
+              patch.subcategoryId = void 0;
+              effectiveProjectId = match.id;
+            }
+          }
+          if (!note.subcategoryId && !patch.projectId) {
+            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
+            const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
+            if (match) {
+              patch.subcategoryId = match.id;
+            }
+          } else if (patch.projectId) {
+            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
             const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
             if (match) {
               patch.subcategoryId = match.id;
@@ -37814,7 +38051,26 @@ function NotesPage() {
       })();
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [notes, projectSubcategories, selectedNoteId, updateNote]);
+  }, [notes, projects, projectSubcategories, selectedNoteId, updateNote]);
+  const openChecklistItems = (0, import_react16.useMemo)(() => {
+    const items = [];
+    for (const note of notes) {
+      const lines = note.content.replace(/\r\n/g, "\n").split("\n");
+      lines.forEach((line, lineIndex) => {
+        const match = line.match(/^\s*[-*+]\s+\[ \]\s+(.+)$/);
+        if (match) {
+          items.push({
+            noteId: note.id,
+            noteTitle: note.title,
+            projectColor: projectMap[note.projectId]?.color ?? "var(--body-muted)",
+            lineIndex,
+            text: match[1].trim().replace(/(\*\*|__|~~|`)/g, "")
+          });
+        }
+      });
+    }
+    return items;
+  }, [notes, projectMap]);
   const filteredNotes = (0, import_react16.useMemo)(() => {
     const keyword = search.trim().toLowerCase();
     return notes.filter((note) => {
@@ -37824,6 +38080,8 @@ function NotesPage() {
         case "pinned":
           if (!note.isPinned) return false;
           break;
+        case "checklist":
+          return false;
         case "project":
           if (note.projectId !== filterNode.projectId) return false;
           break;
@@ -37867,12 +38125,38 @@ function NotesPage() {
       limit: MAX_NOTE_TASK_SUGGESTIONS
     }).map((item) => ({ task: taskMap[item.taskId], reason: item.reason })).filter((item) => Boolean(item.task));
   }, [selectedNote, tasks, taskMap]);
+  const relatedNotes = (0, import_react16.useMemo)(() => {
+    if (!selectedNote) return [];
+    const noteMap = Object.fromEntries(notes.map((note) => [note.id, note]));
+    return suggestRelatedNotes({ note: selectedNote, notes, limit: 5 }).map((item) => ({ note: noteMap[item.noteId], reason: item.reason })).filter((item) => Boolean(item.note));
+  }, [selectedNote, notes]);
   const isDirty = (0, import_react16.useMemo)(() => {
     if (!selectedNote || !draft) return false;
     return selectedNote.title !== draft.title || selectedNote.content !== draft.content || selectedNote.projectId !== draft.projectId || (selectedNote.subcategoryId ?? "") !== (draft.subcategoryId ?? "") || selectedNote.status !== draft.status || selectedNote.isPinned !== draft.isPinned || !tagsEqual(selectedNote.tags, draft.tags);
   }, [selectedNote, draft]);
   const currentSubcategoryName = draft?.subcategoryId ? subMap[draft.subcategoryId]?.name : void 0;
   const currentProject = draft ? projectMap[draft.projectId] : void 0;
+  const editorOverlay = (0, import_react16.useMemo)(() => {
+    if (!selectedNote) return null;
+    if (aiProposal) {
+      return {
+        previous: selectedNote.content,
+        next: aiProposal.content,
+        headline: aiProposal.headline,
+        mode: "proposal",
+        isApplying: isSaving
+      };
+    }
+    if (compareVersion) {
+      return {
+        previous: compareVersion.content,
+        next: selectedNote.content,
+        headline: "선택 버전 → 현재",
+        mode: "compare"
+      };
+    }
+    return null;
+  }, [selectedNote, aiProposal, compareVersion, isSaving]);
   async function handleCreateNote() {
     const base = {
       title: "새 노트",
@@ -37923,6 +38207,101 @@ function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
+  }
+  async function toggleChecklistLine(noteId, lineIndex, checked) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    const lines = note.content.replace(/\r\n/g, "\n").split("\n");
+    const line = lines[lineIndex];
+    if (line == null) return;
+    const replaced = line.replace(/^(\s*[-*+]\s+\[)[ xX](\]\s+)/, `$1${checked ? "x" : " "}$2`);
+    if (replaced === line) return;
+    lines[lineIndex] = replaced;
+    const nextContent = lines.join("\n");
+    if (noteId === selectedNoteId && draft) {
+      setDraft({ ...draft, content: nextContent });
+    }
+    try {
+      await updateNote(noteId, { ...noteToInput(note), content: nextContent });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "저장에 실패했습니다.");
+    }
+  }
+  function handleToggleChecklist(lineIndex, checked) {
+    if (!selectedNoteId) return;
+    void toggleChecklistLine(selectedNoteId, lineIndex, checked);
+  }
+  async function setNoteStatus(noteId, status) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    await updateNote(noteId, { ...noteToInput(note), status });
+  }
+  async function handleDeleteNote(noteId) {
+    if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
+    await removeNote(noteId);
+    if (selectedNoteId === noteId) setSelectedNoteId(null);
+  }
+  async function handleSummarizeNote(noteId) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    setIsAiRunning(true);
+    setAiError("");
+    try {
+      const result = await runNotesAgent({
+        mode: "summarize",
+        userMessage: "이 노트를 요약해줘",
+        targetNotes: [{ id: note.id, title: note.title, content: note.content }],
+        notes,
+        tasks,
+        projects,
+        taskTypes: [],
+        endpoint: setting.llmEndpoint,
+        apiKey: setting.llmApiKey ?? "",
+        model: setting.llmModel
+      });
+      if (result.proposedContent) {
+        const id = await createNote(
+          {
+            title: result.proposedTitle?.trim() || `요약: ${note.title}`,
+            content: result.proposedContent,
+            projectId: note.projectId,
+            subcategoryId: note.subcategoryId,
+            tags: ["요약"],
+            status: "active",
+            isPinned: false
+          },
+          "ai_full",
+          "노트 요약"
+        );
+        setSelectedNoteId(id);
+      } else {
+        setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
+      }
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : "요약에 실패했습니다.");
+    } finally {
+      setIsAiRunning(false);
+    }
+  }
+  function buildCardMenuItems(noteId) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return [];
+    const items = [
+      { id: "open", label: "열기", onSelect: () => setSelectedNoteId(noteId) },
+      { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
+      { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) }
+    ];
+    if (note.status !== "active") {
+      items.push({ id: "activate", label: "활성화", onSelect: () => void setNoteStatus(noteId, "active") });
+    }
+    if (note.status !== "draft") {
+      items.push({ id: "draft", label: "초안으로", onSelect: () => void setNoteStatus(noteId, "draft") });
+    }
+    if (note.status !== "archived") {
+      items.push({ id: "archive", label: "보관", onSelect: () => void setNoteStatus(noteId, "archived") });
+    }
+    items.push({ id: "delete", label: "삭제", tone: "danger", onSelect: () => void handleDeleteNote(noteId) });
+    return items;
   }
   const runEditAgent = (0, import_react16.useCallback)(
     async (prompt) => {
@@ -38169,6 +38548,8 @@ function NotesPage() {
         return "전체 노트";
       case "pinned":
         return "고정된 노트";
+      case "checklist":
+        return "전체 체크리스트";
       case "project":
         return projectMap[filterNode.projectId]?.name ?? "프로젝트";
       case "subcategory":
@@ -38199,6 +38580,7 @@ function NotesPage() {
           projects,
           subcategories: projectSubcategories,
           notes,
+          openChecklistCount: openChecklistItems.length,
           selected: filterNode,
           onSelect: (node) => {
             setFilterNode(node);
@@ -38226,7 +38608,30 @@ function NotesPage() {
           /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", className: "btn btn-outline btn-compact", onClick: () => setCheckedIds(/* @__PURE__ */ new Set()), children: "해제" })
         ] })
       ] }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "notes-list", children: filteredNotes.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "empty-text", children: '노트가 없습니다. "새 노트"로 시작하세요.' }) : filteredNotes.map((note) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+      filterNode.kind === "checklist" ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "notes-checklist-view", children: openChecklistItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "empty-text", children: "미완료 체크리스트 항목이 없습니다." }) : openChecklistItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "global-check-item", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: false,
+            "aria-label": `${item.text} 완료`,
+            onChange: () => void toggleChecklistLine(item.noteId, item.lineIndex, true)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: "global-check-body",
+            onClick: () => setSelectedNoteId(item.noteId),
+            style: { "--note-project-color": item.projectColor },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "global-check-text", children: item.text }),
+              /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("small", { className: "global-check-note", children: item.noteTitle })
+            ]
+          }
+        )
+      ] }, `${item.noteId}-${item.lineIndex}`)) }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "notes-list", children: filteredNotes.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "empty-text", children: '노트가 없습니다. "새 노트"로 시작하세요.' }) : filteredNotes.map((note) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         NoteCard,
         {
           note,
@@ -38235,7 +38640,11 @@ function NotesPage() {
           isChecked: checkedIds.has(note.id),
           linkedTaskCount: note.linkedTaskIds.length,
           onSelect: () => setSelectedNoteId(note.id),
-          onToggleCheck: (checked) => toggleCheck(note.id, checked)
+          onToggleCheck: (checked) => toggleCheck(note.id, checked),
+          onContextMenu: (event) => {
+            event.preventDefault();
+            setCardMenu({ x: event.clientX, y: event.clientY, noteId: note.id });
+          }
         },
         note.id
       )) })
@@ -38251,6 +38660,13 @@ function NotesPage() {
           aiActions,
           aiEnabled: hasApiConfig,
           isAiRunning,
+          overlay: editorOverlay,
+          onAcceptOverlay: () => void acceptProposal(),
+          onRejectOverlay: () => {
+            setAiProposal(null);
+            setCompareVersion(null);
+          },
+          onToggleChecklist: (lineIndex, checked) => void handleToggleChecklist(lineIndex, checked),
           onRunAiAction: (prompt) => void runEditAgent(prompt),
           onInlineAssist: () => void runInlineAssist(),
           onCustomAi: () => {
@@ -38280,38 +38696,20 @@ function NotesPage() {
           savedMessage,
           errorMessage,
           historyCount: selectedVersions.length
-        }
+        },
+        selectedNote.id
       ),
       isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "description-text note-ai-running", children: "AI가 처리 중입니다…" }) : null,
       aiError ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "error-text", children: aiError }) : null,
-      aiProposal ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
-        NoteDiffView,
-        {
-          previous: selectedNote.content,
-          next: aiProposal.content,
-          headline: aiProposal.headline,
-          isApplying: isSaving,
-          onAccept: () => void acceptProposal(),
-          onReject: () => setAiProposal(null)
-        }
-      ) : null,
-      compareVersion ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
-        NoteDiffView,
-        {
-          previous: compareVersion.content,
-          next: selectedNote.content,
-          headline: "선택한 버전 → 현재",
-          onAccept: () => setCompareVersion(null),
-          onReject: () => setCompareVersion(null)
-        }
-      ) : null,
       /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         NoteConnections,
         {
           linkedTasks,
           suggestions,
+          relatedNotes,
           timeFormat: setting.timeFormat,
           onOpenTask: handleOpenTask,
+          onOpenNote: (noteId) => setSelectedNoteId(noteId),
           onLink: (taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest"),
           onUnlink: (taskId) => void unlinkNoteFromTask(selectedNote.id, taskId),
           isBusy: isSaving
@@ -38349,6 +38747,16 @@ function NotesPage() {
         title: "AI 편집",
         items: buildAiMenuItems(),
         onClose: () => setAiMenu(null)
+      }
+    ) : null,
+    cardMenu ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+      ContextMenu,
+      {
+        x: cardMenu.x,
+        y: cardMenu.y,
+        title: "노트",
+        items: buildCardMenuItems(cardMenu.noteId),
+        onClose: () => setCardMenu(null)
       }
     ) : null
   ] });
