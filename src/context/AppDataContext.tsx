@@ -76,7 +76,7 @@ interface AppDataContextValue {
   canUndo: boolean;
   undoDescription?: string;
   autoBackups: AutoBackupSummary[];
-  createTask: (input: TaskFormInput) => Promise<void>;
+  createTask: (input: TaskFormInput) => Promise<string>;
   updateTask: (id: string, input: TaskFormInput) => Promise<void>;
   removeTask: (id: string) => Promise<void>;
   undoLastChange: () => Promise<void>;
@@ -652,6 +652,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         description: recurrenceCount > 1 ? `반복 일정 ${recurrenceCount}건 추가` : `일정 추가: ${normalized.title}`,
         taskIds: records.map((item) => item.id),
       });
+
+      return records[0]?.id ?? "";
     },
     [pushUndo],
   );

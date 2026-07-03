@@ -4,6 +4,7 @@ import { DEFAULT_PROJECT_ID } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { deriveNoteTitle } from "../utils/noteTitle";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
+import { AskDataModal } from "./AskDataModal";
 import { HelpModal } from "./HelpModal";
 import { NoteQuickAddModal } from "./NoteQuickAddModal";
 
@@ -26,6 +27,7 @@ export function AppShell() {
   const [aiInitialDraft, setAiInitialDraft] = useState("");
   const [isNoteAddOpen, setIsNoteAddOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isAskOpen, setIsAskOpen] = useState(false);
 
   const activeProjectId = useMemo(
     () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
@@ -149,6 +151,10 @@ export function AppShell() {
             ?
           </button>
 
+          <button type="button" className="btn btn-soft" onClick={() => setIsAskOpen(true)} aria-label="내 데이터에 질문">
+            질문
+          </button>
+
           <button type="button" className="btn btn-soft" onClick={() => setIsNoteAddOpen(true)} aria-label="노트 추가">
             노트 추가
           </button>
@@ -225,6 +231,8 @@ export function AppShell() {
       ) : null}
 
       {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} /> : null}
+
+      {isAskOpen ? <AskDataModal onClose={() => setIsAskOpen(false)} /> : null}
     </div>
   );
 }

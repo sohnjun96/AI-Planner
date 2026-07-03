@@ -6,8 +6,16 @@ import { NoteConnections } from "../components/NoteConnections";
 import { NoteEditor, type NoteEditorOverlay } from "../components/NoteEditor";
 import { NoteHistoryPanel } from "../components/NoteHistoryPanel";
 import { NoteMetaModal } from "../components/NoteMetaModal";
+import { NoteActionModal, type ConfirmedAction } from "../components/NoteActionModal";
 import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteTree";
-import { runNotesAgent, suggestRelatedNotes, suggestTasksForNote, type NotesAgentProgress } from "../agent/notesAgent";
+import {
+  extractNoteActions,
+  runNotesAgent,
+  suggestRelatedNotes,
+  suggestTasksForNote,
+  type NoteActionItem,
+  type NotesAgentProgress,
+} from "../agent/notesAgent";
 import {
   DEFAULT_PROJECT_ID,
   MAX_NOTE_TASK_SUGGESTIONS,
@@ -46,10 +54,12 @@ export function NotesPage() {
     notes,
     noteVersions,
     tasks,
+    taskTypes,
     projects,
     projectSubcategories,
     setting,
     createNote,
+    createTask,
     updateNote,
     removeNote,
     restoreNoteVersion,
@@ -75,6 +85,8 @@ export function NotesPage() {
   const [aiError, setAiError] = useState("");
   const [aiProposal, setAiProposal] = useState<AiProposal | null>(null);
   const [compareVersion, setCompareVersion] = useState<NoteVersion | null>(null);
+  const [actionItems, setActionItems] = useState<NoteActionItem[] | null>(null);
+  const [isCreatingActions, setIsCreatingActions] = useState(false);
 
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -604,6 +616,64 @@ export function NotesPage() {
     }
   }
 
+  async function handleExtractActions() {
+    if (!selectedNote) return;
+    setIsAiRunning(true);
+    setAiProgress("AI 준비 중…");
+    setAiError("");
+    try {
+      const result = await extractNoteActions({
+        noteTitle: selectedNote.title,
+        noteContent: selectedNote.content,
+        nowIso: new Date().toISOString(),
+        endpoint: setting.llmEndpoint,
+        apiKey: setting.llmApiKey ?? "",
+        model: setting.llmModel,
+        onProgress: handleAiProgress,
+      });
+      setAiProgress("");
+      if (result.length === 0) {
+        setAiError("추출할 액션 아이템을 찾지 못했습니다.");
+      } else {
+        setActionItems(result);
+      }
+    } catch (error) {
+      setAiProgress("");
+      setAiError(error instanceof Error ? error.message : "액션 추출에 실패했습니다.");
+    } finally {
+      setIsAiRunning(false);
+    }
+  }
+
+  async function handleCreateActions(actions: ConfirmedAction[]) {
+    if (!selectedNote) return;
+    setIsCreatingActions(true);
+    try {
+      const defaultTypeId = taskTypes.find((type) => type.isActive)?.id ?? taskTypes[0]?.id ?? "";
+      for (const action of actions) {
+        const taskId = await createTask({
+          title: action.title,
+          content: action.content ?? "",
+          taskTypeId: defaultTypeId,
+          projectId: selectedNote.projectId,
+          status: "NOT_DONE",
+          startAt: action.startAtIso,
+          isMajor: false,
+        });
+        if (taskId) {
+          await linkNoteToTask(selectedNote.id, taskId, "manual");
+        }
+      }
+      setActionItems(null);
+      setSavedMessage(`일정 ${actions.length}건을 만들고 노트에 연결했습니다.`);
+      window.setTimeout(() => setSavedMessage(""), 2500);
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : "일정 생성에 실패했습니다.");
+    } finally {
+      setIsCreatingActions(false);
+    }
+  }
+
   function handleContentContextMenu(event: MouseEvent<HTMLElement>) {
     event.preventDefault();
     const textarea = textareaRef.current;
@@ -907,6 +977,7 @@ export function NotesPage() {
                   void runEditAgent(prompt.trim());
                 }
               }}
+              onExtractActions={() => void handleExtractActions()}
               onManageAi={() => navigate("/settings")}
               onChangeTitle={(value) => setDraft((prev) => (prev ? { ...prev, title: value } : prev))}
               onChangeContent={(value) =>
@@ -969,6 +1040,15 @@ export function NotesPage() {
           subcategories={projectSubcategories}
           onApply={(patch) => void handleApplyMeta(patch)}
           onClose={() => setMetaModalOpen(false)}
+        />
+      ) : null}
+
+      {actionItems ? (
+        <NoteActionModal
+          items={actionItems}
+          isBusy={isCreatingActions}
+          onConfirm={(actions) => void handleCreateActions(actions)}
+          onClose={() => setActionItems(null)}
         />
       ) : null}
 

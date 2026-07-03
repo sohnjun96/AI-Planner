@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
+import { DailyBriefing } from "../components/DailyBriefing";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
@@ -1067,6 +1068,7 @@ export function DashboardPage() {
           <h2>{formatFullDate(today)}</h2>
         </button>
         <div className="dashboard-hero-actions">
+          <DailyBriefing />
           <TaskViewSegmentedControl value={calendarViewMode} onChange={setCalendarViewMode} ariaLabel="대시보드 일정 보기 방식" />
           <button
             type="button"

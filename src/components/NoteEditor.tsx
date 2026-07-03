@@ -26,6 +26,7 @@ interface NoteEditorProps {
   onRunAiAction: (prompt: string) => void;
   onInlineAssist: () => void;
   onCustomAi: () => void;
+  onExtractActions: () => void;
   onManageAi: () => void;
   onChangeTitle: (value: string) => void;
   onChangeContent: (value: string) => void;
@@ -57,6 +58,7 @@ export function NoteEditor({
   onRunAiAction,
   onInlineAssist,
   onCustomAi,
+  onExtractActions,
   onManageAi,
   onChangeTitle,
   onChangeContent,
@@ -172,6 +174,15 @@ export function NoteEditor({
           title="원하는 편집을 직접 입력"
         >
           직접 요청
+        </button>
+        <button
+          type="button"
+          className="note-ai-chip action"
+          disabled={!aiEnabled || isAiRunning}
+          onClick={onExtractActions}
+          title="노트에서 할 일을 뽑아 일정으로 만들기"
+        >
+          📅 일정 추출
         </button>
         <button type="button" className="note-ai-manage" onClick={onManageAi} title="AI 편집 기능 관리">
           관리

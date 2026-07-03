@@ -432,6 +432,80 @@ export function suggestTasksForNote(params: {
   return scored;
 }
 
+export interface NoteActionItem {
+  title: string;
+  startAt?: string;
+  content?: string;
+}
+
+/**
+ * 노트 본문에서 실행 가능한 할 일(액션 아이템)을 추출한다. (단일 LLM 호출)
+ */
+export async function extractNoteActions(input: {
+  noteTitle: string;
+  noteContent: string;
+  nowIso: string;
+  endpoint?: string;
+  apiKey: string;
+  model?: string;
+  onProgress?: (info: NotesAgentProgress) => void;
+}): Promise<NoteActionItem[]> {
+  const system = `
+You extract actionable to-do items from a Korean note so they can become calendar tasks.
+Return exactly ONE JSON object: { "items": [ { "title": "...", "startAt": "YYYY-MM-DDTHH:mm", "content": "..." } ] }.
+- title: Korean, short imperative (e.g. "예산안 검토").
+- startAt: include ONLY if the note clearly implies a date/time. Interpret relative dates ("내일", "목요일") using the provided now. Use local ISO without timezone. Omit if unknown.
+- content: optional extra detail, Korean.
+Only include real, concrete action items. If there are none, return { "items": [] }.
+No markdown fences, no text before or after the JSON.
+`.trim();
+
+  const payload = { now: input.nowIso, noteTitle: input.noteTitle, noteContent: input.noteContent };
+  let chars = 0;
+  const raw = await requestLlmResponse({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify(payload) },
+    ],
+    endpoint: input.endpoint,
+    apiKey: input.apiKey,
+    model: input.model,
+    onToken: input.onProgress
+      ? (delta) => {
+          chars += delta.length;
+          input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars });
+        }
+      : undefined,
+  });
+
+  const parsed = parseJsonObject(raw);
+  if (!parsed) {
+    return [];
+  }
+  const itemsRaw = Array.isArray(parsed.items)
+    ? parsed.items
+    : Array.isArray(parsed.actions)
+      ? parsed.actions
+      : Array.isArray(parsed.tasks)
+        ? parsed.tasks
+        : [];
+
+  const items: NoteActionItem[] = [];
+  for (const entry of itemsRaw) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const title = pickFirstString(entry, ["title", "name", "task", "text"]);
+    if (!title) {
+      continue;
+    }
+    const startAt = pickFirstString(entry, ["startAt", "start_at", "date", "datetime", "when", "dueAt", "due"]) || undefined;
+    const content = pickFirstString(entry, ["content", "note", "description", "detail", "memo"]) || undefined;
+    items.push({ title, startAt, content });
+  }
+  return items.slice(0, 20);
+}
+
 /**
  * 관련 노트 자동 탐색 (LLM 없이 로컬 점수 계산).
  * 키워드 겹침 + 같은 프로젝트 + 공통 태그 기준.
