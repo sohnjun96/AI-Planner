@@ -110,6 +110,10 @@ function formatDayLabel(date: Date): string {
   }).format(date);
 }
 
+function formatWeekday(date: Date): string {
+  return new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
+}
+
 function formatTimeOnly(value: string, timeFormat: "24h" | "12h"): string {
   return new Intl.DateTimeFormat("ko-KR", {
     hour: "2-digit",
@@ -1138,21 +1142,40 @@ export function DashboardPage() {
                 <span>{weekVisibleTaskCount}/{weekViewSourceTasks.length}개</span>
               </header>
               {renderScheduleStatGrid(weekViewSummary)}
-              <div className="week-board">
+              <div className="week-agenda">
                 {weekDays.map((day) => {
                   const visibleDayTasks = getSchedulePriorityTasks(day.tasks, scheduleViewMode);
+                  const isToday = day.key === todayKey;
+                  const isEmpty = visibleDayTasks.length === 0;
                   return (
-                    <section key={day.key} className={`week-column ${day.key === todayKey ? "today" : ""}`}>
-                      <header>
-                        <div>
-                          <strong>{formatDayLabel(day.date)}</strong>
-                          <span>{visibleDayTasks.length}/{day.tasks.length}개</span>
+                    <section key={day.key} className={`week-day-row ${isToday ? "today" : ""} ${isEmpty ? "empty" : ""}`}>
+                      <div className="week-day-head">
+                        <div className="week-day-date">
+                          <span className="week-day-dow">{formatWeekday(day.date)}</span>
+                          <strong className="week-day-num">{day.date.getDate()}</strong>
+                          {isToday ? <span className="week-day-today-badge">오늘</span> : null}
                         </div>
-                      </header>
-                      <button type="button" className="btn btn-soft week-add-button" onClick={() => openCreateTask(day.key)}>
-                        일정 추가
-                      </button>
-                      {renderCalendarTaskCards(visibleDayTasks, "일정이 없습니다.")}
+                        <div className="week-day-meta">
+                          <span>{isEmpty ? "일정 없음" : `${visibleDayTasks.length}/${day.tasks.length}개`}</span>
+                          <button
+                            type="button"
+                            className="week-day-add"
+                            onClick={() => openCreateTask(day.key)}
+                            aria-label={`${formatDayLabel(day.date)} 일정 추가`}
+                          >
+                            + 추가
+                          </button>
+                        </div>
+                      </div>
+                      <div className="week-day-body">
+                        {isEmpty ? (
+                          <button type="button" className="week-day-empty" onClick={() => openCreateTask(day.key)}>
+                            + 일정 추가
+                          </button>
+                        ) : (
+                          renderCalendarTaskCards(visibleDayTasks, "")
+                        )}
+                      </div>
                     </section>
                   );
                 })}

@@ -36460,6 +36460,9 @@ function formatDayLabel(date) {
     weekday: "short"
   }).format(date);
 }
+function formatWeekday(date) {
+  return new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
+}
 function formatTimeOnly(value, timeFormat) {
   return new Intl.DateTimeFormat("ko-KR", {
     hour: "2-digit",
@@ -37349,20 +37352,32 @@ function DashboardPage() {
             ] })
           ] }),
           renderScheduleStatGrid(weekViewSummary),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "week-board", children: weekDays.map((day) => {
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "week-agenda", children: weekDays.map((day) => {
             const visibleDayTasks = getSchedulePriorityTasks(day.tasks, scheduleViewMode);
-            return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: `week-column ${day.key === todayKey ? "today" : ""}`, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { children: formatDayLabel(day.date) }),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { children: [
-                  visibleDayTasks.length,
-                  "/",
-                  day.tasks.length,
-                  "개"
+            const isToday = day.key === todayKey;
+            const isEmpty = visibleDayTasks.length === 0;
+            return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: `week-day-row ${isToday ? "today" : ""} ${isEmpty ? "empty" : ""}`, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "week-day-head", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "week-day-date", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "week-day-dow", children: formatWeekday(day.date) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("strong", { className: "week-day-num", children: day.date.getDate() }),
+                  isToday ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "week-day-today-badge", children: "오늘" }) : null
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "week-day-meta", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: isEmpty ? "일정 없음" : `${visibleDayTasks.length}/${day.tasks.length}개` }),
+                  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+                    "button",
+                    {
+                      type: "button",
+                      className: "week-day-add",
+                      onClick: () => openCreateTask(day.key),
+                      "aria-label": `${formatDayLabel(day.date)} 일정 추가`,
+                      children: "+ 추가"
+                    }
+                  )
                 ] })
-              ] }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "btn btn-soft week-add-button", onClick: () => openCreateTask(day.key), children: "일정 추가" }),
-              renderCalendarTaskCards(visibleDayTasks, "일정이 없습니다.")
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "week-day-body", children: isEmpty ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "week-day-empty", onClick: () => openCreateTask(day.key), children: "+ 일정 추가" }) : renderCalendarTaskCards(visibleDayTasks, "") })
             ] }, day.key);
           }) })
         ] }) : null,
