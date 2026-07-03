@@ -33295,6 +33295,7 @@ function focusTextareaAtEnd(textarea, value) {
 }
 function AiAssistantWorkspace({
   compact = false,
+  showHeader = true,
   showEndpointInfo = true,
   directApply = false,
   hideInitialResult = false,
@@ -33785,14 +33786,15 @@ function AiAssistantWorkspace({
     error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
   ] }) : null;
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header ai-command-header", children: [
+    showHeader ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header ai-command-header", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "eyebrow", children: "AI COMMAND" }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: title }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: subtitle })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: `endpoint-status ${endpointStatus}`, title: endpointStatusMessage, children: endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류" })
-    ] }),
+    ] }) : null,
+    !showHeader && endpointStatus === "error" && !isLoading ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "ai-connection-warn", role: "status", children: "⚠ AI 서버에 연결할 수 없어요. 설정에서 엔드포인트를 확인해 주세요." }) : null,
     showEndpointInfo ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-endpoint-block", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "description-text", children: [
         "Endpoint: ",
@@ -33841,31 +33843,38 @@ function AiAssistantWorkspace({
           }
         )
       ] }),
-      quickPrompts.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: quickPrompts.map((prompt) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-        "button",
-        {
-          type: "button",
-          onClick: () => {
-            setDraft(prompt);
-          },
-          children: prompt
-        },
-        prompt
-      )) }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-action-stack", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-primary btn-large", type: "button", disabled: isLoading || !draft.trim(), onClick: () => void handleSend(), children: isLoading ? "분석 중" : "초안 만들기" }),
-        showRetryButton ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+      quickPrompts.length > 0 && !pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-prompt-chip-hint", children: "예시" }),
+        quickPrompts.map((prompt) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
           "button",
           {
-            className: "btn btn-outline",
             type: "button",
-            disabled: isLoading || !lastUserMessage,
             onClick: () => {
-              void handleSend(lastUserMessage);
+              setDraft(prompt);
+              focusTextareaAtEnd(textareaRef.current, prompt);
             },
-            children: "마지막 요청 다시 실행"
-          }
-        ) : null
+            children: prompt
+          },
+          prompt
+        ))
+      ] }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-composer-footer", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-composer-kbd", children: pendingProposal ? "이어서 수정 요청도 할 수 있어요" : "Enter 초안 만들기 · Shift+Enter 줄바꿈" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-action-stack", children: [
+          showRetryButton ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            "button",
+            {
+              className: "btn btn-outline",
+              type: "button",
+              disabled: isLoading || !lastUserMessage,
+              onClick: () => {
+                void handleSend(lastUserMessage);
+              },
+              children: "다시 실행"
+            }
+          ) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-primary btn-large", type: "button", disabled: isLoading || !draft.trim(), onClick: () => void handleSend(), children: isLoading ? "분석 중…" : "초안 만들기" })
+        ] })
       ] })
     ] }),
     resultPresentation !== "modal" ? resultCard : null
@@ -34797,7 +34806,8 @@ function AppShell() {
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("header", { className: "panel-header", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
                   /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "eyebrow", children: "AI SCHEDULE" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "AI 일정 추가" })
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "AI 일정 추가" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { children: "일정 추가·수정·삭제를 자연어로 말해보세요." })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                   "button",
@@ -34815,12 +34825,19 @@ function AppShell() {
                 AiAssistantWorkspace,
                 {
                   compact: true,
+                  showHeader: false,
                   hideInitialResult: true,
                   showRetryButton: false,
                   showEndpointInfo: false,
                   title: "AI 일정 추가",
-                  subtitle: "원하는 일정을 자연어로 입력하면 초안을 만들고 선택 항목을 바로 반영할 수 있습니다.",
+                  inputLabel: "",
                   placeholder: "예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가",
+                  quickPrompts: [
+                    "내일 오전 10시 팀 회의 1시간 추가",
+                    "매주 월요일 오전 9시 주간보고 추가",
+                    "금요일 점심 약속 12시로 변경",
+                    "오늘 제출 마감 일정 삭제"
+                  ],
                   className: "embedded ai-add-workspace",
                   initialDraft: aiInitialDraft,
                   onApplied: () => setIsAiAddOpen(false),

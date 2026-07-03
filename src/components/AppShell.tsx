@@ -197,6 +197,7 @@ export function AppShell() {
               <div>
                 <p className="eyebrow">AI SCHEDULE</p>
                 <h2>AI 일정 추가</h2>
+                <small>일정 추가·수정·삭제를 자연어로 말해보세요.</small>
               </div>
               <button
                 type="button"
@@ -211,12 +212,19 @@ export function AppShell() {
 
             <AiAssistantWorkspace
               compact
+              showHeader={false}
               hideInitialResult
               showRetryButton={false}
               showEndpointInfo={false}
               title="AI 일정 추가"
-              subtitle="원하는 일정을 자연어로 입력하면 초안을 만들고 선택 항목을 바로 반영할 수 있습니다."
+              inputLabel=""
               placeholder="예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가"
+              quickPrompts={[
+                "내일 오전 10시 팀 회의 1시간 추가",
+                "매주 월요일 오전 9시 주간보고 추가",
+                "금요일 점심 약속 12시로 변경",
+                "오늘 제출 마감 일정 삭제",
+              ]}
               className="embedded ai-add-workspace"
               initialDraft={aiInitialDraft}
               onApplied={() => setIsAiAddOpen(false)}

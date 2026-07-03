@@ -17,6 +17,7 @@ import { formatDateTime } from "../utils/date";
 
 interface AiAssistantWorkspaceProps {
   compact?: boolean;
+  showHeader?: boolean;
   showEndpointInfo?: boolean;
   directApply?: boolean;
   hideInitialResult?: boolean;
@@ -171,6 +172,7 @@ function focusTextareaAtEnd(textarea: HTMLTextAreaElement | null, value?: string
 
 export function AiAssistantWorkspace({
   compact = false,
+  showHeader = true,
   showEndpointInfo = true,
   directApply = false,
   hideInitialResult = false,
@@ -758,16 +760,24 @@ export function AiAssistantWorkspace({
 
   return (
     <section className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`}>
-      <header className="panel-header ai-command-header">
-        <div>
-          <p className="eyebrow">AI COMMAND</p>
-          <h2>{title}</h2>
-          <small>{subtitle}</small>
-        </div>
-        <p className={`endpoint-status ${endpointStatus}`} title={endpointStatusMessage}>
-          {endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류"}
+      {showHeader ? (
+        <header className="panel-header ai-command-header">
+          <div>
+            <p className="eyebrow">AI COMMAND</p>
+            <h2>{title}</h2>
+            <small>{subtitle}</small>
+          </div>
+          <p className={`endpoint-status ${endpointStatus}`} title={endpointStatusMessage}>
+            {endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류"}
+          </p>
+        </header>
+      ) : null}
+
+      {!showHeader && endpointStatus === "error" && !isLoading ? (
+        <p className="ai-connection-warn" role="status">
+          ⚠ AI 서버에 연결할 수 없어요. 설정에서 엔드포인트를 확인해 주세요.
         </p>
-      </header>
+      ) : null}
 
       {showEndpointInfo ? (
         <div className="ai-endpoint-block">
@@ -818,14 +828,16 @@ export function AiAssistantWorkspace({
           />
         </label>
 
-        {quickPrompts.length > 0 ? (
+        {quickPrompts.length > 0 && !pendingProposal ? (
           <div className="ai-prompt-chip-row" aria-label="요청 예시">
+            <span className="ai-prompt-chip-hint">예시</span>
             {quickPrompts.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
                 onClick={() => {
                   setDraft(prompt);
+                  focusTextareaAtEnd(textareaRef.current, prompt);
                 }}
               >
                 {prompt}
@@ -834,22 +846,27 @@ export function AiAssistantWorkspace({
           </div>
         ) : null}
 
-        <div className="ai-action-stack">
-          <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>
-            {isLoading ? "분석 중" : "초안 만들기"}
-          </button>
-          {showRetryButton ? (
-            <button
-              className="btn btn-outline"
-              type="button"
-              disabled={isLoading || !lastUserMessage}
-              onClick={() => {
-                void handleSend(lastUserMessage);
-              }}
-            >
-              마지막 요청 다시 실행
+        <div className="ai-composer-footer">
+          <span className="ai-composer-kbd">
+            {pendingProposal ? "이어서 수정 요청도 할 수 있어요" : "Enter 초안 만들기 · Shift+Enter 줄바꿈"}
+          </span>
+          <div className="ai-action-stack">
+            {showRetryButton ? (
+              <button
+                className="btn btn-outline"
+                type="button"
+                disabled={isLoading || !lastUserMessage}
+                onClick={() => {
+                  void handleSend(lastUserMessage);
+                }}
+              >
+                다시 실행
+              </button>
+            ) : null}
+            <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>
+              {isLoading ? "분석 중…" : "초안 만들기"}
             </button>
-          ) : null}
+          </div>
         </div>
       </div>
 
