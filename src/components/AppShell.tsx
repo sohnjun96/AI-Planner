@@ -219,12 +219,6 @@ export function AppShell() {
               title="AI 일정 추가"
               inputLabel=""
               placeholder="예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가"
-              quickPrompts={[
-                "내일 오전 10시 팀 회의 1시간 추가",
-                "매주 월요일 오전 9시 주간보고 추가",
-                "금요일 점심 약속 12시로 변경",
-                "오늘 제출 마감 일정 삭제",
-              ]}
               className="embedded ai-add-workspace"
               initialDraft={aiInitialDraft}
               onApplied={() => setIsAiAddOpen(false)}

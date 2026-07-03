@@ -759,7 +759,11 @@ export function AiAssistantWorkspace({
   ) : null;
 
   return (
-    <section className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`}>
+    <section
+      className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${
+        hasVisibleResult ? "has-result" : ""
+      } ${className}`}
+    >
       {showHeader ? (
         <header className="panel-header ai-command-header">
           <div>

@@ -1648,8 +1648,6 @@ textarea:focus-visible,
 .proposal-list.compact-list {
   display: grid;
   gap: 12px;
-  max-height: min(46vh, 460px);
-  overflow: auto;
   padding: 4px 6px 4px 2px;
 }
 .proposal-item-toggle {
@@ -1884,7 +1882,10 @@ textarea:focus-visible,
   width: min(1040px, 96vw);
 }
 .ai-add-modal-card {
-  width: min(920px, 96vw);
+  width: min(720px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
   padding: 0;
   overflow: hidden;
   background: var(--canvas);
@@ -1904,12 +1905,13 @@ textarea:focus-visible,
   display: none;
 }
 .ai-add-modal-card > .panel-header {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: row;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 28px 30px 20px;
+  padding: 24px 28px 18px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.06);
   background:
     linear-gradient(
@@ -1931,7 +1933,20 @@ textarea:focus-visible,
   min-width: 0;
 }
 .ai-add-modal-card > .ai-command-center {
-  padding: 28px 30px 30px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 28px 26px;
+}
+.ai-command-center.has-result .ai-input-label textarea {
+  min-height: 0;
+  height: 76px;
+}
+.ai-command-center.has-result .ai-input-label {
+  padding: 12px;
+}
+.ai-command-center.has-result .ai-composer-kbd {
+  display: none;
 }
 .context-menu {
   position: fixed;

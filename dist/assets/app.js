@@ -33785,100 +33785,106 @@ function AiAssistantWorkspace({
     applyResult ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "success-text", children: applyResult }) : null,
     error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
   ] }) : null;
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`, children: [
-    showHeader ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header ai-command-header", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "eyebrow", children: "AI COMMAND" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: title }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: subtitle })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: `endpoint-status ${endpointStatus}`, title: endpointStatusMessage, children: endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류" })
-    ] }) : null,
-    !showHeader && endpointStatus === "error" && !isLoading ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "ai-connection-warn", role: "status", children: "⚠ AI 서버에 연결할 수 없어요. 설정에서 엔드포인트를 확인해 주세요." }) : null,
-    showEndpointInfo ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-endpoint-block", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "description-text", children: [
-        "Endpoint: ",
-        setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "description-text", children: [
-        "모델: ",
-        setting.llmModel ?? "(미설정)",
-        " / API Key: ",
-        setting.llmApiKey ? "설정됨" : "미설정"
-      ] })
-    ] }) : null,
-    showEndpointInfo && endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
-    resultPresentation === "modal" ? resultCard : null,
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-request-grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "ai-input-label", children: [
-        inputLabel ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: inputLabel }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "sr-only", children: "AI 요청" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "textarea",
-          {
-            ref: textareaRef,
-            autoFocus: true,
-            value: draft,
-            onChange: (event) => setDraft(event.target.value),
-            onKeyDown: (event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onRequestClose?.();
-                return;
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+    "section",
+    {
+      className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${hasVisibleResult ? "has-result" : ""} ${className}`,
+      children: [
+        showHeader ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header ai-command-header", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "eyebrow", children: "AI COMMAND" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: title }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: subtitle })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: `endpoint-status ${endpointStatus}`, title: endpointStatusMessage, children: endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류" })
+        ] }) : null,
+        !showHeader && endpointStatus === "error" && !isLoading ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "ai-connection-warn", role: "status", children: "⚠ AI 서버에 연결할 수 없어요. 설정에서 엔드포인트를 확인해 주세요." }) : null,
+        showEndpointInfo ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-endpoint-block", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "description-text", children: [
+            "Endpoint: ",
+            setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "description-text", children: [
+            "모델: ",
+            setting.llmModel ?? "(미설정)",
+            " / API Key: ",
+            setting.llmApiKey ? "설정됨" : "미설정"
+          ] })
+        ] }) : null,
+        showEndpointInfo && endpointStatus === "error" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", role: "alert", children: endpointStatusMessage }) : null,
+        resultPresentation === "modal" ? resultCard : null,
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-request-grid", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "ai-input-label", children: [
+            inputLabel ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: inputLabel }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "sr-only", children: "AI 요청" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+              "textarea",
+              {
+                ref: textareaRef,
+                autoFocus: true,
+                value: draft,
+                onChange: (event) => setDraft(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onRequestClose?.();
+                    return;
+                  }
+                  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                    return;
+                  }
+                  event.preventDefault();
+                  if (canApplyProposalWithEnter) {
+                    void handleApplyProposal();
+                    return;
+                  }
+                  if (!isLoading && draft.trim()) {
+                    void handleSend();
+                  }
+                },
+                rows: compact ? 4 : 5,
+                placeholder
               }
-              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
-                return;
-              }
-              event.preventDefault();
-              if (canApplyProposalWithEnter) {
-                void handleApplyProposal();
-                return;
-              }
-              if (!isLoading && draft.trim()) {
-                void handleSend();
-              }
-            },
-            rows: compact ? 4 : 5,
-            placeholder
-          }
-        )
-      ] }),
-      quickPrompts.length > 0 && !pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-prompt-chip-hint", children: "예시" }),
-        quickPrompts.map((prompt) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "button",
-          {
-            type: "button",
-            onClick: () => {
-              setDraft(prompt);
-              focusTextareaAtEnd(textareaRef.current, prompt);
-            },
-            children: prompt
-          },
-          prompt
-        ))
-      ] }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-composer-footer", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-composer-kbd", children: pendingProposal ? "이어서 수정 요청도 할 수 있어요" : "Enter 초안 만들기 · Shift+Enter 줄바꿈" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-action-stack", children: [
-          showRetryButton ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-            "button",
-            {
-              className: "btn btn-outline",
-              type: "button",
-              disabled: isLoading || !lastUserMessage,
-              onClick: () => {
-                void handleSend(lastUserMessage);
+            )
+          ] }),
+          quickPrompts.length > 0 && !pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-prompt-chip-hint", children: "예시" }),
+            quickPrompts.map((prompt) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+              "button",
+              {
+                type: "button",
+                onClick: () => {
+                  setDraft(prompt);
+                  focusTextareaAtEnd(textareaRef.current, prompt);
+                },
+                children: prompt
               },
-              children: "다시 실행"
-            }
-          ) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-primary btn-large", type: "button", disabled: isLoading || !draft.trim(), onClick: () => void handleSend(), children: isLoading ? "분석 중…" : "초안 만들기" })
-        ] })
-      ] })
-    ] }),
-    resultPresentation !== "modal" ? resultCard : null
-  ] });
+              prompt
+            ))
+          ] }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-composer-footer", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-composer-kbd", children: pendingProposal ? "이어서 수정 요청도 할 수 있어요" : "Enter 초안 만들기 · Shift+Enter 줄바꿈" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-action-stack", children: [
+              showRetryButton ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "button",
+                {
+                  className: "btn btn-outline",
+                  type: "button",
+                  disabled: isLoading || !lastUserMessage,
+                  onClick: () => {
+                    void handleSend(lastUserMessage);
+                  },
+                  children: "다시 실행"
+                }
+              ) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-primary btn-large", type: "button", disabled: isLoading || !draft.trim(), onClick: () => void handleSend(), children: isLoading ? "분석 중…" : "초안 만들기" })
+            ] })
+          ] })
+        ] }),
+        resultPresentation !== "modal" ? resultCard : null
+      ]
+    }
+  );
 }
 
 // src/components/AskDataModal.tsx
@@ -34832,12 +34838,6 @@ function AppShell() {
                   title: "AI 일정 추가",
                   inputLabel: "",
                   placeholder: "예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가",
-                  quickPrompts: [
-                    "내일 오전 10시 팀 회의 1시간 추가",
-                    "매주 월요일 오전 9시 주간보고 추가",
-                    "금요일 점심 약속 12시로 변경",
-                    "오늘 제출 마감 일정 삭제"
-                  ],
                   className: "embedded ai-add-workspace",
                   initialDraft: aiInitialDraft,
                   onApplied: () => setIsAiAddOpen(false),
