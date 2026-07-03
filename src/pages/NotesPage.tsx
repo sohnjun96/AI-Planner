@@ -7,7 +7,7 @@ import { NoteEditor, type NoteEditorOverlay } from "../components/NoteEditor";
 import { NoteHistoryPanel } from "../components/NoteHistoryPanel";
 import { NoteMetaModal } from "../components/NoteMetaModal";
 import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteTree";
-import { runNotesAgent, suggestRelatedNotes, suggestTasksForNote } from "../agent/notesAgent";
+import { runNotesAgent, suggestRelatedNotes, suggestTasksForNote, type NotesAgentProgress } from "../agent/notesAgent";
 import {
   DEFAULT_PROJECT_ID,
   MAX_NOTE_TASK_SUGGESTIONS,
@@ -71,6 +71,7 @@ export function NotesPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const [isAiRunning, setIsAiRunning] = useState(false);
+  const [aiProgress, setAiProgress] = useState("");
   const [aiError, setAiError] = useState("");
   const [aiProposal, setAiProposal] = useState<AiProposal | null>(null);
   const [compareVersion, setCompareVersion] = useState<NoteVersion | null>(null);
@@ -120,6 +121,7 @@ export function NotesPage() {
       setSavedMessage("");
       setErrorMessage("");
       setAiError("");
+      setAiProgress("");
     }
   }, [selectedNote]);
 
@@ -444,6 +446,7 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        onProgress: handleAiProgress,
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -491,10 +494,15 @@ export function NotesPage() {
     return items;
   }
 
+  const handleAiProgress = useCallback((info: NotesAgentProgress) => {
+    setAiProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
+  }, []);
+
   const runEditAgent = useCallback(
     async (prompt: string) => {
       if (!selectedNote || !draft) return;
       setIsAiRunning(true);
+      setAiProgress("AI 준비 중…");
       setAiError("");
       try {
         const result = await runNotesAgent({
@@ -508,7 +516,9 @@ export function NotesPage() {
           endpoint: setting.llmEndpoint,
           apiKey: setting.llmApiKey ?? "",
           model: setting.llmModel,
+          onProgress: handleAiProgress,
         });
+        setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
         if (result.proposedContent && result.proposedContent !== draft.content) {
           setAiProposal({
             content: result.proposedContent,
@@ -521,12 +531,13 @@ export function NotesPage() {
           setAiError(result.assistantMessage || "변경할 내용을 찾지 못했습니다.");
         }
       } catch (error) {
+        setAiProgress("");
         setAiError(error instanceof Error ? error.message : "AI 편집에 실패했습니다.");
       } finally {
         setIsAiRunning(false);
       }
     },
-    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel],
+    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress],
   );
 
   const runInlineAssist = useCallback(async () => {
@@ -541,6 +552,7 @@ export function NotesPage() {
     if (!prompt) return;
 
     setIsAiRunning(true);
+    setAiProgress("AI 준비 중…");
     setAiError("");
     try {
       const result = await runNotesAgent({
@@ -555,7 +567,9 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        onProgress: handleAiProgress,
       });
+      setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
       if (result.replacementText) {
         const nextContent = draft.content.slice(0, start) + result.replacementText + draft.content.slice(end);
         setAiProposal({ content: nextContent, editType: "ai_inline", prompt, headline: "AI 인라인 편집 제안" });
@@ -567,7 +581,7 @@ export function NotesPage() {
     } finally {
       setIsAiRunning(false);
     }
-  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel]);
+  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress]);
 
   async function acceptProposal() {
     if (!selectedNoteId || !draft || !aiProposal) return;
@@ -659,6 +673,7 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        onProgress: handleAiProgress,
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -705,6 +720,7 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        onProgress: handleAiProgress,
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -855,10 +871,7 @@ export function NotesPage() {
                   linkedTaskCount={note.linkedTaskIds.length}
                   onSelect={() => setSelectedNoteId(note.id)}
                   onToggleCheck={(checked) => toggleCheck(note.id, checked)}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setCardMenu({ x: event.clientX, y: event.clientY, noteId: note.id });
-                  }}
+                  onOpenMenu={(pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })}
                 />
               ))
             )}
@@ -883,6 +896,7 @@ export function NotesPage() {
               onRejectOverlay={() => {
                 setAiProposal(null);
                 setCompareVersion(null);
+                setAiProgress("");
               }}
               onToggleChecklist={(lineIndex, checked) => void handleToggleChecklist(lineIndex, checked)}
               onRunAiAction={(prompt) => void runEditAgent(prompt)}
@@ -919,7 +933,14 @@ export function NotesPage() {
               historyCount={selectedVersions.length}
             />
 
-            {isAiRunning ? <p className="description-text note-ai-running">AI가 처리 중입니다…</p> : null}
+            {isAiRunning ? (
+              <p className="note-ai-running" aria-live="polite">
+                <span className="note-ai-spinner" aria-hidden="true" />
+                {aiProgress || "AI가 처리 중입니다…"}
+              </p>
+            ) : aiProgress.startsWith("AI 참고") ? (
+              <p className="note-ai-trace">{aiProgress}</p>
+            ) : null}
             {aiError ? <p className="error-text">{aiError}</p> : null}
 
             <NoteConnections

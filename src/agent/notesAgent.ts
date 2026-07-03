@@ -48,6 +48,14 @@ export interface RunNotesAgentInput {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  /** 진행 상황 콜백 (도구 실행 / 스트리밍 작성) */
+  onProgress?: (info: NotesAgentProgress) => void;
+}
+
+export interface NotesAgentProgress {
+  phase: "tools" | "writing";
+  label: string;
+  chars?: number;
 }
 
 export interface NotesAgentResult {
@@ -59,6 +67,22 @@ export interface NotesAgentResult {
   replacementText?: string;
   /** search 결과 */
   matchedNoteIds?: string[];
+  /** AI가 사용한 도구 요약 (신뢰용 작업 내역) */
+  trace?: string;
+}
+
+const TOOL_LABELS: Record<NotesAgentToolName, string> = {
+  search_notes: "노트 검색",
+  get_note: "노트 조회",
+  list_note_versions: "버전 조회",
+  get_linked_tasks: "연결 일정 조회",
+  current_datetime: "현재 시각 확인",
+};
+
+function summarizeToolCounts(counts: Map<string, number>): string {
+  return Array.from(counts.entries())
+    .map(([label, count]) => `${label} ${count}건`)
+    .join(", ");
 }
 
 const MAX_TOOL_ROUNDS = 4;
@@ -296,14 +320,22 @@ function buildResult(mode: NotesAgentMode, payload: Record<string, unknown>): No
 
 export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAgentResult> {
   const accumulatedToolResults: ToolExecutionResult[] = [];
+  const toolCounts = new Map<string, number>();
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     const messages = buildPromptMessages(input, accumulatedToolResults);
+    let streamedChars = 0;
     const raw = await requestLlmResponse({
       messages,
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      onToken: input.onProgress
+        ? (delta) => {
+            streamedChars += delta.length;
+            input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars: streamedChars });
+          }
+        : undefined,
     });
 
     const payload = parseJsonObject(raw);
@@ -311,6 +343,7 @@ export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAge
       // JSON 파싱 실패 시 원문을 assistantMessage로 노출 (크래시 방지)
       return {
         assistantMessage: extractJsonText(raw).slice(0, 500) || "AI 응답을 해석하지 못했습니다. 다시 시도해 주세요.",
+        trace: toolCounts.size > 0 ? summarizeToolCounts(toolCounts) : undefined,
       };
     }
 
@@ -319,11 +352,20 @@ export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAge
       const roundResults = toolCalls.map((call) =>
         executeToolCall(call, input.notes, input.tasks, input.projects),
       );
+      for (const call of toolCalls) {
+        const label = TOOL_LABELS[call.tool];
+        toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
+      }
+      input.onProgress?.({ phase: "tools", label: summarizeToolCounts(toolCounts) });
       accumulatedToolResults.push(...roundResults);
       continue;
     }
 
-    return buildResult(input.mode, payload);
+    const result = buildResult(input.mode, payload);
+    if (toolCounts.size > 0) {
+      result.trace = summarizeToolCounts(toolCounts);
+    }
+    return result;
   }
 
   // 루프 초과 시 throw 대신 안내 메시지 반환

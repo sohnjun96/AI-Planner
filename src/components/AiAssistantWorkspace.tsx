@@ -8,6 +8,7 @@ import type {
   AgentOperation,
   AgentProposal,
   AgentUpdateTaskOperation,
+  ScheduleAgentProgress,
 } from "../agent/scheduleAgent";
 import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
@@ -197,6 +198,8 @@ export function AiAssistantWorkspace({
   const [pendingContextSuggestions, setPendingContextSuggestions] = useState<AgentContextSuggestion[]>([]);
   const [selectedOperationIndexes, setSelectedOperationIndexes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [aiProgress, setAiProgress] = useState("");
+  const [lastTrace, setLastTrace] = useState("");
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState("");
   const [applyResult, setApplyResult] = useState("");
@@ -308,8 +311,13 @@ export function AiAssistantWorkspace({
       setDraft("");
     }
     setIsLoading(true);
+    setAiProgress("AI 준비 중…");
+    setLastTrace("");
 
     try {
+      const handleProgress = (info: ScheduleAgentProgress) => {
+        setAiProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
+      };
       const result = await runScheduleAgent({
         userMessage,
         conversation: conversationContext,
@@ -321,6 +329,7 @@ export function AiAssistantWorkspace({
         endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        onProgress: handleProgress,
       });
 
       setLastUserMessage(userMessage);
@@ -328,6 +337,7 @@ export function AiAssistantWorkspace({
       setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
       setPendingContextSuggestions(result.contextSuggestions);
+      setLastTrace(result.trace ?? "");
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
@@ -632,7 +642,7 @@ export function AiAssistantWorkspace({
   }
 
   const shouldShowResultCard = !hideInitialResult || hasVisibleResult;
-  const responseText = isLoading ? "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
+  const responseText = isLoading ? aiProgress || "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
   const operationCount = pendingProposal?.operations.length ?? 0;
   const resultCard = shouldShowResultCard ? (
     <div className={`ai-result-card ${hasVisibleResult ? "has-output" : ""}`} aria-live="polite">
@@ -642,6 +652,8 @@ export function AiAssistantWorkspace({
           <p>{lastQuestion}</p>
         </div>
       ) : null}
+
+      {!isLoading && lastTrace ? <p className="ai-trace-line">🔎 AI 참고: {lastTrace}</p> : null}
 
       {pendingProposal ? (
         <div className="proposal-block compact-review">

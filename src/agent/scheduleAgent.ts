@@ -85,6 +85,13 @@ export interface RunScheduleAgentInput {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  onProgress?: (info: ScheduleAgentProgress) => void;
+}
+
+export interface ScheduleAgentProgress {
+  phase: "tools" | "writing";
+  label: string;
+  chars?: number;
 }
 
 export interface RunScheduleAgentResult {
@@ -93,6 +100,22 @@ export interface RunScheduleAgentResult {
   question?: string;
   proposal?: AgentProposal;
   contextSuggestions: AgentContextSuggestion[];
+  /** AI가 사용한 도구 요약 (신뢰용 작업 내역) */
+  trace?: string;
+}
+
+const SCHEDULE_TOOL_LABELS: Record<AgentToolName, string> = {
+  list_projects: "프로젝트 목록",
+  list_task_types: "종류 목록",
+  search_tasks: "일정 검색",
+  get_task: "일정 조회",
+  current_datetime: "현재 시각 확인",
+};
+
+function summarizeScheduleTools(counts: Map<string, number>): string {
+  return Array.from(counts.entries())
+    .map(([label, count]) => `${label} ${count}건`)
+    .join(", ");
 }
 
 interface ParseOptions {
@@ -1095,18 +1118,31 @@ function buildPromptMessages(input: RunScheduleAgentInput, toolResults: ToolExec
 
 export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<RunScheduleAgentResult> {
   const accumulatedToolResults: ToolExecutionResult[] = [];
+  const toolCounts = new Map<string, number>();
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     const messages = buildPromptMessages(input, accumulatedToolResults);
+    let streamedChars = 0;
     const raw = await requestLlmResponse({
       messages,
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      onToken: input.onProgress
+        ? (delta) => {
+            streamedChars += delta.length;
+            input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars: streamedChars });
+          }
+        : undefined,
     });
     const payload = parseModelPayload(raw);
     const toolCalls = parseToolCalls(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
       const roundResults = toolCalls.map((call) => executeToolCall(call, input.tasks, input.projects, input.taskTypes));
+      for (const call of toolCalls) {
+        const label = SCHEDULE_TOOL_LABELS[call.tool];
+        toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
+      }
+      input.onProgress?.({ phase: "tools", label: summarizeScheduleTools(toolCounts) });
       accumulatedToolResults.push(...roundResults);
       continue;
     }
@@ -1145,6 +1181,7 @@ export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<Ru
       question,
       proposal,
       contextSuggestions,
+      trace: toolCounts.size > 0 ? summarizeScheduleTools(toolCounts) : undefined,
     };
   }
   throw new Error("LLM이 도구 호출만 반복하여 최종 제안을 만들지 못했습니다.");

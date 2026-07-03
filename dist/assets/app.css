@@ -5576,3 +5576,132 @@ textarea:focus-visible,
 .settings-section-host .settings-card {
   width: 100%;
 }
+.btn-icon {
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+.note-card-kebab {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--body-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.note-card:hover .note-card-kebab,
+.note-card:focus-within .note-card-kebab {
+  opacity: 1;
+}
+.note-card-kebab:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+.note-read-view {
+  position: relative;
+}
+.note-read-edit-fab {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--body-muted);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+.note-read-view:hover .note-read-edit-fab {
+  opacity: 1;
+}
+.note-read-edit-fab:hover {
+  border-color: var(--primary);
+  color: var(--primary-focus);
+}
+.help-modal-card {
+  width: min(640px, 94vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--canvas);
+  border-radius: var(--radius-xl);
+}
+.help-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-lg);
+}
+.help-group h3 {
+  margin: 0 0 var(--space-xs);
+  font-size: 14px;
+  color: var(--body-muted);
+}
+.help-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.help-group li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 13px;
+}
+.help-group kbd {
+  flex: 0 0 auto;
+  min-width: 96px;
+  text-align: center;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    monospace;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-pearl);
+  color: var(--ink);
+}
+.note-ai-running {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 13px;
+  color: var(--primary-focus);
+}
+.note-ai-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--tint-lavender);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: note-ai-spin 0.7s linear infinite;
+}
+@keyframes note-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.note-ai-trace,
+.ai-trace-line {
+  font-size: 12px;
+  color: var(--body-muted);
+  margin: 0;
+}

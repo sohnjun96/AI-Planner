@@ -10,7 +10,7 @@ interface NoteCardProps {
   linkedTaskCount: number;
   onSelect: () => void;
   onToggleCheck: (checked: boolean) => void;
-  onContextMenu: (event: MouseEvent<HTMLElement>) => void;
+  onOpenMenu: (position: { x: number; y: number }) => void;
 }
 
 function toSnippet(content: string): string {
@@ -22,11 +22,17 @@ function toSnippet(content: string): string {
   return plain.slice(0, 90);
 }
 
-export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck, onContextMenu }: NoteCardProps) {
+export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck, onOpenMenu }: NoteCardProps) {
   const snippet = toSnippet(note.content);
 
   function handleCheckClick(event: MouseEvent<HTMLInputElement>) {
     event.stopPropagation();
+  }
+
+  function handleKebabClick(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    onOpenMenu({ x: rect.right, y: rect.bottom });
   }
 
   return (
@@ -34,7 +40,10 @@ export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount
       className={`note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""}`}
       style={{ "--note-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
       onClick={onSelect}
-      onContextMenu={onContextMenu}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onOpenMenu({ x: event.clientX, y: event.clientY });
+      }}
       role="button"
       tabIndex={0}
       onKeyDown={(event) => {
@@ -58,6 +67,15 @@ export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount
           {note.title}
         </h3>
         <span className={`note-status-badge status-${note.status}`}>{NOTE_STATUS_LABELS[note.status]}</span>
+        <button
+          type="button"
+          className="note-card-kebab"
+          aria-label={`${note.title} 메뉴`}
+          title="메뉴"
+          onClick={handleKebabClick}
+        >
+          ⋯
+        </button>
       </div>
 
       {snippet ? <p className="note-card-snippet">{snippet}</p> : null}

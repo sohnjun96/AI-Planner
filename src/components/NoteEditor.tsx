@@ -206,9 +206,12 @@ export function NoteEditor({
           onDoubleClick={() => setMode("edit")}
           title="더블클릭하면 편집 모드로 전환됩니다"
         >
+          <button type="button" className="note-read-edit-fab" onClick={() => setMode("edit")} title="편집 (더블클릭)">
+            ✎ 편집
+          </button>
           <MarkdownRenderer
             content={draft.content}
-            emptyText="작성된 내용이 없습니다. 더블클릭해서 편집하세요."
+            emptyText="작성된 내용이 없습니다. 더블클릭하거나 ‘편집’을 눌러 작성하세요."
             onChecklistToggle={onToggleChecklist}
           />
         </div>

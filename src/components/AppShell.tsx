@@ -4,6 +4,7 @@ import { DEFAULT_PROJECT_ID } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { deriveNoteTitle } from "../utils/noteTitle";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
+import { HelpModal } from "./HelpModal";
 import { NoteQuickAddModal } from "./NoteQuickAddModal";
 
 const NAV_ITEMS = [
@@ -24,6 +25,7 @@ export function AppShell() {
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
   const [aiInitialDraft, setAiInitialDraft] = useState("");
   const [isNoteAddOpen, setIsNoteAddOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const activeProjectId = useMemo(
     () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
@@ -62,6 +64,12 @@ export function AppShell() {
         (target instanceof HTMLElement && target.isContentEditable);
 
       if (isEditableTarget) {
+        return;
+      }
+
+      if (event.key === "?") {
+        event.preventDefault();
+        setIsHelpOpen(true);
         return;
       }
 
@@ -129,6 +137,16 @@ export function AppShell() {
             title={undoDescription ?? "되돌릴 작업이 없습니다."}
           >
             되돌리기
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-icon"
+            onClick={() => setIsHelpOpen(true)}
+            aria-label="도움말과 단축키 (물음표 키)"
+            title="도움말 · 단축키 (?)"
+          >
+            ?
           </button>
 
           <button type="button" className="btn btn-soft" onClick={() => setIsNoteAddOpen(true)} aria-label="노트 추가">
@@ -205,6 +223,8 @@ export function AppShell() {
       {isNoteAddOpen ? (
         <NoteQuickAddModal onCreate={handleQuickCreateNote} onClose={() => setIsNoteAddOpen(false)} />
       ) : null}
+
+      {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} /> : null}
     </div>
   );
 }
