@@ -4544,10 +4544,19 @@ textarea:focus-visible,
 .settings-summary-card {
   display: grid;
   gap: 6px;
-  min-height: 96px;
+  min-height: 88px;
   align-content: center;
-  padding: 18px;
+  padding: 16px 18px;
   background: var(--surface-pearl);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.settings-summary-card:hover {
+  border-color: var(--primary);
+  background: var(--canvas);
 }
 
 .settings-summary-card span,
@@ -6311,4 +6320,46 @@ textarea:focus-visible,
 
 .note-connection-chip.related {
   border-style: dashed;
+}
+
+/* ===== Settings tabs ===== */
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xxs);
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--canvas);
+}
+
+.settings-tab {
+  border: none;
+  background: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--body-muted);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.settings-tab:hover {
+  color: var(--ink);
+  background: var(--surface-pearl);
+}
+
+.settings-tab.active {
+  background: var(--primary);
+  color: var(--body-on-dark);
+}
+
+.settings-section-host {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-section-host .settings-card {
+  width: 100%;
 }

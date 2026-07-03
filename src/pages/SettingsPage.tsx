@@ -129,6 +129,18 @@ function serializeTaskTypeInput(input: TaskTypeInputPayload): string {
   });
 }
 
+type SettingsSection = "overview" | "general" | "ai" | "noteAi" | "context" | "notify" | "types";
+
+const SETTINGS_TABS: Array<{ id: SettingsSection; label: string }> = [
+  { id: "overview", label: "개요" },
+  { id: "general", label: "기본" },
+  { id: "ai", label: "AI 연결" },
+  { id: "noteAi", label: "노트 AI" },
+  { id: "context", label: "user.md" },
+  { id: "notify", label: "알림·백업" },
+  { id: "types", label: "일정 종류" },
+];
+
 export function SettingsPage() {
   const {
     setting,
@@ -162,6 +174,7 @@ export function SettingsPage() {
     () => setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS,
   );
   const [aiActionMessage, setAiActionMessage] = useState("");
+  const [activeSection, setActiveSection] = useState<SettingsSection>("overview");
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -495,30 +508,59 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="settings-overview-grid" aria-label="설정 요약">
-        <article className="settings-summary-card">
-          <span>주 시작</span>
-          <strong>{setting.weekStartsOn === "mon" ? "월요일" : "일요일"}</strong>
-        </article>
-        <article className="settings-summary-card">
-          <span>시간 표시</span>
-          <strong>{setting.timeFormat === "24h" ? "24시간제" : "12시간제"}</strong>
-        </article>
-        <article className="settings-summary-card">
-          <span>알림</span>
-          <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐"}</strong>
-        </article>
-        <article className="settings-summary-card">
-          <span>백업</span>
-          <strong>{setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동"}</strong>
-        </article>
-        <article className="settings-summary-card">
-          <span>AI 컨텍스트</span>
-          <strong>{userContextUsedLength} / {aiContextMaxLength}자</strong>
-        </article>
-      </section>
+      <nav className="settings-tabs" aria-label="설정 분류">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`settings-tab ${activeSection === tab.id ? "active" : ""}`}
+            aria-pressed={activeSection === tab.id}
+            onClick={() => setActiveSection(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="settings-main-grid">
+      {activeSection === "overview" ? (
+        <section className="settings-overview-grid" aria-label="설정 요약">
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("general")}>
+            <span>기본 환경</span>
+            <strong>
+              {setting.weekStartsOn === "mon" ? "월" : "일"} 시작 · {setting.timeFormat === "24h" ? "24시간제" : "12시간제"}
+            </strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("ai")}>
+            <span>AI 연결</span>
+            <strong>{(setting.llmEndpoint ?? "").trim() ? "설정됨" : "미설정"}</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("noteAi")}>
+            <span>노트 AI 기능</span>
+            <strong>{noteAiActionsDraft.length}개</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("context")}>
+            <span>AI 컨텍스트</span>
+            <strong>
+              {userContextUsedLength} / {aiContextMaxLength}자
+            </strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("notify")}>
+            <span>알림</span>
+            <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐"}</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("notify")}>
+            <span>백업</span>
+            <strong>{setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동"}</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("types")}>
+            <span>일정 종류</span>
+            <strong>{sortedTypes.length}개</strong>
+          </button>
+        </section>
+      ) : null}
+
+      <div className="settings-section-host">
+        {activeSection === "general" ? (
         <section className="settings-card">
           <header className="settings-card-header">
             <div>
@@ -566,7 +608,9 @@ export function SettingsPage() {
             지난 완료 업무를 기본으로 표시
           </label>
         </section>
+        ) : null}
 
+        {activeSection === "ai" ? (
         <section className="settings-card">
           <header className="settings-card-header">
             <div>
@@ -633,7 +677,9 @@ export function SettingsPage() {
             </p>
           ) : null}
         </section>
+        ) : null}
 
+        {activeSection === "noteAi" ? (
         <section className="settings-card settings-ai-actions-card">
           <header className="settings-card-header">
             <div>
@@ -653,7 +699,9 @@ export function SettingsPage() {
 
           {aiActionMessage ? <p className="success-text">{aiActionMessage}</p> : null}
         </section>
+        ) : null}
 
+        {activeSection === "context" ? (
         <section className="settings-card settings-context-card">
           <header className="settings-card-header">
             <div>
@@ -714,7 +762,9 @@ export function SettingsPage() {
           {userContextMessage ? <p className="success-text">{userContextMessage}</p> : null}
           {userContextError ? <p className="error-text">{userContextError}</p> : null}
         </section>
+        ) : null}
 
+        {activeSection === "notify" ? (
         <section className="settings-card settings-backup-card">
           <header className="settings-card-header">
             <div>
@@ -801,7 +851,9 @@ export function SettingsPage() {
             </button>
           </div>
         </section>
+        ) : null}
 
+        {activeSection === "types" ? (
         <section className="settings-card settings-type-card">
           <header className="settings-card-header">
             <div>
@@ -905,6 +957,7 @@ export function SettingsPage() {
             </form>
           </div>
         </section>
+        ) : null}
       </div>
 
       {isBackupListOpen ? (

@@ -39971,6 +39971,15 @@ function serializeTaskTypeInput(input) {
     isActive: input.isActive
   });
 }
+var SETTINGS_TABS = [
+  { id: "overview", label: "개요" },
+  { id: "general", label: "기본" },
+  { id: "ai", label: "AI 연결" },
+  { id: "noteAi", label: "노트 AI" },
+  { id: "context", label: "user.md" },
+  { id: "notify", label: "알림·백업" },
+  { id: "types", label: "일정 종류" }
+];
 function SettingsPage() {
   const {
     setting,
@@ -40003,6 +40012,7 @@ function SettingsPage() {
     () => setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS
   );
   const [aiActionMessage, setAiActionMessage] = (0, import_react18.useState)("");
+  const [activeSection, setActiveSection] = (0, import_react18.useState)("overview");
   const [typeForm, setTypeForm] = (0, import_react18.useState)(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = (0, import_react18.useState)("");
   const [typeError, setTypeError] = (0, import_react18.useState)("");
@@ -40279,24 +40289,38 @@ function SettingsPage() {
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-overview-grid", "aria-label": "설정 요약", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("article", { className: "settings-summary-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "주 시작" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("strong", { children: setting.weekStartsOn === "mon" ? "월요일" : "일요일" })
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("nav", { className: "settings-tabs", "aria-label": "설정 분류", children: SETTINGS_TABS.map((tab) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+      "button",
+      {
+        type: "button",
+        className: `settings-tab ${activeSection === tab.id ? "active" : ""}`,
+        "aria-pressed": activeSection === tab.id,
+        onClick: () => setActiveSection(tab.id),
+        children: tab.label
+      },
+      tab.id
+    )) }),
+    activeSection === "overview" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-overview-grid", "aria-label": "설정 요약", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "settings-summary-card", onClick: () => setActiveSection("general"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "기본 환경" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("strong", { children: [
+          setting.weekStartsOn === "mon" ? "월" : "일",
+          " 시작 · ",
+          setting.timeFormat === "24h" ? "24시간제" : "12시간제"
+        ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("article", { className: "settings-summary-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "시간 표시" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("strong", { children: setting.timeFormat === "24h" ? "24시간제" : "12시간제" })
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "settings-summary-card", onClick: () => setActiveSection("ai"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "AI 연결" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("strong", { children: (setting.llmEndpoint ?? "").trim() ? "설정됨" : "미설정" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("article", { className: "settings-summary-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "알림" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("strong", { children: setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐" })
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "settings-summary-card", onClick: () => setActiveSection("noteAi"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "노트 AI 기능" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("strong", { children: [
+          noteAiActionsDraft.length,
+          "개"
+        ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("article", { className: "settings-summary-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "백업" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("strong", { children: setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동" })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("article", { className: "settings-summary-card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "settings-summary-card", onClick: () => setActiveSection("context"), children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "AI 컨텍스트" }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("strong", { children: [
           userContextUsedLength,
@@ -40304,10 +40328,25 @@ function SettingsPage() {
           aiContextMaxLength,
           "자"
         ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "settings-summary-card", onClick: () => setActiveSection("notify"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "알림" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("strong", { children: setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "settings-summary-card", onClick: () => setActiveSection("notify"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "백업" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("strong", { children: setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "settings-summary-card", onClick: () => setActiveSection("types"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "일정 종류" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("strong", { children: [
+          sortedTypes.length,
+          "개"
+        ] })
       ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "settings-main-grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card", children: [
+    ] }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "settings-section-host", children: [
+      activeSection === "general" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("header", { className: "settings-card-header", children: /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "eyebrow", children: "GENERAL" }),
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h3", { children: "기본 환경" })
@@ -40359,8 +40398,8 @@ function SettingsPage() {
           ),
           "지난 완료 업무를 기본으로 표시"
         ] })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card", children: [
+      ] }) : null,
+      activeSection === "ai" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("header", { className: "settings-card-header", children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "eyebrow", children: "AI" }),
@@ -40428,8 +40467,8 @@ function SettingsPage() {
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "description-text", children: "Endpoint, 모델명, API Key는 입력 즉시 저장됩니다." }),
         aiConnectionMessage ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: `endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`, role: "status", "aria-live": "polite", children: aiConnectionMessage }) : null
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-ai-actions-card", children: [
+      ] }) : null,
+      activeSection === "noteAi" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-ai-actions-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("header", { className: "settings-card-header", children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "eyebrow", children: "NOTE AI" }),
@@ -40440,8 +40479,8 @@ function SettingsPage() {
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "description-text", children: "노트 편집 화면의 AI 버튼과 우클릭 메뉴에 나타납니다. 각 기능의 이름과 프롬프트를 자유롭게 수정하거나 추가하세요." }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(NoteAiActionManager, { actions: noteAiActionsDraft, onChange: setNoteAiActionsDraft }),
         aiActionMessage ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "success-text", children: aiActionMessage }) : null
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-context-card", children: [
+      ] }) : null,
+      activeSection === "context" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-context-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("header", { className: "settings-card-header", children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "eyebrow", children: "USER CONTEXT" }),
@@ -40502,8 +40541,8 @@ function SettingsPage() {
         ] }),
         userContextMessage ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "success-text", children: userContextMessage }) : null,
         userContextError ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "error-text", children: userContextError }) : null
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-backup-card", children: [
+      ] }) : null,
+      activeSection === "notify" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-backup-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("header", { className: "settings-card-header", children: /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "eyebrow", children: "NOTIFY & BACKUP" }),
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h3", { children: "알림과 백업" })
@@ -40581,8 +40620,8 @@ function SettingsPage() {
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { className: "btn btn-outline", type: "button", onClick: openBackupList, children: "목록 보기" })
         ] })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-type-card", children: [
+      ] }) : null,
+      activeSection === "types" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "settings-card settings-type-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("header", { className: "settings-card-header", children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "eyebrow", children: "TYPES" }),
@@ -40677,7 +40716,7 @@ function SettingsPage() {
             typeError ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "error-text", children: typeError }) : null
           ] })
         ] })
-      ] })
+      ] }) : null
     ] }),
     isBackupListOpen ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "modal-backdrop", onClick: () => setIsBackupListOpen(false), children: /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
       "section",
