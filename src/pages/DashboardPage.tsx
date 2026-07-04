@@ -388,7 +388,7 @@ function CompactTaskCard({
   return (
     <article
       className={`compact-task-card ${task.status.toLowerCase()} ${hasConflict ? "has-conflict" : ""}`}
-      style={{ borderLeftColor: project?.color ?? "#64748b" }}
+      style={{ "--task-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
       draggable
       onContextMenu={(event) => {
         onContextMenu?.(event, task);

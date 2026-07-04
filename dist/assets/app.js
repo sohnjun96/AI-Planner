@@ -36852,7 +36852,7 @@ function CompactTaskCard({
     "article",
     {
       className: `compact-task-card ${task.status.toLowerCase()} ${hasConflict ? "has-conflict" : ""}`,
-      style: { borderLeftColor: project?.color ?? "#64748b" },
+      style: { "--task-project-color": project?.color ?? "var(--body-muted)" },
       draggable: true,
       onContextMenu: (event) => {
         onContextMenu?.(event, task);
@@ -40082,7 +40082,7 @@ function TaskItem({
     "article",
     {
       className: `task-item ${task.status.toLowerCase()} ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${hasConflict ? "conflict" : ""} ${draggableTask ? "draggable" : ""}`,
-      style: { borderLeftColor: project?.color ?? "#94a3b8" },
+      style: { "--task-project-color": project?.color ?? "var(--body-muted)" },
       onClick,
       onContextMenu: (event) => {
         onContextMenu?.(event, task);

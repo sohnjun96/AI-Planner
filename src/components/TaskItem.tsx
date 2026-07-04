@@ -1,4 +1,4 @@
-import { type MouseEvent } from "react";
+import { type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { STATUS_LABELS } from "../constants";
 import type { Project, Task, TaskStatus, TaskType } from "../models";
@@ -46,7 +46,7 @@ export function TaskItem({
       } ${
         draggableTask ? "draggable" : ""
       }`}
-      style={{ borderLeftColor: project?.color ?? "#94a3b8" }}
+      style={{ "--task-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
       onClick={onClick}
       onContextMenu={(event) => {
         onContextMenu?.(event, task);

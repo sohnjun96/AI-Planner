@@ -453,6 +453,26 @@ a {
   box-shadow: none;
 }
 
+/* 모든 버튼 변형에 일관된 hover 피드백 */
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-focus);
+  border-color: var(--primary-focus);
+}
+
+.btn-soft:hover:not(:disabled) {
+  background: var(--surface-soft);
+  border-color: var(--hairline-strong);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--surface-pearl);
+  border-color: var(--hairline-strong);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--status-conflict-bg);
+}
+
 .btn-large,
 .btn-hero {
   min-height: 48px;
@@ -1205,14 +1225,22 @@ textarea:focus-visible,
   padding: var(--space-md);
   background: var(--canvas);
   border: 1px solid var(--hairline);
-  border-left: 5px solid #7a7a7a;
+  border-left: 5px solid var(--task-project-color, var(--body-muted));
   border-radius: var(--radius-lg);
   color: var(--ink);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .task-item.clickable,
 .task-item.draggable {
   cursor: pointer;
+}
+
+.task-item.clickable:hover,
+.task-item.draggable:hover {
+  border-color: var(--hairline-strong);
+  border-left-color: var(--task-project-color, var(--body-muted));
+  box-shadow: var(--card-shadow);
 }
 
 .task-item.draggable {
@@ -1661,10 +1689,10 @@ textarea:focus-visible,
 
 .ai-request-grid > .ai-input-label {
   padding: 18px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 24px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xxl);
   background: linear-gradient(180deg, rgba(250, 250, 255, 0.98), rgba(255, 255, 255, 0.98));
-  box-shadow: 0 20px 44px -34px rgba(15, 23, 42, 0.24);
+  box-shadow: var(--card-shadow);
 }
 
 .ai-input-label > span {
@@ -1677,9 +1705,9 @@ textarea:focus-visible,
 
 .ai-input-label textarea {
   min-height: 132px;
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   padding: 16px 18px;
-  background: #fff;
+  background: var(--canvas);
   color: var(--ink);
   font-size: 15px;
   line-height: 1.6;
@@ -2175,17 +2203,17 @@ textarea:focus-visible,
   z-index: 2100;
   width: 220px;
   padding: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+  box-shadow: var(--product-shadow);
 }
 
 .context-menu-title {
   margin: 2px 4px 8px;
-  color: #334155;
-  font-size: 0.78rem;
-  font-weight: 800;
+  color: var(--body-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .context-menu-list {
@@ -2199,69 +2227,60 @@ textarea:focus-visible,
   width: 100%;
   padding: 9px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: #0f172a;
+  color: var(--ink);
   text-align: left;
   cursor: pointer;
+  transition: background-color 120ms ease;
 }
 
 .context-menu-item:hover,
 .context-menu-item:focus-visible {
-  background: #f1f5f9;
+  background: var(--surface-soft);
   outline: none;
 }
 
 .context-menu-item span {
-  font-size: 0.88rem;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .context-menu-item small {
-  color: #64748b;
-  font-size: 0.73rem;
+  color: var(--body-muted);
+  font-size: 12px;
   line-height: 1.35;
 }
 
 .context-menu-item.primary {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--status-major-bg);
+  color: var(--status-major-text);
 }
 
 .context-menu-item.primary small {
-  color: #3b82f6;
+  color: var(--link-blue);
 }
 
 .context-menu-item.primary:hover,
 .context-menu-item.primary:focus-visible {
-  background: #dbeafe;
+  background: var(--tint-sky);
 }
 
 .context-menu-item.danger {
-  color: #b91c1c;
+  color: var(--status-conflict-text);
 }
 
 .context-menu-item.danger:hover,
 .context-menu-item.danger:focus-visible {
-  background: #fef2f2;
+  background: var(--status-conflict-bg);
 }
 
-.ai-add-workspace .ai-action-stack {
-  align-content: space-between;
-  min-height: 100%;
-}
-
-.ai-add-workspace .ai-action-stack .btn,
 .ai-result-modal-card .proposal-actions .btn {
-  border-radius: 14px;
-}
-
-.ai-add-workspace .ai-action-stack .btn {
-  width: 100%;
+  border-radius: var(--radius-md);
 }
 
 .ai-add-workspace .ai-input-label textarea {
-  min-height: 248px;
+  min-height: 160px;
   background: var(--canvas);
   font-size: 15px;
 }
@@ -4329,10 +4348,17 @@ textarea:focus-visible,
   gap: 7px;
   min-height: 72px;
   border: 1px solid var(--hairline);
-  border-left: 4px solid var(--body-muted);
-  border-radius: 12px;
+  border-left: 4px solid var(--task-project-color, var(--body-muted));
+  border-radius: var(--radius-lg);
   padding: 9px 10px 9px 12px;
   background: var(--canvas);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.compact-task-card:hover {
+  border-color: var(--hairline-strong);
+  border-left-color: var(--task-project-color, var(--body-muted));
+  box-shadow: var(--card-shadow);
 }
 
 .compact-task-card.not_done {
@@ -6828,4 +6854,19 @@ textarea:focus-visible,
 .ask-reference-chip:hover {
   border-color: var(--primary);
   color: var(--primary-focus);
+}
+
+/* ===== 디자인 일관성 패스 ===== */
+/* 모든 모달 카드 radius를 20px로 통일 (개별 26/16/12px 값을 한 곳에서 정리) */
+.modal-card {
+  border-radius: var(--radius-xxl);
+}
+
+/* 설정 목록 등 클릭 가능한 행에 hover 피드백 */
+.entity-item {
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.entity-item:hover {
+  background: var(--surface-pearl);
 }
