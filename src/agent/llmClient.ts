@@ -101,6 +101,8 @@ export async function requestLlmResponse(params: {
   endpoint?: string;
   model?: string;
   onToken?: (delta: string) => void;
+  /** 요청 취소용. 모달을 닫거나 새 요청을 보낼 때 이전 fetch를 중단한다. */
+  signal?: AbortSignal;
 }): Promise<string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -115,6 +117,7 @@ export async function requestLlmResponse(params: {
   const response = await fetch(params.endpoint?.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers,
+    signal: params.signal,
     body: JSON.stringify({
       model: params.model?.trim() || LLM_DEFAULT_MODEL,
       messages: params.messages,

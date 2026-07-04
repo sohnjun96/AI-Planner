@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { isAbortError } from "../agent/agentUtils";
 import { runQaAgent, type QaReference } from "../agent/qaAgent";
 import { useAppData } from "../context/AppDataContext";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -24,6 +25,7 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
   const [references, setReferences] = useState<QaReference[]>([]);
   const [trace, setTrace] = useState("");
   const [error, setError] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
 
   const hasApiConfig = Boolean((setting.llmEndpoint ?? "").trim());
 
@@ -37,11 +39,21 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  // 모달이 닫히면 진행 중인 요청을 중단한다.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   async function handleAsk() {
     const q = question.trim();
     if (!q || isRunning) {
       return;
     }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsRunning(true);
     setProgress("AI 준비 중…");
     setError("");
@@ -58,16 +70,20 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        signal: controller.signal,
         onProgress: (info) =>
-          setProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`),
+          setProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`),
       });
       setAnswer(result.answer);
       setReferences(result.references);
       setTrace(result.trace ?? "");
     } catch (askError) {
+      if (isAbortError(askError)) return;
       setError(askError instanceof Error ? askError.message : "질문 처리에 실패했습니다.");
     } finally {
-      setIsRunning(false);
+      if (abortRef.current === controller) {
+        setIsRunning(false);
+      }
     }
   }
 

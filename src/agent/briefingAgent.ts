@@ -27,6 +27,7 @@ export interface RunBriefingInput {
   apiKey: string;
   model?: string;
   onToken?: (delta: string) => void;
+  signal?: AbortSignal;
 }
 
 const SYSTEM_PROMPT = `
@@ -70,6 +71,7 @@ export async function runBriefing(input: RunBriefingInput): Promise<string> {
     apiKey: input.apiKey,
     model: input.model,
     onToken: input.onToken,
+    signal: input.signal,
   });
 
   return content.trim();

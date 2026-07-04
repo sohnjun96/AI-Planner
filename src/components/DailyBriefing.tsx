@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { isAbortError } from "../agent/agentUtils";
 import { runBriefing, type BriefingNote, type BriefingTask } from "../agent/briefingAgent";
 import { DEFAULT_PROJECT_ID, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
@@ -23,9 +24,22 @@ export function DailyBriefing() {
   const [briefing, setBriefing] = useState("");
   const [error, setError] = useState("");
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const hasApiConfig = Boolean((setting.llmEndpoint ?? "").trim());
   const todayKey = getDateKey(new Date());
+
+  // 모달을 닫으면 진행 중인 브리핑 생성을 중단한다.
+  const closeModal = useCallback(() => {
+    abortRef.current?.abort();
+    setIsOpen(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -33,12 +47,12 @@ export function DailyBriefing() {
     }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsOpen(false);
+        closeModal();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, closeModal]);
 
   function buildContext() {
     const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
@@ -102,6 +116,9 @@ export function DailyBriefing() {
   }
 
   async function handleRun() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsRunning(true);
     setError("");
     setBriefing("");
@@ -115,13 +132,17 @@ export function DailyBriefing() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        signal: controller.signal,
         onToken: (delta) => setBriefing((prev) => prev + delta),
       });
       setBriefing(result);
     } catch (runError) {
+      if (isAbortError(runError)) return;
       setError(runError instanceof Error ? runError.message : "브리핑 생성에 실패했습니다.");
     } finally {
-      setIsRunning(false);
+      if (abortRef.current === controller) {
+        setIsRunning(false);
+      }
     }
   }
 
@@ -165,7 +186,7 @@ export function DailyBriefing() {
       </button>
 
       {isOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsOpen(false)}>
+        <div className="modal-backdrop" onClick={closeModal}>
           <section
             className="modal-card briefing-modal-card"
             role="dialog"
@@ -179,7 +200,7 @@ export function DailyBriefing() {
                 <h2>오늘의 브리핑</h2>
                 <small>{todayKey}</small>
               </div>
-              <button type="button" className="btn btn-soft" onClick={() => setIsOpen(false)}>
+              <button type="button" className="btn btn-soft" onClick={closeModal}>
                 닫기
               </button>
             </header>

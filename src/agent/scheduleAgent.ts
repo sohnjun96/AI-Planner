@@ -1,7 +1,24 @@
 import { DEFAULT_AI_CONTEXT_MAX_LENGTH, DEFAULT_PROJECT_ID, DEFAULT_TASK_TYPES } from "../constants";
 import type { Project, Task, TaskStatus, TaskType, UserContext, UserContextRuleCategory, UserContextSuggestion } from "../models";
 import { toIsoNow } from "../utils/date";
-import { requestLlmResponse, type LlmChatMessage } from "./llmClient";
+import {
+  ToolCallCache,
+  capToolResults,
+  duplicateCallNotice,
+  execCurrentDatetime,
+  execGetTask,
+  execSearchTasks,
+  type SharedToolResult,
+} from "./agentTools";
+import {
+  isRecord,
+  pickFirstString,
+  pickFirstStringArray,
+  requestJsonWithRetry,
+  resolveEntityId,
+  tryParseJsonLikeValue,
+  type LlmChatMessage,
+} from "./agentUtils";
 
 type AgentToolName = "list_projects" | "list_task_types" | "search_tasks" | "get_task" | "current_datetime";
 
@@ -67,12 +84,7 @@ export interface AgentProposal {
 
 export type AgentContextSuggestion = UserContextSuggestion;
 
-interface ToolExecutionResult {
-  tool: AgentToolName;
-  args: Record<string, unknown>;
-  ok: boolean;
-  result: unknown;
-}
+type ToolExecutionResult = SharedToolResult;
 
 export interface RunScheduleAgentInput {
   userMessage: string;
@@ -86,6 +98,7 @@ export interface RunScheduleAgentInput {
   apiKey: string;
   model?: string;
   onProgress?: (info: ScheduleAgentProgress) => void;
+  signal?: AbortSignal;
 }
 
 export interface ScheduleAgentProgress {
@@ -207,7 +220,7 @@ Required root schema:
 Hard output rules:
 1. Always include every root key: assistantMessage, needsUserInput, userQuestion, toolCalls, proposal.
 2. proposal must always include summary and operations.
-3. If you need to inspect existing tasks, projects, task types, or the current date, return toolCalls and set proposal.operations to [].
+3. If you need to inspect existing tasks, projects, or task types, return toolCalls and set proposal.operations to [].
 4. If toolCalls is not empty, do not include final create/update/delete operations in the same response.
 5. If you can satisfy the request, set toolCalls to [] and put every proposed change in proposal.operations.
 6. Never return a summary-only proposal when the user asked to create, update, or delete schedules. The actual draft must be in proposal.operations.
@@ -274,7 +287,11 @@ Allowed tools:
 - list_task_types: {}
 - search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE"|"CANCELED", "date"?: "YYYY-MM-DD", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "limit"?: number }
 - get_task: { "taskId": string }
-- current_datetime: {}
+
+Tool usage notes:
+- The current date/time is already provided as "now" in the user payload. Never call a tool to get it.
+- Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
+- Keep tool calls minimal — batch what you need in one round when possible.
 
 Example final response:
 {
@@ -365,10 +382,6 @@ Example clarification response:
 }
 `.trim();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function isTaskStatus(value: unknown): value is TaskStatus {
   return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
 }
@@ -399,53 +412,6 @@ function normalizeTaskStatus(value: unknown): TaskStatus | undefined {
   return undefined;
 }
 
-function tryParseJsonLikeValue(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return value;
-  }
-  if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    try {
-      return JSON.parse(trimmed) as unknown;
-    } catch {
-      return value;
-    }
-  }
-  return value;
-}
-
-function extractJsonText(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    return trimmed;
-  }
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
-  }
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1).trim();
-  }
-  return trimmed;
-}
-
-function parseModelPayload(raw: string): AgentModelPayload {
-  const jsonText = extractJsonText(raw);
-  const parsed = JSON.parse(jsonText) as unknown;
-  if (!isRecord(parsed)) {
-    throw new Error("LLM 응답이 JSON 객체가 아닙니다.");
-  }
-  return parsed as AgentModelPayload;
-}
-
 function parseToolCalls(value: unknown): AgentToolCall[] {
   if (!Array.isArray(value)) {
     return [];
@@ -471,36 +437,12 @@ function getPreferredItemId(items: Array<{ id: string; isActive: boolean }>, fal
   return items.find((item) => item.isActive)?.id ?? items[0]?.id ?? fallbackId ?? "";
 }
 
-function normalizeLookupValue(value: unknown): string {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
 function truncateText(value: string, maxLength: number): string {
   const normalizedMax = Number.isFinite(maxLength) ? Math.max(0, Math.floor(maxLength)) : DEFAULT_AI_CONTEXT_MAX_LENGTH;
   if (value.length <= normalizedMax) {
     return value;
   }
   return value.slice(0, normalizedMax);
-}
-
-function pickFirstStringArray(record: Record<string, unknown>, keys: readonly string[]): string[] {
-  for (const key of keys) {
-    const candidate = record[key];
-    if (Array.isArray(candidate)) {
-      return candidate
-        .map((item) => (typeof item === "string" ? item.trim() : ""))
-        .filter(Boolean)
-        .slice(0, 8);
-    }
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate
-        .split(/[,，]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .slice(0, 8);
-    }
-  }
-  return [];
 }
 
 function normalizeContextCategory(value: unknown): UserContextRuleCategory | undefined {
@@ -530,16 +472,6 @@ function normalizeDefaultTime(value: unknown): string | undefined {
     return undefined;
   }
   return `${match[1].padStart(2, "0")}:${match[2]}`;
-}
-
-function pickFirstString(record: Record<string, unknown>, keys: readonly string[]): string {
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.trim();
-    }
-  }
-  return "";
 }
 
 function pickFirstBoolean(record: Record<string, unknown>, keys: readonly string[]): boolean {
@@ -584,49 +516,6 @@ function normalizeDateTime(value: unknown, fallbackTime: string): string {
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
-}
-
-function normalizeSearchDate(value: unknown): string {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-  const match = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
-  if (!match) {
-    return "";
-  }
-  return `${match[1]}-${match[2]}-${match[3]}`;
-}
-
-function getTaskDateKey(task: Task): string {
-  const parsed = new Date(task.startAt);
-  if (Number.isNaN(parsed.getTime())) {
-    return task.startAt.slice(0, 10);
-  }
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function resolveEntityId(rawValue: unknown, items: Array<{ id: string; name: string }>, fallbackId?: string): string {
-  const trimmed = typeof rawValue === "string" ? rawValue.trim() : "";
-  if (!trimmed) {
-    return fallbackId ?? "";
-  }
-  const exactMatch = items.find((item) => item.id === trimmed);
-  if (exactMatch) {
-    return exactMatch.id;
-  }
-  const normalized = normalizeLookupValue(trimmed);
-  const nameMatch = items.find((item) => normalizeLookupValue(item.name) === normalized);
-  if (nameMatch) {
-    return nameMatch.id;
-  }
-  return fallbackId ?? "";
 }
 
 function getOperationCandidates(value: unknown): unknown[] {
@@ -935,6 +824,8 @@ function parseContextSuggestions(value: unknown, options: ParseOptions = {}): Ag
 }
 
 function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[], taskTypes: TaskType[]): ToolExecutionResult {
+  const ctx = { tasks, projects, taskTypes };
+
   if (call.tool === "list_projects") {
     return {
       tool: call.tool,
@@ -963,111 +854,14 @@ function executeToolCall(call: AgentToolCall, tasks: Task[], projects: Project[]
   }
 
   if (call.tool === "current_datetime") {
-    return {
-      tool: call.tool,
-      args: call.args,
-      ok: true,
-      result: {
-        now: toIsoNow(),
-      },
-    };
+    return execCurrentDatetime(call.tool, call.args);
   }
 
   if (call.tool === "get_task") {
-    const taskId = typeof call.args.taskId === "string" ? call.args.taskId : "";
-    const task = tasks.find((item) => item.id === taskId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      ok: Boolean(task),
-      result: task
-        ? {
-            id: task.id,
-            title: task.title,
-            content: task.content,
-            status: task.status,
-            startAt: task.startAt,
-            endAt: task.endAt,
-            taskTypeId: task.taskTypeId,
-            taskTypeName: taskTypes.find((item) => item.id === task.taskTypeId)?.name ?? "",
-            projectId: task.projectId,
-            projectName: projects.find((item) => item.id === task.projectId)?.name ?? "",
-            projectDescription: projects.find((item) => item.id === task.projectId)?.description ?? "",
-            isMajor: task.isMajor,
-            updatedAt: task.updatedAt,
-          }
-        : { message: "일정을 찾지 못했습니다." },
-    };
+    return execGetTask(call.tool, call.args, ctx);
   }
 
-  const keywordSource =
-    typeof call.args.keyword === "string"
-      ? call.args.keyword
-      : typeof call.args.title === "string"
-        ? call.args.title
-        : typeof call.args.taskTitle === "string"
-          ? call.args.taskTitle
-          : "";
-  const keyword = keywordSource.trim().toLowerCase();
-  const date = normalizeSearchDate(call.args.date);
-  const startDate = normalizeSearchDate(call.args.startDate);
-  const endDate = normalizeSearchDate(call.args.endDate);
-  const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
-  const status = normalizeTaskStatus(call.args.status);
-  const limitRaw = typeof call.args.limit === "number" ? call.args.limit : 20;
-  const limit = Math.max(1, Math.min(50, Math.floor(limitRaw)));
-  const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
-  const taskTypeMap = Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType]));
-  const filtered = tasks
-    .filter((task) => {
-      const taskDateKey = getTaskDateKey(task);
-      if (projectId && task.projectId !== projectId) {
-        return false;
-      }
-      if (status && task.status !== status) {
-        return false;
-      }
-      if (date && taskDateKey !== date) {
-        return false;
-      }
-      if (startDate && taskDateKey < startDate) {
-        return false;
-      }
-      if (endDate && taskDateKey > endDate) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      const projectName = projectMap[task.projectId]?.name ?? "";
-      const projectDescription = projectMap[task.projectId]?.description ?? "";
-      const taskTypeName = taskTypeMap[task.taskTypeId]?.name ?? "";
-      const haystack = `${task.title} ${task.content} ${projectName} ${projectDescription} ${taskTypeName}`.toLowerCase();
-      return haystack.includes(keyword);
-    })
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, limit)
-    .map((task) => ({
-      id: task.id,
-      title: task.title,
-      content: task.content,
-      status: task.status,
-      startAt: task.startAt,
-      endAt: task.endAt,
-      projectId: task.projectId,
-      projectName: projectMap[task.projectId]?.name ?? "",
-      projectDescription: projectMap[task.projectId]?.description ?? "",
-      taskTypeId: task.taskTypeId,
-      taskTypeName: taskTypeMap[task.taskTypeId]?.name ?? "",
-      isMajor: task.isMajor,
-      updatedAt: task.updatedAt,
-    }));
-  return {
-    tool: "search_tasks",
-    args: call.args,
-    ok: true,
-    result: filtered,
-  };
+  return execSearchTasks(call.tool, call.args, ctx);
 }
 
 function buildPromptMessages(input: RunScheduleAgentInput, toolResults: ToolExecutionResult[]): LlmChatMessage[] {
@@ -1119,31 +913,54 @@ function buildPromptMessages(input: RunScheduleAgentInput, toolResults: ToolExec
 export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<RunScheduleAgentResult> {
   const accumulatedToolResults: ToolExecutionResult[] = [];
   const toolCounts = new Map<string, number>();
+  const callCache = new ToolCallCache();
+
+  const fallbackResult = (message: string): RunScheduleAgentResult => ({
+    assistantMessage: message,
+    needsUserInput: false,
+    question: undefined,
+    proposal: undefined,
+    contextSuggestions: [],
+    trace: toolCounts.size > 0 ? summarizeScheduleTools(toolCounts) : undefined,
+  });
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const messages = buildPromptMessages(input, accumulatedToolResults);
+    const messages = buildPromptMessages(input, capToolResults(accumulatedToolResults));
     let streamedChars = 0;
-    const raw = await requestLlmResponse({
+    const writingLabel = toolCounts.size > 0 ? "조회 결과로 초안 작성 중" : "요청 분석 중";
+    const { payload: parsed } = await requestJsonWithRetry({
       messages,
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      signal: input.signal,
       onToken: input.onProgress
         ? (delta) => {
             streamedChars += delta.length;
-            input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars: streamedChars });
+            input.onProgress?.({ phase: "writing", label: writingLabel, chars: streamedChars });
           }
         : undefined,
     });
-    const payload = parseModelPayload(raw);
+    if (!parsed) {
+      // 재시도 후에도 JSON 파싱 실패 — 크래시 대신 안내 메시지 반환
+      return fallbackResult("AI 응답을 해석하지 못했습니다. 요청을 조금 바꿔 다시 시도해 주세요.");
+    }
+    const payload = parsed as AgentModelPayload;
     const toolCalls = parseToolCalls(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
-      const roundResults = toolCalls.map((call) => executeToolCall(call, input.tasks, input.projects, input.taskTypes));
-      for (const call of toolCalls) {
+      // 이미 실행한 동일 호출은 건너뛴다 (라운드 낭비·프롬프트 중복 방지)
+      const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
+      if (freshCalls.length === 0) {
+        accumulatedToolResults.push(duplicateCallNotice());
+        continue;
+      }
+      for (const call of freshCalls) {
+        callCache.add(call.tool, call.args);
+        accumulatedToolResults.push(executeToolCall(call, input.tasks, input.projects, input.taskTypes));
         const label = SCHEDULE_TOOL_LABELS[call.tool];
         toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
       }
       input.onProgress?.({ phase: "tools", label: summarizeScheduleTools(toolCounts) });
-      accumulatedToolResults.push(...roundResults);
       continue;
     }
     const proposalOptions: ParseOptions = {
@@ -1184,5 +1001,6 @@ export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<Ru
       trace: toolCounts.size > 0 ? summarizeScheduleTools(toolCounts) : undefined,
     };
   }
-  throw new Error("LLM이 도구 호출만 반복하여 최종 제안을 만들지 못했습니다.");
+  // 루프 초과 — 예외 대신 안내 메시지로 마무리 (#graceful)
+  return fallbackResult("일정 정보를 조회했지만 제안을 완성하지 못했습니다. 요청을 조금 더 구체적으로 다시 입력해 주세요.");
 }

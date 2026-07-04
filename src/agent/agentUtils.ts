@@ -115,5 +115,40 @@ export function resolveEntityId(
   return fallbackId ?? "";
 }
 
+/** 사용자가 요청을 취소해서 발생한 오류인지 판별한다. */
+export function isAbortError(error: unknown): boolean {
+  return Boolean(error) && (error as { name?: string }).name === "AbortError";
+}
+
+const JSON_RETRY_NUDGE =
+  "Your previous reply was not one valid JSON object. Respond again with exactly one valid JSON object matching the required schema — no markdown fences, no text before or after the JSON.";
+
+/**
+ * LLM을 호출해 JSON 객체를 기대한다. 파싱에 실패하면 넛지 메시지를 붙여 1회 재시도한다.
+ * 두 번 모두 실패하면 payload는 undefined, raw는 마지막 원문이다.
+ */
+export async function requestJsonWithRetry(params: {
+  messages: LlmChatMessage[];
+  apiKey: string;
+  endpoint?: string;
+  model?: string;
+  signal?: AbortSignal;
+  onToken?: (delta: string) => void;
+}): Promise<{ payload?: Record<string, unknown>; raw: string }> {
+  const raw = await requestLlmResponse(params);
+  const payload = parseJsonObject(raw);
+  if (payload) {
+    return { payload, raw };
+  }
+
+  const retryMessages: LlmChatMessage[] = [
+    ...params.messages,
+    { role: "assistant", content: raw.slice(0, 2000) },
+    { role: "user", content: JSON_RETRY_NUDGE },
+  ];
+  const retryRaw = await requestLlmResponse({ ...params, messages: retryMessages });
+  return { payload: parseJsonObject(retryRaw), raw: retryRaw };
+}
+
 export type { LlmChatMessage };
 export { requestLlmResponse };

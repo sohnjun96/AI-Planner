@@ -1,12 +1,21 @@
 import type { Note, Project, Task, TaskType } from "../models";
 import { toIsoNow } from "../utils/date";
 import {
+  ToolCallCache,
+  capToolResults,
+  duplicateCallNotice,
+  execCurrentDatetime,
+  execGetLinkedTasks,
+  execGetNote,
+  execSearchNotes,
+  type SharedToolResult,
+} from "./agentTools";
+import {
   extractJsonText,
   isRecord,
-  parseJsonObject,
   pickFirstString,
   pickFirstStringArray,
-  requestLlmResponse,
+  requestJsonWithRetry,
   type LlmChatMessage,
 } from "./agentUtils";
 
@@ -24,12 +33,7 @@ interface NotesAgentToolCall {
   args: Record<string, unknown>;
 }
 
-interface ToolExecutionResult {
-  tool: NotesAgentToolName;
-  args: Record<string, unknown>;
-  ok: boolean;
-  result: unknown;
-}
+type ToolExecutionResult = SharedToolResult;
 
 export interface RunNotesAgentInput {
   mode: NotesAgentMode;
@@ -50,6 +54,7 @@ export interface RunNotesAgentInput {
   model?: string;
   /** 진행 상황 콜백 (도구 실행 / 스트리밍 작성) */
   onProgress?: (info: NotesAgentProgress) => void;
+  signal?: AbortSignal;
 }
 
 export interface NotesAgentProgress {
@@ -114,11 +119,13 @@ Root schema (always include every key):
 Rules:
 1. If you need to inspect other notes, versions, or linked tasks before answering, return toolCalls and leave the result fields empty.
 2. If toolCalls is not empty, do not include a final result in the same response.
-3. Use only these tools: search_notes, get_note, list_note_versions, get_linked_tasks, current_datetime.
+3. Use only these tools: search_notes, get_note, list_note_versions, get_linked_tasks.
 4. search_notes args: { "keyword"?: string, "projectId"?: string, "tag"?: string, "status"?: "draft"|"active"|"archived", "limit"?: number }
 5. get_note args: { "noteId": string }
 6. get_linked_tasks args: { "noteId": string }
 7. Do not invent note ids. Use ids returned from tools or provided in the payload.
+8. The current date/time is already provided as "now" in the payload — never call a tool for it.
+9. Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
 `.trim();
 
 const MODE_INSTRUCTIONS: Record<NotesAgentMode, string> = {
@@ -173,45 +180,17 @@ function executeToolCall(
   tasks: Task[],
   projects: Project[],
 ): ToolExecutionResult {
-  const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
+  const ctx = { tasks, projects, taskTypes: [], notes };
 
   if (call.tool === "current_datetime") {
-    return { tool: call.tool, args: call.args, ok: true, result: { now: toIsoNow() } };
+    return execCurrentDatetime(call.tool, call.args);
   }
-
   if (call.tool === "get_note") {
-    const noteId = typeof call.args.noteId === "string" ? call.args.noteId : "";
-    const note = notes.find((item) => item.id === noteId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      ok: Boolean(note),
-      result: note
-        ? {
-            id: note.id,
-            title: note.title,
-            content: note.content,
-            projectId: note.projectId,
-            projectName: projectMap[note.projectId]?.name ?? "",
-            tags: note.tags,
-            status: note.status,
-            linkedTaskIds: note.linkedTaskIds,
-            updatedAt: note.updatedAt,
-          }
-        : { message: "노트를 찾지 못했습니다." },
-    };
+    return execGetNote(call.tool, call.args, ctx);
   }
-
   if (call.tool === "get_linked_tasks") {
-    const noteId = typeof call.args.noteId === "string" ? call.args.noteId : "";
-    const note = notes.find((item) => item.id === noteId);
-    const linkedIds = new Set(note?.linkedTaskIds ?? []);
-    const linkedTasks = tasks
-      .filter((task) => linkedIds.has(task.id))
-      .map((task) => ({ id: task.id, title: task.title, startAt: task.startAt, status: task.status }));
-    return { tool: call.tool, args: call.args, ok: true, result: linkedTasks };
+    return execGetLinkedTasks(call.tool, call.args, ctx);
   }
-
   if (call.tool === "list_note_versions") {
     // 버전 히스토리는 UI 레이어에서 관리하므로 에이전트에는 요약 정보만 제공한다.
     return {
@@ -221,47 +200,7 @@ function executeToolCall(
       result: { message: "버전 정보는 편집 화면의 히스토리 패널에서 확인할 수 있습니다." },
     };
   }
-
-  // search_notes
-  const keyword = (typeof call.args.keyword === "string" ? call.args.keyword : "").trim().toLowerCase();
-  const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
-  const tag = (typeof call.args.tag === "string" ? call.args.tag : "").trim().toLowerCase();
-  const status = typeof call.args.status === "string" ? call.args.status : "";
-  const limitRaw = typeof call.args.limit === "number" ? call.args.limit : 20;
-  const limit = Math.max(1, Math.min(50, Math.floor(limitRaw)));
-
-  const filtered = notes
-    .filter((note) => {
-      if (projectId && note.projectId !== projectId) {
-        return false;
-      }
-      if (status && note.status !== status) {
-        return false;
-      }
-      if (tag && !note.tags.some((item) => item.toLowerCase() === tag)) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      const projectName = projectMap[note.projectId]?.name ?? "";
-      const haystack = `${note.title} ${note.content} ${note.tags.join(" ")} ${projectName}`.toLowerCase();
-      return haystack.includes(keyword);
-    })
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, limit)
-    .map((note) => ({
-      id: note.id,
-      title: note.title,
-      snippet: note.content.slice(0, 160),
-      projectId: note.projectId,
-      projectName: projectMap[note.projectId]?.name ?? "",
-      tags: note.tags,
-      status: note.status,
-      updatedAt: note.updatedAt,
-    }));
-
-  return { tool: "search_notes", args: call.args, ok: true, result: filtered };
+  return execSearchNotes(call.tool, call.args, ctx);
 }
 
 function buildPromptMessages(input: RunNotesAgentInput, toolResults: ToolExecutionResult[]): LlmChatMessage[] {
@@ -321,26 +260,28 @@ function buildResult(mode: NotesAgentMode, payload: Record<string, unknown>): No
 export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAgentResult> {
   const accumulatedToolResults: ToolExecutionResult[] = [];
   const toolCounts = new Map<string, number>();
+  const callCache = new ToolCallCache();
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const messages = buildPromptMessages(input, accumulatedToolResults);
+    const messages = buildPromptMessages(input, capToolResults(accumulatedToolResults));
     let streamedChars = 0;
-    const raw = await requestLlmResponse({
+    const writingLabel = toolCounts.size > 0 ? "조회 결과로 작성 중" : "AI가 작성 중";
+    const { payload, raw } = await requestJsonWithRetry({
       messages,
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      signal: input.signal,
       onToken: input.onProgress
         ? (delta) => {
             streamedChars += delta.length;
-            input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars: streamedChars });
+            input.onProgress?.({ phase: "writing", label: writingLabel, chars: streamedChars });
           }
         : undefined,
     });
 
-    const payload = parseJsonObject(raw);
     if (!payload) {
-      // JSON 파싱 실패 시 원문을 assistantMessage로 노출 (크래시 방지)
+      // 재시도 후에도 JSON 파싱 실패 — 원문을 assistantMessage로 노출 (크래시 방지)
       return {
         assistantMessage: extractJsonText(raw).slice(0, 500) || "AI 응답을 해석하지 못했습니다. 다시 시도해 주세요.",
         trace: toolCounts.size > 0 ? summarizeToolCounts(toolCounts) : undefined,
@@ -349,15 +290,18 @@ export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAge
 
     const toolCalls = parseToolCalls(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
-      const roundResults = toolCalls.map((call) =>
-        executeToolCall(call, input.notes, input.tasks, input.projects),
-      );
-      for (const call of toolCalls) {
+      const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
+      if (freshCalls.length === 0) {
+        accumulatedToolResults.push(duplicateCallNotice());
+        continue;
+      }
+      for (const call of freshCalls) {
+        callCache.add(call.tool, call.args);
+        accumulatedToolResults.push(executeToolCall(call, input.notes, input.tasks, input.projects));
         const label = TOOL_LABELS[call.tool];
         toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
       }
       input.onProgress?.({ phase: "tools", label: summarizeToolCounts(toolCounts) });
-      accumulatedToolResults.push(...roundResults);
       continue;
     }
 
@@ -449,6 +393,7 @@ export async function extractNoteActions(input: {
   apiKey: string;
   model?: string;
   onProgress?: (info: NotesAgentProgress) => void;
+  signal?: AbortSignal;
 }): Promise<NoteActionItem[]> {
   const system = `
 You extract actionable to-do items from a Korean note so they can become calendar tasks.
@@ -462,7 +407,7 @@ No markdown fences, no text before or after the JSON.
 
   const payload = { now: input.nowIso, noteTitle: input.noteTitle, noteContent: input.noteContent };
   let chars = 0;
-  const raw = await requestLlmResponse({
+  const { payload: parsed } = await requestJsonWithRetry({
     messages: [
       { role: "system", content: system },
       { role: "user", content: JSON.stringify(payload) },
@@ -470,15 +415,15 @@ No markdown fences, no text before or after the JSON.
     endpoint: input.endpoint,
     apiKey: input.apiKey,
     model: input.model,
+    signal: input.signal,
     onToken: input.onProgress
       ? (delta) => {
           chars += delta.length;
-          input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars });
+          input.onProgress?.({ phase: "writing", label: "액션 추출 중", chars });
         }
       : undefined,
   });
 
-  const parsed = parseJsonObject(raw);
   if (!parsed) {
     return [];
   }

@@ -1,12 +1,21 @@
-import { STATUS_LABELS } from "../constants";
 import type { Note, Project, Task, TaskType } from "../models";
 import { toIsoNow } from "../utils/date";
 import {
+  ToolCallCache,
+  capToolResults,
+  duplicateCallNotice,
+  execCurrentDatetime,
+  execGetNote,
+  execGetTask,
+  execSearchNotes,
+  execSearchTasks,
+  type SharedToolResult,
+} from "./agentTools";
+import {
   extractJsonText,
   isRecord,
-  parseJsonObject,
   pickFirstString,
-  requestLlmResponse,
+  requestJsonWithRetry,
   type LlmChatMessage,
 } from "./agentUtils";
 
@@ -40,6 +49,7 @@ export interface RunQaInput {
   apiKey: string;
   model?: string;
   onProgress?: (info: QaProgress) => void;
+  signal?: AbortSignal;
 }
 
 interface QaToolCall {
@@ -47,11 +57,7 @@ interface QaToolCall {
   args: Record<string, unknown>;
 }
 
-interface ToolExecutionResult {
-  tool: QaToolName;
-  args: Record<string, unknown>;
-  result: unknown;
-}
+type ToolExecutionResult = SharedToolResult;
 
 const MAX_TOOL_ROUNDS = 4;
 const ALLOWED_TOOLS: QaToolName[] = ["search_notes", "get_note", "search_tasks", "get_task", "current_datetime"];
@@ -78,9 +84,11 @@ Return exactly ONE JSON object with every key:
 
 Rules:
 1. To look things up, return toolCalls (and leave answer empty). Do not answer and call tools in the same response.
-2. Tools: search_notes { keyword?, projectId?, status?, limit? }, get_note { noteId }, search_tasks { keyword?, status?, date?, startDate?, endDate?, projectId?, limit? }, get_task { taskId }, current_datetime {}.
+2. Tools: search_notes { keyword?, projectId?, status?, limit? }, get_note { noteId }, search_tasks { keyword?, status?, date?, startDate?, endDate?, projectId?, limit? }, get_task { taskId }.
 3. Only put ids that came from tool results in references. If you found nothing, say so honestly and return empty references.
 4. No markdown fences, no text outside the JSON.
+5. The current date/time is already provided as "now" in the payload — never call a tool for it.
+6. Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
 `.trim();
 
 function parseToolCalls(value: unknown): QaToolCall[] {
@@ -97,119 +105,22 @@ function parseToolCalls(value: unknown): QaToolCall[] {
     .filter((item): item is QaToolCall => item !== null);
 }
 
-function normalizeSearchDate(value: unknown): string {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const match = value.trim().match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
-  return match ? `${match[1]}-${match[2]}-${match[3]}` : "";
-}
-
-function taskDateKey(task: Task): string {
-  const parsed = new Date(task.startAt);
-  if (Number.isNaN(parsed.getTime())) {
-    return task.startAt.slice(0, 10);
-  }
-  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
-}
-
 function executeToolCall(call: QaToolCall, input: RunQaInput): ToolExecutionResult {
-  const projectMap = Object.fromEntries(input.projects.map((project) => [project.id, project]));
-  const typeMap = Object.fromEntries(input.taskTypes.map((type) => [type.id, type]));
+  const ctx = { tasks: input.tasks, projects: input.projects, taskTypes: input.taskTypes, notes: input.notes };
 
   if (call.tool === "current_datetime") {
-    return { tool: call.tool, args: call.args, result: { now: toIsoNow() } };
+    return execCurrentDatetime(call.tool, call.args);
   }
-
   if (call.tool === "get_note") {
-    const note = input.notes.find((item) => item.id === call.args.noteId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      result: note
-        ? { id: note.id, title: note.title, content: note.content, projectName: projectMap[note.projectId]?.name ?? "", tags: note.tags, updatedAt: note.updatedAt }
-        : { message: "노트를 찾지 못했습니다." },
-    };
+    return execGetNote(call.tool, call.args, ctx);
   }
-
   if (call.tool === "get_task") {
-    const task = input.tasks.find((item) => item.id === call.args.taskId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      result: task
-        ? {
-            id: task.id,
-            title: task.title,
-            content: task.content,
-            startAt: task.startAt,
-            status: STATUS_LABELS[task.status],
-            projectName: projectMap[task.projectId]?.name ?? "",
-            typeName: typeMap[task.taskTypeId]?.name ?? "",
-          }
-        : { message: "일정을 찾지 못했습니다." },
-    };
+    return execGetTask(call.tool, call.args, ctx);
   }
-
-  const keyword = (typeof call.args.keyword === "string" ? call.args.keyword : "").trim().toLowerCase();
-  const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
-  const limit = Math.max(1, Math.min(30, typeof call.args.limit === "number" ? Math.floor(call.args.limit) : 15));
-
   if (call.tool === "search_notes") {
-    const filtered = input.notes
-      .filter((note) => {
-        if (projectId && note.projectId !== projectId) {
-          return false;
-        }
-        if (!keyword) {
-          return true;
-        }
-        return `${note.title} ${note.content} ${note.tags.join(" ")}`.toLowerCase().includes(keyword);
-      })
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, limit)
-      .map((note) => ({ id: note.id, title: note.title, snippet: note.content.slice(0, 200), projectName: projectMap[note.projectId]?.name ?? "" }));
-    return { tool: call.tool, args: call.args, result: filtered };
+    return execSearchNotes(call.tool, call.args, ctx);
   }
-
-  // search_tasks
-  const date = normalizeSearchDate(call.args.date);
-  const startDate = normalizeSearchDate(call.args.startDate);
-  const endDate = normalizeSearchDate(call.args.endDate);
-  const status = typeof call.args.status === "string" ? call.args.status : "";
-  const filtered = input.tasks
-    .filter((task) => {
-      const key = taskDateKey(task);
-      if (projectId && task.projectId !== projectId) {
-        return false;
-      }
-      if (status && STATUS_LABELS[task.status] !== status && task.status !== status) {
-        return false;
-      }
-      if (date && key !== date) {
-        return false;
-      }
-      if (startDate && key < startDate) {
-        return false;
-      }
-      if (endDate && key > endDate) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      return `${task.title} ${task.content}`.toLowerCase().includes(keyword);
-    })
-    .sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime())
-    .slice(0, limit)
-    .map((task) => ({
-      id: task.id,
-      title: task.title,
-      startAt: task.startAt,
-      status: STATUS_LABELS[task.status],
-      projectName: projectMap[task.projectId]?.name ?? "",
-    }));
-  return { tool: "search_tasks", args: call.args, result: filtered };
+  return execSearchTasks(call.tool, call.args, ctx);
 }
 
 function buildMessages(input: RunQaInput, toolResults: ToolExecutionResult[]): LlmChatMessage[] {
@@ -237,22 +148,25 @@ export async function runQaAgent(input: RunQaInput): Promise<QaResult> {
   const noteMap = Object.fromEntries(input.notes.map((note) => [note.id, note]));
   const taskMap = Object.fromEntries(input.tasks.map((task) => [task.id, task]));
 
+  const callCache = new ToolCallCache();
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     let chars = 0;
-    const raw = await requestLlmResponse({
-      messages: buildMessages(input, accumulated),
+    const writingLabel = toolCounts.size > 0 ? "답변 작성 중" : "질문 분석 중";
+    const { payload, raw } = await requestJsonWithRetry({
+      messages: buildMessages(input, capToolResults(accumulated)),
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      signal: input.signal,
       onToken: input.onProgress
         ? (delta) => {
             chars += delta.length;
-            input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars });
+            input.onProgress?.({ phase: "writing", label: writingLabel, chars });
           }
         : undefined,
     });
 
-    const payload = parseJsonObject(raw);
     if (!payload) {
       return {
         answer: extractJsonText(raw).slice(0, 800) || "답변을 해석하지 못했습니다. 다시 시도해 주세요.",
@@ -263,7 +177,13 @@ export async function runQaAgent(input: RunQaInput): Promise<QaResult> {
 
     const toolCalls = parseToolCalls(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
-      for (const call of toolCalls) {
+      const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
+      if (freshCalls.length === 0) {
+        accumulated.push(duplicateCallNotice());
+        continue;
+      }
+      for (const call of freshCalls) {
+        callCache.add(call.tool, call.args);
         accumulated.push(executeToolCall(call, input));
         const label = TOOL_LABELS[call.tool];
         toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);

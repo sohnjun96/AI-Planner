@@ -32119,6 +32119,324 @@ function isFollowingTitle(title, previousContent) {
 // src/components/AiAssistantWorkspace.tsx
 var import_react3 = __toESM(require_react(), 1);
 
+// src/agent/agentTools.ts
+var MAX_SEARCH_LIMIT = 30;
+var DEFAULT_SEARCH_LIMIT = 15;
+var TASK_CONTENT_PREVIEW = 160;
+var TASK_CONTENT_FULL = 500;
+var NOTE_SNIPPET_LENGTH = 200;
+var NOTE_CONTENT_MAX = 4e3;
+var MAX_ACCUMULATED_RESULTS = 16;
+function clip(value, max) {
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const record = value;
+    const keys = Object.keys(record).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+var ToolCallCache = class {
+  seen = /* @__PURE__ */ new Set();
+  key(tool, args) {
+    return `${tool}:${stableStringify(args)}`;
+  }
+  has(tool, args) {
+    return this.seen.has(this.key(tool, args));
+  }
+  add(tool, args) {
+    this.seen.add(this.key(tool, args));
+  }
+};
+function duplicateCallNotice() {
+  return {
+    tool: "system_notice",
+    args: {},
+    ok: false,
+    result: {
+      notice: "직전 도구 호출은 이미 동일한 인자로 실행되어 생략했습니다. 기존 toolResults를 사용해 최종 결과를 작성하세요."
+    }
+  };
+}
+function capToolResults(results) {
+  if (results.length <= MAX_ACCUMULATED_RESULTS) {
+    return results;
+  }
+  const dropped = results.length - MAX_ACCUMULATED_RESULTS;
+  return [
+    {
+      tool: "system_notice",
+      args: {},
+      ok: true,
+      result: { notice: `이전 도구 결과 ${dropped}건은 프롬프트 길이 관리를 위해 생략되었습니다.` }
+    },
+    ...results.slice(dropped)
+  ];
+}
+function normalizeSearchDate(value, field) {
+  if (typeof value !== "string" || !value.trim()) {
+    return { value: "" };
+  }
+  const match = value.trim().match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (!match) {
+    return { value: "", warning: `${field} 인자 "${value}"가 YYYY-MM-DD 형식이 아니어서 무시했습니다.` };
+  }
+  return { value: `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}` };
+}
+function taskDateKey(task) {
+  const parsed = new Date(task.startAt);
+  if (Number.isNaN(parsed.getTime())) {
+    return task.startAt.slice(0, 10);
+  }
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${parsed.getFullYear()}-${month}-${day}`;
+}
+var STATUS_ALIAS = {
+  not_done: "NOT_DONE",
+  notdone: "NOT_DONE",
+  todo: "NOT_DONE",
+  pending: "NOT_DONE",
+  in_progress: "NOT_DONE",
+  미완료: "NOT_DONE",
+  대기: "NOT_DONE",
+  on_hold: "ON_HOLD",
+  hold: "ON_HOLD",
+  paused: "ON_HOLD",
+  보류: "ON_HOLD",
+  done: "DONE",
+  complete: "DONE",
+  completed: "DONE",
+  완료: "DONE",
+  canceled: "CANCELED",
+  cancelled: "CANCELED",
+  cancel: "CANCELED",
+  취소: "CANCELED"
+};
+function normalizeStatusFilter(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return {};
+  }
+  const raw = value.trim();
+  const upper = raw.toUpperCase();
+  if (upper === "NOT_DONE" || upper === "ON_HOLD" || upper === "DONE" || upper === "CANCELED") {
+    return { status: upper };
+  }
+  const alias = STATUS_ALIAS[raw.toLowerCase()];
+  if (alias) {
+    return { status: alias };
+  }
+  const labelEntry = Object.entries(STATUS_LABELS).find(([, label]) => label === raw);
+  if (labelEntry) {
+    return { status: labelEntry[0] };
+  }
+  return { warning: `status 인자 "${raw}"를 해석하지 못해 무시했습니다.` };
+}
+function clampLimit(value) {
+  const raw = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : DEFAULT_SEARCH_LIMIT;
+  return Math.max(1, Math.min(MAX_SEARCH_LIMIT, raw));
+}
+function toTaskSummary(task, ctx, contentMax = TASK_CONTENT_PREVIEW) {
+  const project = ctx.projects.find((item) => item.id === task.projectId);
+  const taskType = ctx.taskTypes.find((item) => item.id === task.taskTypeId);
+  return {
+    id: task.id,
+    title: task.title,
+    content: clip(task.content, contentMax),
+    status: task.status,
+    statusLabel: STATUS_LABELS[task.status],
+    startAt: task.startAt,
+    endAt: task.endAt,
+    projectId: task.projectId,
+    projectName: project?.name ?? "",
+    taskTypeId: task.taskTypeId,
+    taskTypeName: taskType?.name ?? "",
+    isMajor: task.isMajor,
+    updatedAt: task.updatedAt
+  };
+}
+function execCurrentDatetime(tool, args) {
+  return { tool, args, ok: true, result: { now: toIsoNow() } };
+}
+function execSearchTasks(tool, args, ctx) {
+  const warnings = [];
+  const keywordSource = typeof args.keyword === "string" ? args.keyword : typeof args.title === "string" ? args.title : "";
+  const keyword = keywordSource.trim().toLowerCase();
+  const date = normalizeSearchDate(args.date, "date");
+  const startDate = normalizeSearchDate(args.startDate, "startDate");
+  const endDate = normalizeSearchDate(args.endDate, "endDate");
+  for (const parsed of [date, startDate, endDate]) {
+    if (parsed.warning) {
+      warnings.push(parsed.warning);
+    }
+  }
+  const statusFilter = normalizeStatusFilter(args.status);
+  if (statusFilter.warning) {
+    warnings.push(statusFilter.warning);
+  }
+  const projectId = typeof args.projectId === "string" ? args.projectId : "";
+  const limit = clampLimit(args.limit);
+  const hasDateFilter = Boolean(date.value || startDate.value || endDate.value);
+  const items = ctx.tasks.filter((task) => {
+    const key = taskDateKey(task);
+    if (projectId && task.projectId !== projectId) {
+      return false;
+    }
+    if (statusFilter.status && task.status !== statusFilter.status) {
+      return false;
+    }
+    if (date.value && key !== date.value) {
+      return false;
+    }
+    if (startDate.value && key < startDate.value) {
+      return false;
+    }
+    if (endDate.value && key > endDate.value) {
+      return false;
+    }
+    if (!keyword) {
+      return true;
+    }
+    const project = ctx.projects.find((item) => item.id === task.projectId);
+    const taskType = ctx.taskTypes.find((item) => item.id === task.taskTypeId);
+    const haystack = `${task.title} ${task.content} ${project?.name ?? ""} ${project?.description ?? ""} ${taskType?.name ?? ""}`.toLowerCase();
+    return haystack.includes(keyword);
+  }).sort(
+    hasDateFilter ? (
+      // 날짜 기반 검색은 일정 시각 순으로 — "내일 회의"류 요청에서 정확한 후보가 상위로 온다.
+      (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+    ) : (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  ).slice(0, limit).map((task) => toTaskSummary(task, ctx));
+  return { tool, args, ok: true, result: warnings.length > 0 ? { warnings, items } : items };
+}
+function execGetTask(tool, args, ctx) {
+  const taskId = typeof args.taskId === "string" ? args.taskId.trim() : "";
+  if (!taskId) {
+    return { tool, args, ok: false, result: { error: "taskId 인자가 필요합니다." } };
+  }
+  const task = ctx.tasks.find((item) => item.id === taskId);
+  if (!task) {
+    return {
+      tool,
+      args,
+      ok: false,
+      result: { error: `taskId "${taskId}"에 해당하는 일정이 없습니다. search_tasks로 먼저 검색해 실제 id를 확인하세요.` }
+    };
+  }
+  const project = ctx.projects.find((item) => item.id === task.projectId);
+  return {
+    tool,
+    args,
+    ok: true,
+    result: { ...toTaskSummary(task, ctx, TASK_CONTENT_FULL), projectDescription: project?.description ?? "" }
+  };
+}
+function execSearchNotes(tool, args, ctx) {
+  const notes = ctx.notes ?? [];
+  const warnings = [];
+  const keyword = (typeof args.keyword === "string" ? args.keyword : "").trim().toLowerCase();
+  const projectId = typeof args.projectId === "string" ? args.projectId : "";
+  const tag = (typeof args.tag === "string" ? args.tag : "").trim().toLowerCase();
+  const statusRaw = typeof args.status === "string" ? args.status.trim() : "";
+  let status = "";
+  if (statusRaw) {
+    if (statusRaw === "draft" || statusRaw === "active" || statusRaw === "archived") {
+      status = statusRaw;
+    } else {
+      warnings.push(`status 인자 "${statusRaw}"는 draft/active/archived 중 하나가 아니어서 무시했습니다.`);
+    }
+  }
+  const limit = clampLimit(args.limit);
+  const items = notes.filter((note) => {
+    if (projectId && note.projectId !== projectId) {
+      return false;
+    }
+    if (status && note.status !== status) {
+      return false;
+    }
+    if (tag && !note.tags.some((item) => item.toLowerCase() === tag)) {
+      return false;
+    }
+    if (!keyword) {
+      return true;
+    }
+    const project = ctx.projects.find((item) => item.id === note.projectId);
+    const haystack = `${note.title} ${note.content} ${note.tags.join(" ")} ${project?.name ?? ""}`.toLowerCase();
+    return haystack.includes(keyword);
+  }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, limit).map((note) => ({
+    id: note.id,
+    title: note.title,
+    snippet: clip(note.content, NOTE_SNIPPET_LENGTH),
+    projectId: note.projectId,
+    projectName: ctx.projects.find((item) => item.id === note.projectId)?.name ?? "",
+    tags: note.tags,
+    status: note.status,
+    updatedAt: note.updatedAt
+  }));
+  return { tool, args, ok: true, result: warnings.length > 0 ? { warnings, items } : items };
+}
+function execGetNote(tool, args, ctx) {
+  const noteId = typeof args.noteId === "string" ? args.noteId.trim() : "";
+  if (!noteId) {
+    return { tool, args, ok: false, result: { error: "noteId 인자가 필요합니다." } };
+  }
+  const note = (ctx.notes ?? []).find((item) => item.id === noteId);
+  if (!note) {
+    return {
+      tool,
+      args,
+      ok: false,
+      result: { error: `noteId "${noteId}"에 해당하는 노트가 없습니다. search_notes로 먼저 검색해 실제 id를 확인하세요.` }
+    };
+  }
+  return {
+    tool,
+    args,
+    ok: true,
+    result: {
+      id: note.id,
+      title: note.title,
+      content: clip(note.content, NOTE_CONTENT_MAX),
+      contentTruncated: note.content.length > NOTE_CONTENT_MAX,
+      projectId: note.projectId,
+      projectName: ctx.projects.find((item) => item.id === note.projectId)?.name ?? "",
+      tags: note.tags,
+      status: note.status,
+      linkedTaskIds: note.linkedTaskIds,
+      updatedAt: note.updatedAt
+    }
+  };
+}
+function execGetLinkedTasks(tool, args, ctx) {
+  const noteId = typeof args.noteId === "string" ? args.noteId.trim() : "";
+  if (!noteId) {
+    return { tool, args, ok: false, result: { error: "noteId 인자가 필요합니다." } };
+  }
+  const note = (ctx.notes ?? []).find((item) => item.id === noteId);
+  if (!note) {
+    return {
+      tool,
+      args,
+      ok: false,
+      result: { error: `noteId "${noteId}"에 해당하는 노트가 없습니다. search_notes로 먼저 검색하세요.` }
+    };
+  }
+  const linkedIds = new Set(note.linkedTaskIds);
+  const linkedTasks = ctx.tasks.filter((task) => linkedIds.has(task.id)).map((task) => ({
+    id: task.id,
+    title: task.title,
+    startAt: task.startAt,
+    status: task.status,
+    statusLabel: STATUS_LABELS[task.status]
+  }));
+  return { tool, args, ok: true, result: linkedTasks };
+}
+
 // src/agent/llmClient.ts
 function readTextContent(content) {
   if (typeof content === "string") {
@@ -32194,6 +32512,7 @@ async function requestLlmResponse(params) {
   const response = await fetch(params.endpoint?.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers,
+    signal: params.signal,
     body: JSON.stringify({
       model: params.model?.trim() || LLM_DEFAULT_MODEL,
       messages: params.messages,
@@ -32219,6 +32538,114 @@ async function requestLlmResponse(params) {
     throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
   }
   return content.trim();
+}
+
+// src/agent/agentUtils.ts
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function tryParseJsonLikeValue(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+  if (trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+function extractJsonText(raw) {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]) {
+    return fencedMatch[1].trim();
+  }
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return trimmed.slice(start, end + 1).trim();
+  }
+  return trimmed;
+}
+function parseJsonObject(raw) {
+  try {
+    const jsonText = extractJsonText(raw);
+    const parsed = JSON.parse(jsonText);
+    if (!isRecord(parsed)) {
+      return void 0;
+    }
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function pickFirstString(record, keys) {
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return "";
+}
+function pickFirstStringArray(record, keys, limit = 8) {
+  for (const key of keys) {
+    const candidate = record[key];
+    if (Array.isArray(candidate)) {
+      return candidate.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean).slice(0, limit);
+    }
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.split(/[,，]/).map((item) => item.trim()).filter(Boolean).slice(0, limit);
+    }
+  }
+  return [];
+}
+function normalizeLookupValue(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+function resolveEntityId(rawValue, items, fallbackId) {
+  const trimmed = typeof rawValue === "string" ? rawValue.trim() : "";
+  if (!trimmed) {
+    return fallbackId ?? "";
+  }
+  const exactMatch = items.find((item) => item.id === trimmed);
+  if (exactMatch) {
+    return exactMatch.id;
+  }
+  const normalized = normalizeLookupValue(trimmed);
+  const nameMatch = items.find((item) => normalizeLookupValue(item.name) === normalized);
+  if (nameMatch) {
+    return nameMatch.id;
+  }
+  return fallbackId ?? "";
+}
+function isAbortError(error) {
+  return Boolean(error) && error.name === "AbortError";
+}
+var JSON_RETRY_NUDGE = "Your previous reply was not one valid JSON object. Respond again with exactly one valid JSON object matching the required schema — no markdown fences, no text before or after the JSON.";
+async function requestJsonWithRetry(params) {
+  const raw = await requestLlmResponse(params);
+  const payload = parseJsonObject(raw);
+  if (payload) {
+    return { payload, raw };
+  }
+  const retryMessages = [
+    ...params.messages,
+    { role: "assistant", content: raw.slice(0, 2e3) },
+    { role: "user", content: JSON_RETRY_NUDGE }
+  ];
+  const retryRaw = await requestLlmResponse({ ...params, messages: retryMessages });
+  return { payload: parseJsonObject(retryRaw), raw: retryRaw };
 }
 
 // src/agent/scheduleAgent.ts
@@ -32307,7 +32734,7 @@ Required root schema:
 Hard output rules:
 1. Always include every root key: assistantMessage, needsUserInput, userQuestion, toolCalls, proposal.
 2. proposal must always include summary and operations.
-3. If you need to inspect existing tasks, projects, task types, or the current date, return toolCalls and set proposal.operations to [].
+3. If you need to inspect existing tasks, projects, or task types, return toolCalls and set proposal.operations to [].
 4. If toolCalls is not empty, do not include final create/update/delete operations in the same response.
 5. If you can satisfy the request, set toolCalls to [] and put every proposed change in proposal.operations.
 6. Never return a summary-only proposal when the user asked to create, update, or delete schedules. The actual draft must be in proposal.operations.
@@ -32374,7 +32801,11 @@ Allowed tools:
 - list_task_types: {}
 - search_tasks: { "keyword"?: string, "projectId"?: string, "status"?: "NOT_DONE"|"ON_HOLD"|"DONE"|"CANCELED", "date"?: "YYYY-MM-DD", "startDate"?: "YYYY-MM-DD", "endDate"?: "YYYY-MM-DD", "limit"?: number }
 - get_task: { "taskId": string }
-- current_datetime: {}
+
+Tool usage notes:
+- The current date/time is already provided as "now" in the user payload. Never call a tool to get it.
+- Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
+- Keep tool calls minimal — batch what you need in one round when possible.
 
 Example final response:
 {
@@ -32464,9 +32895,6 @@ Example clarification response:
   }
 }
 `.trim();
-function isRecord(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 function isTaskStatus(value) {
   return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
 }
@@ -32495,47 +32923,6 @@ function normalizeTaskStatus(value) {
   }
   return void 0;
 }
-function tryParseJsonLikeValue(value) {
-  if (typeof value !== "string") {
-    return value;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return value;
-  }
-  if (trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]")) {
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return value;
-    }
-  }
-  return value;
-}
-function extractJsonText(raw) {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    return trimmed;
-  }
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
-  }
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1).trim();
-  }
-  return trimmed;
-}
-function parseModelPayload(raw) {
-  const jsonText = extractJsonText(raw);
-  const parsed = JSON.parse(jsonText);
-  if (!isRecord(parsed)) {
-    throw new Error("LLM 응답이 JSON 객체가 아닙니다.");
-  }
-  return parsed;
-}
 function parseToolCalls(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -32557,27 +32944,12 @@ function parseToolCalls(value) {
 function getPreferredItemId(items, fallbackId) {
   return items.find((item) => item.isActive)?.id ?? items[0]?.id ?? fallbackId ?? "";
 }
-function normalizeLookupValue(value) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
 function truncateText(value, maxLength) {
   const normalizedMax = Number.isFinite(maxLength) ? Math.max(0, Math.floor(maxLength)) : DEFAULT_AI_CONTEXT_MAX_LENGTH;
   if (value.length <= normalizedMax) {
     return value;
   }
   return value.slice(0, normalizedMax);
-}
-function pickFirstStringArray(record, keys) {
-  for (const key of keys) {
-    const candidate = record[key];
-    if (Array.isArray(candidate)) {
-      return candidate.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean).slice(0, 8);
-    }
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.split(/[,，]/).map((item) => item.trim()).filter(Boolean).slice(0, 8);
-    }
-  }
-  return [];
 }
 function normalizeContextCategory(value) {
   if (typeof value !== "string") {
@@ -32605,15 +32977,6 @@ function normalizeDefaultTime(value) {
     return void 0;
   }
   return `${match[1].padStart(2, "0")}:${match[2]}`;
-}
-function pickFirstString(record, keys) {
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.trim();
-    }
-  }
-  return "";
 }
 function pickFirstBoolean(record, keys) {
   for (const key of keys) {
@@ -32655,46 +33018,6 @@ function normalizeDateTime(value, fallbackTime) {
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
-}
-function normalizeSearchDate(value) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-  const match = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
-  if (!match) {
-    return "";
-  }
-  return `${match[1]}-${match[2]}-${match[3]}`;
-}
-function getTaskDateKey(task) {
-  const parsed = new Date(task.startAt);
-  if (Number.isNaN(parsed.getTime())) {
-    return task.startAt.slice(0, 10);
-  }
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-function resolveEntityId(rawValue, items, fallbackId) {
-  const trimmed = typeof rawValue === "string" ? rawValue.trim() : "";
-  if (!trimmed) {
-    return fallbackId ?? "";
-  }
-  const exactMatch = items.find((item) => item.id === trimmed);
-  if (exactMatch) {
-    return exactMatch.id;
-  }
-  const normalized = normalizeLookupValue(trimmed);
-  const nameMatch = items.find((item) => normalizeLookupValue(item.name) === normalized);
-  if (nameMatch) {
-    return nameMatch.id;
-  }
-  return fallbackId ?? "";
 }
 function getOperationCandidates(value) {
   const normalizedValue = tryParseJsonLikeValue(value);
@@ -32960,6 +33283,7 @@ function parseContextSuggestions(value, options = {}) {
   return suggestions.slice(0, 5);
 }
 function executeToolCall(call, tasks, projects, taskTypes) {
+  const ctx = { tasks, projects, taskTypes };
   if (call.tool === "list_projects") {
     return {
       tool: call.tool,
@@ -32986,96 +33310,12 @@ function executeToolCall(call, tasks, projects, taskTypes) {
     };
   }
   if (call.tool === "current_datetime") {
-    return {
-      tool: call.tool,
-      args: call.args,
-      ok: true,
-      result: {
-        now: toIsoNow()
-      }
-    };
+    return execCurrentDatetime(call.tool, call.args);
   }
   if (call.tool === "get_task") {
-    const taskId = typeof call.args.taskId === "string" ? call.args.taskId : "";
-    const task = tasks.find((item) => item.id === taskId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      ok: Boolean(task),
-      result: task ? {
-        id: task.id,
-        title: task.title,
-        content: task.content,
-        status: task.status,
-        startAt: task.startAt,
-        endAt: task.endAt,
-        taskTypeId: task.taskTypeId,
-        taskTypeName: taskTypes.find((item) => item.id === task.taskTypeId)?.name ?? "",
-        projectId: task.projectId,
-        projectName: projects.find((item) => item.id === task.projectId)?.name ?? "",
-        projectDescription: projects.find((item) => item.id === task.projectId)?.description ?? "",
-        isMajor: task.isMajor,
-        updatedAt: task.updatedAt
-      } : { message: "일정을 찾지 못했습니다." }
-    };
+    return execGetTask(call.tool, call.args, ctx);
   }
-  const keywordSource = typeof call.args.keyword === "string" ? call.args.keyword : typeof call.args.title === "string" ? call.args.title : typeof call.args.taskTitle === "string" ? call.args.taskTitle : "";
-  const keyword = keywordSource.trim().toLowerCase();
-  const date = normalizeSearchDate(call.args.date);
-  const startDate = normalizeSearchDate(call.args.startDate);
-  const endDate = normalizeSearchDate(call.args.endDate);
-  const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
-  const status = normalizeTaskStatus(call.args.status);
-  const limitRaw = typeof call.args.limit === "number" ? call.args.limit : 20;
-  const limit = Math.max(1, Math.min(50, Math.floor(limitRaw)));
-  const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
-  const taskTypeMap = Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType]));
-  const filtered = tasks.filter((task) => {
-    const taskDateKey2 = getTaskDateKey(task);
-    if (projectId && task.projectId !== projectId) {
-      return false;
-    }
-    if (status && task.status !== status) {
-      return false;
-    }
-    if (date && taskDateKey2 !== date) {
-      return false;
-    }
-    if (startDate && taskDateKey2 < startDate) {
-      return false;
-    }
-    if (endDate && taskDateKey2 > endDate) {
-      return false;
-    }
-    if (!keyword) {
-      return true;
-    }
-    const projectName = projectMap[task.projectId]?.name ?? "";
-    const projectDescription = projectMap[task.projectId]?.description ?? "";
-    const taskTypeName = taskTypeMap[task.taskTypeId]?.name ?? "";
-    const haystack = `${task.title} ${task.content} ${projectName} ${projectDescription} ${taskTypeName}`.toLowerCase();
-    return haystack.includes(keyword);
-  }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, limit).map((task) => ({
-    id: task.id,
-    title: task.title,
-    content: task.content,
-    status: task.status,
-    startAt: task.startAt,
-    endAt: task.endAt,
-    projectId: task.projectId,
-    projectName: projectMap[task.projectId]?.name ?? "",
-    projectDescription: projectMap[task.projectId]?.description ?? "",
-    taskTypeId: task.taskTypeId,
-    taskTypeName: taskTypeMap[task.taskTypeId]?.name ?? "",
-    isMajor: task.isMajor,
-    updatedAt: task.updatedAt
-  }));
-  return {
-    tool: "search_tasks",
-    args: call.args,
-    ok: true,
-    result: filtered
-  };
+  return execSearchTasks(call.tool, call.args, ctx);
 }
 function buildPromptMessages(input, toolResults) {
   const userContextMaxLength = input.userContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
@@ -33122,29 +33362,48 @@ function buildPromptMessages(input, toolResults) {
 async function runScheduleAgent(input) {
   const accumulatedToolResults = [];
   const toolCounts = /* @__PURE__ */ new Map();
+  const callCache = new ToolCallCache();
+  const fallbackResult = (message) => ({
+    assistantMessage: message,
+    needsUserInput: false,
+    question: void 0,
+    proposal: void 0,
+    contextSuggestions: [],
+    trace: toolCounts.size > 0 ? summarizeScheduleTools(toolCounts) : void 0
+  });
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const messages = buildPromptMessages(input, accumulatedToolResults);
+    const messages = buildPromptMessages(input, capToolResults(accumulatedToolResults));
     let streamedChars = 0;
-    const raw = await requestLlmResponse({
+    const writingLabel = toolCounts.size > 0 ? "조회 결과로 초안 작성 중" : "요청 분석 중";
+    const { payload: parsed } = await requestJsonWithRetry({
       messages,
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      signal: input.signal,
       onToken: input.onProgress ? (delta) => {
         streamedChars += delta.length;
-        input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars: streamedChars });
+        input.onProgress?.({ phase: "writing", label: writingLabel, chars: streamedChars });
       } : void 0
     });
-    const payload = parseModelPayload(raw);
+    if (!parsed) {
+      return fallbackResult("AI 응답을 해석하지 못했습니다. 요청을 조금 바꿔 다시 시도해 주세요.");
+    }
+    const payload = parsed;
     const toolCalls = parseToolCalls(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
-      const roundResults = toolCalls.map((call) => executeToolCall(call, input.tasks, input.projects, input.taskTypes));
-      for (const call of toolCalls) {
+      const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
+      if (freshCalls.length === 0) {
+        accumulatedToolResults.push(duplicateCallNotice());
+        continue;
+      }
+      for (const call of freshCalls) {
+        callCache.add(call.tool, call.args);
+        accumulatedToolResults.push(executeToolCall(call, input.tasks, input.projects, input.taskTypes));
         const label = SCHEDULE_TOOL_LABELS[call.tool];
         toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
       }
       input.onProgress?.({ phase: "tools", label: summarizeScheduleTools(toolCounts) });
-      accumulatedToolResults.push(...roundResults);
       continue;
     }
     const proposalOptions = {
@@ -33171,7 +33430,7 @@ async function runScheduleAgent(input) {
       trace: toolCounts.size > 0 ? summarizeScheduleTools(toolCounts) : void 0
     };
   }
-  throw new Error("LLM이 도구 호출만 반복하여 최종 제안을 만들지 못했습니다.");
+  return fallbackResult("일정 정보를 조회했지만 제안을 완성하지 못했습니다. 요청을 조금 더 구체적으로 다시 입력해 주세요.");
 }
 
 // src/components/AiAssistantWorkspace.tsx
@@ -33313,6 +33572,7 @@ function AiAssistantWorkspace({
 }) {
   const { tasks, projects, taskTypes, setting, userContext, createTask, updateTask, removeTask, acceptUserContextSuggestion } = useAppData();
   const textareaRef = (0, import_react3.useRef)(null);
+  const abortRef = (0, import_react3.useRef)(null);
   const [draft, setDraft] = (0, import_react3.useState)(initialDraft);
   const [lastUserMessage, setLastUserMessage] = (0, import_react3.useState)("");
   const [lastAssistantMessage, setLastAssistantMessage] = (0, import_react3.useState)(
@@ -33377,6 +33637,11 @@ function AiAssistantWorkspace({
     };
   }, [setting.llmApiKey, setting.llmEndpoint, setting.llmModel]);
   (0, import_react3.useEffect)(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+  (0, import_react3.useEffect)(() => {
     const frame = window.requestAnimationFrame(() => {
       focusTextareaAtEnd(textareaRef.current);
     });
@@ -33417,12 +33682,15 @@ function AiAssistantWorkspace({
     if (!messageOverride) {
       setDraft("");
     }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsLoading(true);
     setAiProgress("AI 준비 중…");
     setLastTrace("");
     try {
       const handleProgress = (info) => {
-        setAiProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
+        setAiProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
       };
       const result = await runScheduleAgent({
         userMessage,
@@ -33435,7 +33703,8 @@ function AiAssistantWorkspace({
         endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
-        onProgress: handleProgress
+        onProgress: handleProgress,
+        signal: controller.signal
       });
       setLastUserMessage(userMessage);
       setLastAssistantMessage(result.assistantMessage);
@@ -33446,6 +33715,9 @@ function AiAssistantWorkspace({
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
+      if (isAbortError(runError)) {
+        return;
+      }
       const message = toFriendlyError(runError);
       setError(message);
       setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
@@ -33454,7 +33726,9 @@ function AiAssistantWorkspace({
       setEndpointStatus("error");
       setEndpointStatusMessage(message);
     } finally {
-      setIsLoading(false);
+      if (abortRef.current === controller) {
+        setIsLoading(false);
+      }
     }
   }
   async function applyCreateOperation(operation) {
@@ -33890,60 +34164,6 @@ function AiAssistantWorkspace({
 // src/components/AskDataModal.tsx
 var import_react4 = __toESM(require_react(), 1);
 
-// src/agent/agentUtils.ts
-function isRecord2(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-function extractJsonText2(raw) {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    return trimmed;
-  }
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
-  }
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1).trim();
-  }
-  return trimmed;
-}
-function parseJsonObject(raw) {
-  try {
-    const jsonText = extractJsonText2(raw);
-    const parsed = JSON.parse(jsonText);
-    if (!isRecord2(parsed)) {
-      return void 0;
-    }
-    return parsed;
-  } catch {
-    return void 0;
-  }
-}
-function pickFirstString2(record, keys) {
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.trim();
-    }
-  }
-  return "";
-}
-function pickFirstStringArray2(record, keys, limit = 8) {
-  for (const key of keys) {
-    const candidate = record[key];
-    if (Array.isArray(candidate)) {
-      return candidate.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean).slice(0, limit);
-    }
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.split(/[,，]/).map((item) => item.trim()).filter(Boolean).slice(0, limit);
-    }
-  }
-  return [];
-}
-
 // src/agent/qaAgent.ts
 var MAX_TOOL_ROUNDS2 = 4;
 var ALLOWED_TOOLS = ["search_notes", "get_note", "search_tasks", "get_task", "current_datetime"];
@@ -33968,113 +34188,38 @@ Return exactly ONE JSON object with every key:
 
 Rules:
 1. To look things up, return toolCalls (and leave answer empty). Do not answer and call tools in the same response.
-2. Tools: search_notes { keyword?, projectId?, status?, limit? }, get_note { noteId }, search_tasks { keyword?, status?, date?, startDate?, endDate?, projectId?, limit? }, get_task { taskId }, current_datetime {}.
+2. Tools: search_notes { keyword?, projectId?, status?, limit? }, get_note { noteId }, search_tasks { keyword?, status?, date?, startDate?, endDate?, projectId?, limit? }, get_task { taskId }.
 3. Only put ids that came from tool results in references. If you found nothing, say so honestly and return empty references.
 4. No markdown fences, no text outside the JSON.
+5. The current date/time is already provided as "now" in the payload — never call a tool for it.
+6. Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
 `.trim();
 function parseToolCalls2(value) {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.map((item) => {
-    if (!isRecord2(item) || typeof item.tool !== "string" || !ALLOWED_TOOLS.includes(item.tool)) {
+    if (!isRecord(item) || typeof item.tool !== "string" || !ALLOWED_TOOLS.includes(item.tool)) {
       return null;
     }
-    return { tool: item.tool, args: isRecord2(item.args) ? item.args : {} };
+    return { tool: item.tool, args: isRecord(item.args) ? item.args : {} };
   }).filter((item) => item !== null);
 }
-function normalizeSearchDate2(value) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const match = value.trim().match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
-  return match ? `${match[1]}-${match[2]}-${match[3]}` : "";
-}
-function taskDateKey(task) {
-  const parsed = new Date(task.startAt);
-  if (Number.isNaN(parsed.getTime())) {
-    return task.startAt.slice(0, 10);
-  }
-  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
-}
 function executeToolCall2(call, input) {
-  const projectMap = Object.fromEntries(input.projects.map((project) => [project.id, project]));
-  const typeMap = Object.fromEntries(input.taskTypes.map((type) => [type.id, type]));
+  const ctx = { tasks: input.tasks, projects: input.projects, taskTypes: input.taskTypes, notes: input.notes };
   if (call.tool === "current_datetime") {
-    return { tool: call.tool, args: call.args, result: { now: toIsoNow() } };
+    return execCurrentDatetime(call.tool, call.args);
   }
   if (call.tool === "get_note") {
-    const note = input.notes.find((item) => item.id === call.args.noteId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      result: note ? { id: note.id, title: note.title, content: note.content, projectName: projectMap[note.projectId]?.name ?? "", tags: note.tags, updatedAt: note.updatedAt } : { message: "노트를 찾지 못했습니다." }
-    };
+    return execGetNote(call.tool, call.args, ctx);
   }
   if (call.tool === "get_task") {
-    const task = input.tasks.find((item) => item.id === call.args.taskId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      result: task ? {
-        id: task.id,
-        title: task.title,
-        content: task.content,
-        startAt: task.startAt,
-        status: STATUS_LABELS[task.status],
-        projectName: projectMap[task.projectId]?.name ?? "",
-        typeName: typeMap[task.taskTypeId]?.name ?? ""
-      } : { message: "일정을 찾지 못했습니다." }
-    };
+    return execGetTask(call.tool, call.args, ctx);
   }
-  const keyword = (typeof call.args.keyword === "string" ? call.args.keyword : "").trim().toLowerCase();
-  const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
-  const limit = Math.max(1, Math.min(30, typeof call.args.limit === "number" ? Math.floor(call.args.limit) : 15));
   if (call.tool === "search_notes") {
-    const filtered2 = input.notes.filter((note) => {
-      if (projectId && note.projectId !== projectId) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      return `${note.title} ${note.content} ${note.tags.join(" ")}`.toLowerCase().includes(keyword);
-    }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, limit).map((note) => ({ id: note.id, title: note.title, snippet: note.content.slice(0, 200), projectName: projectMap[note.projectId]?.name ?? "" }));
-    return { tool: call.tool, args: call.args, result: filtered2 };
+    return execSearchNotes(call.tool, call.args, ctx);
   }
-  const date = normalizeSearchDate2(call.args.date);
-  const startDate = normalizeSearchDate2(call.args.startDate);
-  const endDate = normalizeSearchDate2(call.args.endDate);
-  const status = typeof call.args.status === "string" ? call.args.status : "";
-  const filtered = input.tasks.filter((task) => {
-    const key = taskDateKey(task);
-    if (projectId && task.projectId !== projectId) {
-      return false;
-    }
-    if (status && STATUS_LABELS[task.status] !== status && task.status !== status) {
-      return false;
-    }
-    if (date && key !== date) {
-      return false;
-    }
-    if (startDate && key < startDate) {
-      return false;
-    }
-    if (endDate && key > endDate) {
-      return false;
-    }
-    if (!keyword) {
-      return true;
-    }
-    return `${task.title} ${task.content}`.toLowerCase().includes(keyword);
-  }).sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime()).slice(0, limit).map((task) => ({
-    id: task.id,
-    title: task.title,
-    startAt: task.startAt,
-    status: STATUS_LABELS[task.status],
-    projectName: projectMap[task.projectId]?.name ?? ""
-  }));
-  return { tool: "search_tasks", args: call.args, result: filtered };
+  return execSearchTasks(call.tool, call.args, ctx);
 }
 function buildMessages(input, toolResults) {
   const payload = {
@@ -34096,29 +34241,37 @@ async function runQaAgent(input) {
   const toolCounts = /* @__PURE__ */ new Map();
   const noteMap = Object.fromEntries(input.notes.map((note) => [note.id, note]));
   const taskMap = Object.fromEntries(input.tasks.map((task) => [task.id, task]));
+  const callCache = new ToolCallCache();
   for (let round = 0; round < MAX_TOOL_ROUNDS2; round += 1) {
     let chars = 0;
-    const raw = await requestLlmResponse({
-      messages: buildMessages(input, accumulated),
+    const writingLabel = toolCounts.size > 0 ? "답변 작성 중" : "질문 분석 중";
+    const { payload, raw } = await requestJsonWithRetry({
+      messages: buildMessages(input, capToolResults(accumulated)),
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      signal: input.signal,
       onToken: input.onProgress ? (delta) => {
         chars += delta.length;
-        input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars });
+        input.onProgress?.({ phase: "writing", label: writingLabel, chars });
       } : void 0
     });
-    const payload = parseJsonObject(raw);
     if (!payload) {
       return {
-        answer: extractJsonText2(raw).slice(0, 800) || "답변을 해석하지 못했습니다. 다시 시도해 주세요.",
+        answer: extractJsonText(raw).slice(0, 800) || "답변을 해석하지 못했습니다. 다시 시도해 주세요.",
         references: [],
         trace: toolCounts.size > 0 ? summarize(toolCounts) : void 0
       };
     }
     const toolCalls = parseToolCalls2(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
-      for (const call of toolCalls) {
+      const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
+      if (freshCalls.length === 0) {
+        accumulated.push(duplicateCallNotice());
+        continue;
+      }
+      for (const call of freshCalls) {
+        callCache.add(call.tool, call.args);
         accumulated.push(executeToolCall2(call, input));
         const label = TOOL_LABELS[call.tool];
         toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
@@ -34126,15 +34279,15 @@ async function runQaAgent(input) {
       input.onProgress?.({ phase: "tools", label: summarize(toolCounts) });
       continue;
     }
-    const answer = pickFirstString2(payload, ["answer", "response", "text"]) || "관련 정보를 찾지 못했습니다.";
+    const answer = pickFirstString(payload, ["answer", "response", "text"]) || "관련 정보를 찾지 못했습니다.";
     const referencesRaw = Array.isArray(payload.references) ? payload.references : [];
     const references = [];
     for (const entry of referencesRaw) {
-      if (!isRecord2(entry)) {
+      if (!isRecord(entry)) {
         continue;
       }
-      const id = pickFirstString2(entry, ["id", "noteId", "taskId"]);
-      const type = pickFirstString2(entry, ["type"]);
+      const id = pickFirstString(entry, ["id", "noteId", "taskId"]);
+      const type = pickFirstString(entry, ["type"]);
       if (type === "note" && noteMap[id]) {
         references.push({ type: "note", id, title: noteMap[id].title });
       } else if (type === "task" && taskMap[id]) {
@@ -34362,6 +34515,7 @@ function AskDataModal({ onClose }) {
   const [references, setReferences] = (0, import_react4.useState)([]);
   const [trace, setTrace] = (0, import_react4.useState)("");
   const [error, setError] = (0, import_react4.useState)("");
+  const abortRef = (0, import_react4.useRef)(null);
   const hasApiConfig = Boolean((setting.llmEndpoint ?? "").trim());
   (0, import_react4.useEffect)(() => {
     const handleKeyDown = (event) => {
@@ -34372,11 +34526,19 @@ function AskDataModal({ onClose }) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
+  (0, import_react4.useEffect)(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
   async function handleAsk() {
     const q = question.trim();
     if (!q || isRunning) {
       return;
     }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsRunning(true);
     setProgress("AI 준비 중…");
     setError("");
@@ -34393,15 +34555,19 @@ function AskDataModal({ onClose }) {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
-        onProgress: (info) => setProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`)
+        signal: controller.signal,
+        onProgress: (info) => setProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`)
       });
       setAnswer(result.answer);
       setReferences(result.references);
       setTrace(result.trace ?? "");
     } catch (askError) {
+      if (isAbortError(askError)) return;
       setError(askError instanceof Error ? askError.message : "질문 처리에 실패했습니다.");
     } finally {
-      setIsRunning(false);
+      if (abortRef.current === controller) {
+        setIsRunning(false);
+      }
     }
   }
   function openReference(reference) {
@@ -35270,7 +35436,8 @@ async function runBriefing(input) {
     endpoint: input.endpoint,
     apiKey: input.apiKey,
     model: input.model,
-    onToken: input.onToken
+    onToken: input.onToken,
+    signal: input.signal
   });
   return content.trim();
 }
@@ -35341,20 +35508,30 @@ function DailyBriefing() {
   const [briefing, setBriefing] = (0, import_react10.useState)("");
   const [error, setError] = (0, import_react10.useState)("");
   const [savedNoteId, setSavedNoteId] = (0, import_react10.useState)(null);
+  const abortRef = (0, import_react10.useRef)(null);
   const hasApiConfig = Boolean((setting.llmEndpoint ?? "").trim());
   const todayKey = getDateKey(/* @__PURE__ */ new Date());
+  const closeModal = (0, import_react10.useCallback)(() => {
+    abortRef.current?.abort();
+    setIsOpen(false);
+  }, []);
+  (0, import_react10.useEffect)(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
   (0, import_react10.useEffect)(() => {
     if (!isOpen) {
       return;
     }
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        setIsOpen(false);
+        closeModal();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, closeModal]);
   function buildContext() {
     const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
     const typeMap = Object.fromEntries(taskTypes.map((type) => [type.id, type]));
@@ -35398,6 +35575,9 @@ function DailyBriefing() {
     return { todayTasks, overdueTasks, conflicts, openChecklistCount, recentNotes };
   }
   async function handleRun() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsRunning(true);
     setError("");
     setBriefing("");
@@ -35411,13 +35591,17 @@ function DailyBriefing() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        signal: controller.signal,
         onToken: (delta) => setBriefing((prev) => prev + delta)
       });
       setBriefing(result);
     } catch (runError) {
+      if (isAbortError(runError)) return;
       setError(runError instanceof Error ? runError.message : "브리핑 생성에 실패했습니다.");
     } finally {
-      setIsRunning(false);
+      if (abortRef.current === controller) {
+        setIsRunning(false);
+      }
     }
   }
   function openAndRun() {
@@ -35453,7 +35637,7 @@ function DailyBriefing() {
         /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: "오늘 하루를 정리해 드려요" })
       ] })
     ] }),
-    isOpen ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "modal-backdrop", onClick: () => setIsOpen(false), children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+    isOpen ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "modal-backdrop", onClick: closeModal, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
       "section",
       {
         className: "modal-card briefing-modal-card",
@@ -35468,7 +35652,7 @@ function DailyBriefing() {
               /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: "오늘의 브리핑" }),
               /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: todayKey })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setIsOpen(false), children: "닫기" })
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "btn btn-soft", onClick: closeModal, children: "닫기" })
           ] }),
           !hasApiConfig ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "description-text", children: "설정에서 LLM 엔드포인트와 API 키를 먼저 입력해 주세요." }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "briefing-body", children: [
@@ -38540,11 +38724,13 @@ Root schema (always include every key):
 Rules:
 1. If you need to inspect other notes, versions, or linked tasks before answering, return toolCalls and leave the result fields empty.
 2. If toolCalls is not empty, do not include a final result in the same response.
-3. Use only these tools: search_notes, get_note, list_note_versions, get_linked_tasks, current_datetime.
+3. Use only these tools: search_notes, get_note, list_note_versions, get_linked_tasks.
 4. search_notes args: { "keyword"?: string, "projectId"?: string, "tag"?: string, "status"?: "draft"|"active"|"archived", "limit"?: number }
 5. get_note args: { "noteId": string }
 6. get_linked_tasks args: { "noteId": string }
 7. Do not invent note ids. Use ids returned from tools or provided in the payload.
+8. The current date/time is already provided as "now" in the payload — never call a tool for it.
+9. Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
 `.trim();
 var MODE_INSTRUCTIONS = {
   edit: `
@@ -38576,7 +38762,7 @@ function parseToolCalls3(value) {
     return [];
   }
   return value.map((item) => {
-    if (!isRecord2(item) || typeof item.tool !== "string") {
+    if (!isRecord(item) || typeof item.tool !== "string") {
       return null;
     }
     if (!ALLOWED_TOOLS2.includes(item.tool)) {
@@ -38584,41 +38770,20 @@ function parseToolCalls3(value) {
     }
     return {
       tool: item.tool,
-      args: isRecord2(item.args) ? item.args : {}
+      args: isRecord(item.args) ? item.args : {}
     };
   }).filter((item) => item !== null);
 }
 function executeToolCall3(call, notes, tasks, projects) {
-  const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
+  const ctx = { tasks, projects, taskTypes: [], notes };
   if (call.tool === "current_datetime") {
-    return { tool: call.tool, args: call.args, ok: true, result: { now: toIsoNow() } };
+    return execCurrentDatetime(call.tool, call.args);
   }
   if (call.tool === "get_note") {
-    const noteId = typeof call.args.noteId === "string" ? call.args.noteId : "";
-    const note = notes.find((item) => item.id === noteId);
-    return {
-      tool: call.tool,
-      args: call.args,
-      ok: Boolean(note),
-      result: note ? {
-        id: note.id,
-        title: note.title,
-        content: note.content,
-        projectId: note.projectId,
-        projectName: projectMap[note.projectId]?.name ?? "",
-        tags: note.tags,
-        status: note.status,
-        linkedTaskIds: note.linkedTaskIds,
-        updatedAt: note.updatedAt
-      } : { message: "노트를 찾지 못했습니다." }
-    };
+    return execGetNote(call.tool, call.args, ctx);
   }
   if (call.tool === "get_linked_tasks") {
-    const noteId = typeof call.args.noteId === "string" ? call.args.noteId : "";
-    const note = notes.find((item) => item.id === noteId);
-    const linkedIds = new Set(note?.linkedTaskIds ?? []);
-    const linkedTasks = tasks.filter((task) => linkedIds.has(task.id)).map((task) => ({ id: task.id, title: task.title, startAt: task.startAt, status: task.status }));
-    return { tool: call.tool, args: call.args, ok: true, result: linkedTasks };
+    return execGetLinkedTasks(call.tool, call.args, ctx);
   }
   if (call.tool === "list_note_versions") {
     return {
@@ -38628,39 +38793,7 @@ function executeToolCall3(call, notes, tasks, projects) {
       result: { message: "버전 정보는 편집 화면의 히스토리 패널에서 확인할 수 있습니다." }
     };
   }
-  const keyword = (typeof call.args.keyword === "string" ? call.args.keyword : "").trim().toLowerCase();
-  const projectId = typeof call.args.projectId === "string" ? call.args.projectId : "";
-  const tag = (typeof call.args.tag === "string" ? call.args.tag : "").trim().toLowerCase();
-  const status = typeof call.args.status === "string" ? call.args.status : "";
-  const limitRaw = typeof call.args.limit === "number" ? call.args.limit : 20;
-  const limit = Math.max(1, Math.min(50, Math.floor(limitRaw)));
-  const filtered = notes.filter((note) => {
-    if (projectId && note.projectId !== projectId) {
-      return false;
-    }
-    if (status && note.status !== status) {
-      return false;
-    }
-    if (tag && !note.tags.some((item) => item.toLowerCase() === tag)) {
-      return false;
-    }
-    if (!keyword) {
-      return true;
-    }
-    const projectName = projectMap[note.projectId]?.name ?? "";
-    const haystack = `${note.title} ${note.content} ${note.tags.join(" ")} ${projectName}`.toLowerCase();
-    return haystack.includes(keyword);
-  }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, limit).map((note) => ({
-    id: note.id,
-    title: note.title,
-    snippet: note.content.slice(0, 160),
-    projectId: note.projectId,
-    projectName: projectMap[note.projectId]?.name ?? "",
-    tags: note.tags,
-    status: note.status,
-    updatedAt: note.updatedAt
-  }));
-  return { tool: "search_notes", args: call.args, ok: true, result: filtered };
+  return execSearchNotes(call.tool, call.args, ctx);
 }
 function buildPromptMessages2(input, toolResults) {
   const projectMap = Object.fromEntries(input.projects.map((project) => [project.id, project]));
@@ -38692,10 +38825,10 @@ ${MODE_INSTRUCTIONS[input.mode]}`;
 }
 function buildResult(mode, payload) {
   const assistantMessage = typeof payload.assistantMessage === "string" && payload.assistantMessage.trim() ? payload.assistantMessage.trim() : "요청을 처리했습니다.";
-  const proposedTitle = pickFirstString2(payload, ["proposedTitle", "title"]) || void 0;
-  const proposedContent = pickFirstString2(payload, ["proposedContent", "content"]) || void 0;
-  const replacementText = pickFirstString2(payload, ["replacementText", "replacement"]) || void 0;
-  const matchedNoteIds = pickFirstStringArray2(payload, ["matchedNoteIds", "noteIds", "ids"], 20);
+  const proposedTitle = pickFirstString(payload, ["proposedTitle", "title"]) || void 0;
+  const proposedContent = pickFirstString(payload, ["proposedContent", "content"]) || void 0;
+  const replacementText = pickFirstString(payload, ["replacementText", "replacement"]) || void 0;
+  const matchedNoteIds = pickFirstStringArray(payload, ["matchedNoteIds", "noteIds", "ids"], 20);
   const result = { assistantMessage };
   if (mode === "inline_edit") {
     result.replacementText = replacementText;
@@ -38710,37 +38843,42 @@ function buildResult(mode, payload) {
 async function runNotesAgent(input) {
   const accumulatedToolResults = [];
   const toolCounts = /* @__PURE__ */ new Map();
+  const callCache = new ToolCallCache();
   for (let round = 0; round < MAX_TOOL_ROUNDS3; round += 1) {
-    const messages = buildPromptMessages2(input, accumulatedToolResults);
+    const messages = buildPromptMessages2(input, capToolResults(accumulatedToolResults));
     let streamedChars = 0;
-    const raw = await requestLlmResponse({
+    const writingLabel = toolCounts.size > 0 ? "조회 결과로 작성 중" : "AI가 작성 중";
+    const { payload, raw } = await requestJsonWithRetry({
       messages,
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      signal: input.signal,
       onToken: input.onProgress ? (delta) => {
         streamedChars += delta.length;
-        input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars: streamedChars });
+        input.onProgress?.({ phase: "writing", label: writingLabel, chars: streamedChars });
       } : void 0
     });
-    const payload = parseJsonObject(raw);
     if (!payload) {
       return {
-        assistantMessage: extractJsonText2(raw).slice(0, 500) || "AI 응답을 해석하지 못했습니다. 다시 시도해 주세요.",
+        assistantMessage: extractJsonText(raw).slice(0, 500) || "AI 응답을 해석하지 못했습니다. 다시 시도해 주세요.",
         trace: toolCounts.size > 0 ? summarizeToolCounts(toolCounts) : void 0
       };
     }
     const toolCalls = parseToolCalls3(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
-      const roundResults = toolCalls.map(
-        (call) => executeToolCall3(call, input.notes, input.tasks, input.projects)
-      );
-      for (const call of toolCalls) {
+      const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
+      if (freshCalls.length === 0) {
+        accumulatedToolResults.push(duplicateCallNotice());
+        continue;
+      }
+      for (const call of freshCalls) {
+        callCache.add(call.tool, call.args);
+        accumulatedToolResults.push(executeToolCall3(call, input.notes, input.tasks, input.projects));
         const label = TOOL_LABELS2[call.tool];
         toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
       }
       input.onProgress?.({ phase: "tools", label: summarizeToolCounts(toolCounts) });
-      accumulatedToolResults.push(...roundResults);
       continue;
     }
     const result = buildResult(input.mode, payload);
@@ -38798,7 +38936,7 @@ No markdown fences, no text before or after the JSON.
 `.trim();
   const payload = { now: input.nowIso, noteTitle: input.noteTitle, noteContent: input.noteContent };
   let chars = 0;
-  const raw = await requestLlmResponse({
+  const { payload: parsed } = await requestJsonWithRetry({
     messages: [
       { role: "system", content: system },
       { role: "user", content: JSON.stringify(payload) }
@@ -38806,27 +38944,27 @@ No markdown fences, no text before or after the JSON.
     endpoint: input.endpoint,
     apiKey: input.apiKey,
     model: input.model,
+    signal: input.signal,
     onToken: input.onProgress ? (delta) => {
       chars += delta.length;
-      input.onProgress?.({ phase: "writing", label: "AI가 작성 중", chars });
+      input.onProgress?.({ phase: "writing", label: "액션 추출 중", chars });
     } : void 0
   });
-  const parsed = parseJsonObject(raw);
   if (!parsed) {
     return [];
   }
   const itemsRaw = Array.isArray(parsed.items) ? parsed.items : Array.isArray(parsed.actions) ? parsed.actions : Array.isArray(parsed.tasks) ? parsed.tasks : [];
   const items = [];
   for (const entry of itemsRaw) {
-    if (!isRecord2(entry)) {
+    if (!isRecord(entry)) {
       continue;
     }
-    const title = pickFirstString2(entry, ["title", "name", "task", "text"]);
+    const title = pickFirstString(entry, ["title", "name", "task", "text"]);
     if (!title) {
       continue;
     }
-    const startAt = pickFirstString2(entry, ["startAt", "start_at", "date", "datetime", "when", "dueAt", "due"]) || void 0;
-    const content = pickFirstString2(entry, ["content", "note", "description", "detail", "memo"]) || void 0;
+    const startAt = pickFirstString(entry, ["startAt", "start_at", "date", "datetime", "when", "dueAt", "due"]) || void 0;
+    const content = pickFirstString(entry, ["content", "note", "description", "detail", "memo"]) || void 0;
     items.push({ title, startAt, content });
   }
   return items.slice(0, 20);
@@ -38940,6 +39078,18 @@ function NotesPage() {
   const textareaRef = (0, import_react20.useRef)(null);
   const loadedNoteIdRef = (0, import_react20.useRef)(null);
   const selectionRef = (0, import_react20.useRef)({ start: 0, end: 0 });
+  const abortRef = (0, import_react20.useRef)(null);
+  const beginAiRequest = (0, import_react20.useCallback)(() => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    return controller;
+  }, []);
+  (0, import_react20.useEffect)(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
   const activeProjectId = (0, import_react20.useMemo)(
     () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
     [projects]
@@ -39229,6 +39379,7 @@ function NotesPage() {
   async function handleSummarizeNote(noteId) {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return;
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiError("");
     try {
@@ -39243,7 +39394,8 @@ function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
-        onProgress: handleAiProgress
+        onProgress: handleAiProgress,
+        signal: controller.signal
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -39264,9 +39416,12 @@ function NotesPage() {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "요약에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
   function buildCardMenuItems(noteId) {
@@ -39290,11 +39445,12 @@ function NotesPage() {
     return items;
   }
   const handleAiProgress = (0, import_react20.useCallback)((info) => {
-    setAiProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
+    setAiProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
   }, []);
   const runEditAgent = (0, import_react20.useCallback)(
     async (prompt) => {
       if (!selectedNote || !draft) return;
+      const controller = beginAiRequest();
       setIsAiRunning(true);
       setAiProgress("AI 준비 중…");
       setAiError("");
@@ -39310,7 +39466,8 @@ function NotesPage() {
           endpoint: setting.llmEndpoint,
           apiKey: setting.llmApiKey ?? "",
           model: setting.llmModel,
-          onProgress: handleAiProgress
+          onProgress: handleAiProgress,
+          signal: controller.signal
         });
         setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
         if (result.proposedContent && result.proposedContent !== draft.content) {
@@ -39325,13 +39482,16 @@ function NotesPage() {
           setAiError(result.assistantMessage || "변경할 내용을 찾지 못했습니다.");
         }
       } catch (error) {
+        if (isAbortError(error)) return;
         setAiProgress("");
         setAiError(error instanceof Error ? error.message : "AI 편집에 실패했습니다.");
       } finally {
-        setIsAiRunning(false);
+        if (abortRef.current === controller) {
+          setIsAiRunning(false);
+        }
       }
     },
-    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress]
+    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress, beginAiRequest]
   );
   const runInlineAssist = (0, import_react20.useCallback)(async () => {
     if (!selectedNote || !draft) return;
@@ -39343,6 +39503,7 @@ function NotesPage() {
     const selectedText = draft.content.slice(start, end);
     const prompt = window.prompt("선택한 텍스트를 어떻게 편집할까요?", "더 명확하게 다듬어줘");
     if (!prompt) return;
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiProgress("AI 준비 중…");
     setAiError("");
@@ -39359,7 +39520,8 @@ function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
-        onProgress: handleAiProgress
+        onProgress: handleAiProgress,
+        signal: controller.signal
       });
       setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
       if (result.replacementText) {
@@ -39369,11 +39531,14 @@ function NotesPage() {
         setAiError(result.assistantMessage || "변경할 내용을 찾지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "AI 편집에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
-  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress]);
+  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress, beginAiRequest]);
   async function acceptProposal() {
     if (!selectedNoteId || !draft || !aiProposal) return;
     const nextInput = {
@@ -39396,6 +39561,7 @@ function NotesPage() {
   }
   async function handleExtractActions() {
     if (!selectedNote) return;
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiProgress("AI 준비 중…");
     setAiError("");
@@ -39407,7 +39573,8 @@ function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
-        onProgress: handleAiProgress
+        onProgress: handleAiProgress,
+        signal: controller.signal
       });
       setAiProgress("");
       if (result.length === 0) {
@@ -39416,10 +39583,13 @@ function NotesPage() {
         setActionItems(result);
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiProgress("");
       setAiError(error instanceof Error ? error.message : "액션 추출에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
   async function handleCreateActions(actions) {
@@ -39501,6 +39671,7 @@ function NotesPage() {
   async function handleSummarizeSelected() {
     const targets = notes.filter((note) => checkedIds.has(note.id));
     if (targets.length === 0) return;
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiError("");
     try {
@@ -39515,7 +39686,8 @@ function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
-        onProgress: handleAiProgress
+        onProgress: handleAiProgress,
+        signal: controller.signal
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -39536,9 +39708,12 @@ function NotesPage() {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "요약에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
   async function handleMergeSelected() {
@@ -39547,6 +39722,7 @@ function NotesPage() {
       setAiError("병합하려면 노트를 2개 이상 선택해 주세요.");
       return;
     }
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiError("");
     try {
@@ -39561,7 +39737,8 @@ function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
-        onProgress: handleAiProgress
+        onProgress: handleAiProgress,
+        signal: controller.signal
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -39582,9 +39759,12 @@ function NotesPage() {
         setAiError(result.assistantMessage || "통합 결과를 만들지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "통합에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
   function toggleCheck(noteId, checked) {

@@ -10,6 +10,7 @@ import type {
   AgentUpdateTaskOperation,
   ScheduleAgentProgress,
 } from "../agent/scheduleAgent";
+import { isAbortError } from "../agent/agentUtils";
 import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput, TaskStatus } from "../models";
@@ -190,6 +191,7 @@ export function AiAssistantWorkspace({
 }: AiAssistantWorkspaceProps) {
   const { tasks, projects, taskTypes, setting, userContext, createTask, updateTask, removeTask, acceptUserContextSuggestion } = useAppData();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [draft, setDraft] = useState(initialDraft);
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastAssistantMessage, setLastAssistantMessage] = useState(
@@ -263,6 +265,13 @@ export function AiAssistantWorkspace({
     };
   }, [setting.llmApiKey, setting.llmEndpoint, setting.llmModel]);
 
+  // 모달을 닫는 등 컴포넌트가 사라지면 진행 중인 AI 요청을 중단한다.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       focusTextareaAtEnd(textareaRef.current);
@@ -312,13 +321,17 @@ export function AiAssistantWorkspace({
     if (!messageOverride) {
       setDraft("");
     }
+    // 새 요청은 진행 중이던 이전 요청을 중단하고 시작한다.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsLoading(true);
     setAiProgress("AI 준비 중…");
     setLastTrace("");
 
     try {
       const handleProgress = (info: ScheduleAgentProgress) => {
-        setAiProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
+        setAiProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
       };
       const result = await runScheduleAgent({
         userMessage,
@@ -332,6 +345,7 @@ export function AiAssistantWorkspace({
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         onProgress: handleProgress,
+        signal: controller.signal,
       });
 
       setLastUserMessage(userMessage);
@@ -343,6 +357,10 @@ export function AiAssistantWorkspace({
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
+      // 사용자가 취소한 요청은 오류로 표시하지 않는다.
+      if (isAbortError(runError)) {
+        return;
+      }
       const message = toFriendlyError(runError);
       setError(message);
       setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
@@ -351,7 +369,10 @@ export function AiAssistantWorkspace({
       setEndpointStatus("error");
       setEndpointStatusMessage(message);
     } finally {
-      setIsLoading(false);
+      // 이 요청이 여전히 최신일 때만 로딩 상태를 해제한다 (새 요청과의 경합 방지).
+      if (abortRef.current === controller) {
+        setIsLoading(false);
+      }
     }
   }
 

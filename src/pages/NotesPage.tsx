@@ -8,6 +8,7 @@ import { NoteHistoryPanel } from "../components/NoteHistoryPanel";
 import { NoteMetaModal } from "../components/NoteMetaModal";
 import { NoteActionModal, type ConfirmedAction } from "../components/NoteActionModal";
 import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteTree";
+import { isAbortError } from "../agent/agentUtils";
 import {
   extractNoteActions,
   runNotesAgent,
@@ -96,6 +97,21 @@ export function NotesPage() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const loadedNoteIdRef = useRef<string | null>(null);
   const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const abortRef = useRef<AbortController | null>(null);
+
+  // 새 AI 요청 시작: 진행 중이던 요청은 중단한다.
+  const beginAiRequest = useCallback(() => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    return controller;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const activeProjectId = useMemo(
     () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
@@ -444,6 +460,7 @@ export function NotesPage() {
   async function handleSummarizeNote(noteId: string) {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return;
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiError("");
     try {
@@ -459,6 +476,7 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         onProgress: handleAiProgress,
+        signal: controller.signal,
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -479,9 +497,12 @@ export function NotesPage() {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "요약에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
 
@@ -507,12 +528,13 @@ export function NotesPage() {
   }
 
   const handleAiProgress = useCallback((info: NotesAgentProgress) => {
-    setAiProgress(info.phase === "writing" ? `AI가 작성 중… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
+    setAiProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
   }, []);
 
   const runEditAgent = useCallback(
     async (prompt: string) => {
       if (!selectedNote || !draft) return;
+      const controller = beginAiRequest();
       setIsAiRunning(true);
       setAiProgress("AI 준비 중…");
       setAiError("");
@@ -529,6 +551,7 @@ export function NotesPage() {
           apiKey: setting.llmApiKey ?? "",
           model: setting.llmModel,
           onProgress: handleAiProgress,
+          signal: controller.signal,
         });
         setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
         if (result.proposedContent && result.proposedContent !== draft.content) {
@@ -543,13 +566,16 @@ export function NotesPage() {
           setAiError(result.assistantMessage || "변경할 내용을 찾지 못했습니다.");
         }
       } catch (error) {
+        if (isAbortError(error)) return;
         setAiProgress("");
         setAiError(error instanceof Error ? error.message : "AI 편집에 실패했습니다.");
       } finally {
-        setIsAiRunning(false);
+        if (abortRef.current === controller) {
+          setIsAiRunning(false);
+        }
       }
     },
-    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress],
+    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress, beginAiRequest],
   );
 
   const runInlineAssist = useCallback(async () => {
@@ -563,6 +589,7 @@ export function NotesPage() {
     const prompt = window.prompt("선택한 텍스트를 어떻게 편집할까요?", "더 명확하게 다듬어줘");
     if (!prompt) return;
 
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiProgress("AI 준비 중…");
     setAiError("");
@@ -580,6 +607,7 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         onProgress: handleAiProgress,
+        signal: controller.signal,
       });
       setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
       if (result.replacementText) {
@@ -589,11 +617,14 @@ export function NotesPage() {
         setAiError(result.assistantMessage || "변경할 내용을 찾지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "AI 편집에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
-  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress]);
+  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress, beginAiRequest]);
 
   async function acceptProposal() {
     if (!selectedNoteId || !draft || !aiProposal) return;
@@ -618,6 +649,7 @@ export function NotesPage() {
 
   async function handleExtractActions() {
     if (!selectedNote) return;
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiProgress("AI 준비 중…");
     setAiError("");
@@ -630,6 +662,7 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         onProgress: handleAiProgress,
+        signal: controller.signal,
       });
       setAiProgress("");
       if (result.length === 0) {
@@ -638,10 +671,13 @@ export function NotesPage() {
         setActionItems(result);
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiProgress("");
       setAiError(error instanceof Error ? error.message : "액션 추출에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
 
@@ -729,6 +765,7 @@ export function NotesPage() {
   async function handleSummarizeSelected() {
     const targets = notes.filter((note) => checkedIds.has(note.id));
     if (targets.length === 0) return;
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiError("");
     try {
@@ -744,6 +781,7 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         onProgress: handleAiProgress,
+        signal: controller.signal,
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -764,9 +802,12 @@ export function NotesPage() {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "요약에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
 
@@ -776,6 +817,7 @@ export function NotesPage() {
       setAiError("병합하려면 노트를 2개 이상 선택해 주세요.");
       return;
     }
+    const controller = beginAiRequest();
     setIsAiRunning(true);
     setAiError("");
     try {
@@ -791,6 +833,7 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         onProgress: handleAiProgress,
+        signal: controller.signal,
       });
       if (result.proposedContent) {
         const id = await createNote(
@@ -811,9 +854,12 @@ export function NotesPage() {
         setAiError(result.assistantMessage || "통합 결과를 만들지 못했습니다.");
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       setAiError(error instanceof Error ? error.message : "통합에 실패했습니다.");
     } finally {
-      setIsAiRunning(false);
+      if (abortRef.current === controller) {
+        setIsAiRunning(false);
+      }
     }
   }
 
