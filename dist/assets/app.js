@@ -34103,12 +34103,14 @@ function AiAssistantWorkspace({
                     return;
                   }
                   event.preventDefault();
-                  if (canApplyProposalWithEnter) {
-                    void handleApplyProposal();
+                  if (draft.trim()) {
+                    if (!isLoading) {
+                      void handleSend();
+                    }
                     return;
                   }
-                  if (!isLoading && draft.trim()) {
-                    void handleSend();
+                  if (canApplyProposalWithEnter) {
+                    void handleApplyProposal();
                   }
                 },
                 rows: compact ? 4 : 5,
@@ -34132,7 +34134,7 @@ function AiAssistantWorkspace({
             ))
           ] }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-composer-footer", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-composer-kbd", children: pendingProposal ? "이어서 수정 요청도 할 수 있어요" : "Enter 초안 만들기 · Shift+Enter 줄바꿈" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-composer-kbd", children: pendingProposal ? "수정 요청 입력 후 Enter 전송 · 빈 칸에서 Enter는 선택 항목 반영" : "Enter 초안 만들기 · Shift+Enter 줄바꿈" }),
             /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-action-stack", children: [
               showRetryButton ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
                 "button",

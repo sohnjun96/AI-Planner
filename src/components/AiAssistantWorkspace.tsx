@@ -840,12 +840,16 @@ export function AiAssistantWorkspace({
                 return;
               }
               event.preventDefault();
-              if (canApplyProposalWithEnter) {
-                void handleApplyProposal();
+              // 입력 내용이 있으면 항상 '전송'이 우선 — 초안이 떠 있어도 수정 요청을 보낸다.
+              // 입력창이 빈 상태에서의 Enter만 선택 항목 반영으로 동작한다.
+              if (draft.trim()) {
+                if (!isLoading) {
+                  void handleSend();
+                }
                 return;
               }
-              if (!isLoading && draft.trim()) {
-                void handleSend();
+              if (canApplyProposalWithEnter) {
+                void handleApplyProposal();
               }
             }}
             rows={compact ? 4 : 5}
@@ -873,7 +877,9 @@ export function AiAssistantWorkspace({
 
         <div className="ai-composer-footer">
           <span className="ai-composer-kbd">
-            {pendingProposal ? "이어서 수정 요청도 할 수 있어요" : "Enter 초안 만들기 · Shift+Enter 줄바꿈"}
+            {pendingProposal
+              ? "수정 요청 입력 후 Enter 전송 · 빈 칸에서 Enter는 선택 항목 반영"
+              : "Enter 초안 만들기 · Shift+Enter 줄바꿈"}
           </span>
           <div className="ai-action-stack">
             {showRetryButton ? (
