@@ -38109,17 +38109,12 @@ function NoteEditor({
   projectName,
   projectColor,
   subcategoryName,
-  aiActions,
   aiEnabled,
   isAiRunning,
   overlay,
   onAcceptOverlay,
   onRejectOverlay,
-  onRunAiAction,
-  onInlineAssist,
-  onCustomAi,
-  onExtractActions,
-  onManageAi,
+  onOpenAiMenu,
   onChangeTitle,
   onChangeContent,
   onToggleChecklist,
@@ -38187,66 +38182,37 @@ function NoteEditor({
         /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", className: "btn btn-primary", disabled: isSaving || !isDirty, onClick: onSave, title: "Ctrl+S", children: isSaving ? "저장 중" : isDirty ? "저장" : "저장됨" })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "note-meta-bar", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("button", { type: "button", className: "note-meta-chips", onClick: onOpenMeta, "aria-label": "분류 및 태그 수정", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-chip project", style: { "--note-project-color": projectColor }, children: projectName }),
-      subcategoryName ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-chip", children: subcategoryName }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: `note-meta-chip status status-${draft.status}`, children: NOTE_STATUS_LABELS[draft.status] }),
-      draft.isPinned ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-chip pin", children: "📌 고정" }) : null,
-      draft.tags.map((tag) => /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: "note-meta-chip tag", children: [
-        "#",
-        tag
-      ] }, tag)),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-edit-hint", children: "수정" })
-    ] }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "note-ai-bar", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-ai-bar-label", children: "AI" }),
-      aiActions.map((action) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
-        "button",
-        {
-          type: "button",
-          className: "note-ai-chip",
-          title: action.prompt,
-          disabled: !aiEnabled || isAiRunning,
-          onClick: () => onRunAiAction(action.prompt),
-          children: action.label
-        },
-        action.id
-      )),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
-        "button",
-        {
-          type: "button",
-          className: "note-ai-chip subtle",
-          disabled: !aiEnabled || isAiRunning,
-          onClick: onInlineAssist,
-          title: "선택한 텍스트만 편집",
-          children: "선택 편집"
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
-        "button",
-        {
-          type: "button",
-          className: "note-ai-chip subtle",
-          disabled: !aiEnabled || isAiRunning,
-          onClick: onCustomAi,
-          title: "원하는 편집을 직접 입력",
-          children: "직접 요청"
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
-        "button",
-        {
-          type: "button",
-          className: "note-ai-chip action",
-          disabled: !aiEnabled || isAiRunning,
-          onClick: onExtractActions,
-          title: "노트에서 할 일을 뽑아 일정으로 만들기",
-          children: "📅 일정 추출"
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", className: "note-ai-manage", onClick: onManageAi, title: "AI 편집 기능 관리", children: "관리" }),
-      isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-ai-bar-status", children: "처리 중…" }) : null
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "note-toolbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("button", { type: "button", className: "note-meta-chips", onClick: onOpenMeta, "aria-label": "분류 및 태그 수정", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-chip project", style: { "--note-project-color": projectColor }, children: projectName }),
+        subcategoryName ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-chip", children: subcategoryName }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: `note-meta-chip status status-${draft.status}`, children: NOTE_STATUS_LABELS[draft.status] }),
+        draft.isPinned ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-chip pin", children: "📌 고정" }) : null,
+        draft.tags.map((tag) => /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: "note-meta-chip tag", children: [
+          "#",
+          tag
+        ] }, tag)),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-meta-edit-hint", children: "수정" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "note-toolbar-tools", children: [
+        isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "note-ai-bar-status", children: "AI 처리 중…" }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "note-ai-button",
+            disabled: !aiEnabled || isAiRunning,
+            onClick: onOpenAiMenu,
+            title: "AI 편집 메뉴 (본문 우클릭과 동일)",
+            children: "✨ AI"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("button", { type: "button", className: "note-text-button", onClick: onOpenHistory, children: [
+          "이력 ",
+          historyCount > 0 ? `(${historyCount})` : ""
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", className: "note-text-button danger", onClick: onDelete, children: "삭제" })
+      ] })
     ] }),
     overlay ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
       NoteInlineDiff,
@@ -38290,17 +38256,10 @@ function NoteEditor({
         ]
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("footer", { className: "note-editor-footer", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "note-editor-footer-left", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("button", { type: "button", className: "note-text-button", onClick: onOpenHistory, children: [
-          "이력 ",
-          historyCount > 0 ? `(${historyCount})` : ""
-        ] }),
-        savedMessage ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "success-text", children: savedMessage }) : null,
-        errorMessage ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "error-text", children: errorMessage }) : null
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", className: "note-text-button danger", onClick: onDelete, children: "삭제" })
-    ] })
+    savedMessage || errorMessage ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "note-editor-status", children: [
+      savedMessage ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "success-text", children: savedMessage }) : null,
+      errorMessage ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "error-text", children: errorMessage }) : null
+    ] }) : null
   ] });
 }
 
@@ -39727,7 +39686,25 @@ function NotesPage() {
         }
       }
     });
+    items.push({
+      id: "ai-extract",
+      label: "📅 일정 추출",
+      description: "할 일을 뽑아 일정으로",
+      onSelect: () => void handleExtractActions()
+    });
+    items.push({
+      id: "ai-manage",
+      label: "기능 관리…",
+      description: "AI 편집 기능 추가·수정",
+      onSelect: () => navigate("/settings")
+    });
     return items;
+  }
+  function handleOpenAiMenuButton(event) {
+    const textarea = textareaRef.current;
+    selectionRef.current = textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd } : { start: 0, end: 0 };
+    const rect = event.currentTarget.getBoundingClientRect();
+    setAiMenu({ x: rect.left, y: rect.bottom + 4 });
   }
   async function handleRestoreVersion(versionId) {
     if (!selectedNoteId) return;
@@ -39867,22 +39844,21 @@ function NotesPage() {
     }
   }, [filterNode, projectMap, subMap]);
   return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-workspace", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("aside", { className: "notes-tree-pane", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-tree-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("h2", { children: "노트" }),
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("aside", { className: "notes-explorer", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-explorer-head", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+          "input",
+          {
+            className: "notes-search",
+            value: search,
+            onChange: (event) => setSearch(event.target.value),
+            placeholder: "노트 검색",
+            "aria-label": "노트 검색"
+          }
+        ),
         /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-primary btn-compact", onClick: () => void handleCreateNote(), children: "+ 새 노트" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-        "input",
-        {
-          className: "notes-search",
-          value: search,
-          onChange: (event) => setSearch(event.target.value),
-          placeholder: "노트 검색",
-          "aria-label": "노트 검색"
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-explorer-tree", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
         ProjectNoteTree,
         {
           projects,
@@ -39895,15 +39871,10 @@ function NotesPage() {
           },
           onAddSubcategory: (projectId, name) => void createSubcategory(projectId, name)
         }
-      )
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("section", { className: "notes-list-pane", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-list-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "eyebrow", children: "NOTES" }),
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("h3", { children: listTitle })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-list-count", children: filteredNotes.length })
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-explorer-label", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { children: listTitle }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-list-count", children: filterNode.kind === "checklist" ? openChecklistItems.length : filteredNotes.length })
       ] }),
       checkedCount > 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-bulk-bar", children: [
         /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("span", { children: [
@@ -39916,7 +39887,7 @@ function NotesPage() {
           /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-outline btn-compact", onClick: () => setCheckedIds(/* @__PURE__ */ new Set()), children: "해제" })
         ] })
       ] }) : null,
-      filterNode.kind === "checklist" ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-checklist-view", children: openChecklistItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "미완료 체크리스트 항목이 없습니다." }) : openChecklistItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "global-check-item", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-explorer-list", children: filterNode.kind === "checklist" ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-checklist-view", children: openChecklistItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "미완료 체크리스트 항목이 없습니다." }) : openChecklistItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "global-check-item", children: [
         /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
           "input",
           {
@@ -39952,7 +39923,7 @@ function NotesPage() {
           onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })
         },
         note.id
-      )) })
+      )) }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("main", { className: "notes-detail-pane", children: selectedNote && draft && currentProject ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(import_jsx_runtime25.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
@@ -39962,7 +39933,6 @@ function NotesPage() {
           projectName: currentProject.name,
           projectColor: currentProject.color,
           subcategoryName: currentSubcategoryName,
-          aiActions,
           aiEnabled: hasApiConfig,
           isAiRunning,
           overlay: editorOverlay,
@@ -39973,16 +39943,7 @@ function NotesPage() {
             setAiProgress("");
           },
           onToggleChecklist: (lineIndex, checked) => void handleToggleChecklist(lineIndex, checked),
-          onRunAiAction: (prompt) => void runEditAgent(prompt),
-          onInlineAssist: () => void runInlineAssist(),
-          onCustomAi: () => {
-            const prompt = window.prompt("AI에게 어떻게 편집할지 알려주세요.");
-            if (prompt?.trim()) {
-              void runEditAgent(prompt.trim());
-            }
-          },
-          onExtractActions: () => void handleExtractActions(),
-          onManageAi: () => navigate("/settings"),
+          onOpenAiMenu: handleOpenAiMenuButton,
           onChangeTitle: (value) => setDraft((prev) => prev ? { ...prev, title: value } : prev),
           onChangeContent: (value) => setDraft((prev) => {
             if (!prev) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { NOTE_STATUS_LABELS } from "../constants";
-import type { NoteAiAction, NoteFormInput } from "../models";
+import type { NoteFormInput } from "../models";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { NoteInlineDiff } from "./NoteInlineDiff";
 
@@ -17,17 +17,13 @@ interface NoteEditorProps {
   projectName: string;
   projectColor: string;
   subcategoryName?: string;
-  aiActions: NoteAiAction[];
   aiEnabled: boolean;
   isAiRunning: boolean;
   overlay?: NoteEditorOverlay | null;
   onAcceptOverlay: () => void;
   onRejectOverlay: () => void;
-  onRunAiAction: (prompt: string) => void;
-  onInlineAssist: () => void;
-  onCustomAi: () => void;
-  onExtractActions: () => void;
-  onManageAi: () => void;
+  /** ✨AI 버튼 — 우클릭과 동일한 AI 메뉴를 버튼 위치에 연다 */
+  onOpenAiMenu: (event: MouseEvent<HTMLElement>) => void;
   onChangeTitle: (value: string) => void;
   onChangeContent: (value: string) => void;
   onToggleChecklist: (lineIndex: number, checked: boolean) => void;
@@ -49,17 +45,12 @@ export function NoteEditor({
   projectName,
   projectColor,
   subcategoryName,
-  aiActions,
   aiEnabled,
   isAiRunning,
   overlay,
   onAcceptOverlay,
   onRejectOverlay,
-  onRunAiAction,
-  onInlineAssist,
-  onCustomAi,
-  onExtractActions,
-  onManageAi,
+  onOpenAiMenu,
   onChangeTitle,
   onChangeContent,
   onToggleChecklist,
@@ -126,7 +117,8 @@ export function NoteEditor({
         </div>
       </header>
 
-      <div className="note-meta-bar">
+      {/* 분류 칩(왼쪽) + 도구(오른쪽)를 한 줄로 — 편집기 상단을 차분하게 유지 */}
+      <div className="note-toolbar">
         <button type="button" className="note-meta-chips" onClick={onOpenMeta} aria-label="분류 및 태그 수정">
           <span className="note-meta-chip project" style={{ "--note-project-color": projectColor } as React.CSSProperties}>
             {projectName}
@@ -141,53 +133,25 @@ export function NoteEditor({
           ))}
           <span className="note-meta-edit-hint">수정</span>
         </button>
-      </div>
 
-      <div className="note-ai-bar">
-        <span className="note-ai-bar-label">AI</span>
-        {aiActions.map((action) => (
+        <div className="note-toolbar-tools">
+          {isAiRunning ? <span className="note-ai-bar-status">AI 처리 중…</span> : null}
           <button
-            key={action.id}
             type="button"
-            className="note-ai-chip"
-            title={action.prompt}
+            className="note-ai-button"
             disabled={!aiEnabled || isAiRunning}
-            onClick={() => onRunAiAction(action.prompt)}
+            onClick={onOpenAiMenu}
+            title="AI 편집 메뉴 (본문 우클릭과 동일)"
           >
-            {action.label}
+            ✨ AI
           </button>
-        ))}
-        <button
-          type="button"
-          className="note-ai-chip subtle"
-          disabled={!aiEnabled || isAiRunning}
-          onClick={onInlineAssist}
-          title="선택한 텍스트만 편집"
-        >
-          선택 편집
-        </button>
-        <button
-          type="button"
-          className="note-ai-chip subtle"
-          disabled={!aiEnabled || isAiRunning}
-          onClick={onCustomAi}
-          title="원하는 편집을 직접 입력"
-        >
-          직접 요청
-        </button>
-        <button
-          type="button"
-          className="note-ai-chip action"
-          disabled={!aiEnabled || isAiRunning}
-          onClick={onExtractActions}
-          title="노트에서 할 일을 뽑아 일정으로 만들기"
-        >
-          📅 일정 추출
-        </button>
-        <button type="button" className="note-ai-manage" onClick={onManageAi} title="AI 편집 기능 관리">
-          관리
-        </button>
-        {isAiRunning ? <span className="note-ai-bar-status">처리 중…</span> : null}
+          <button type="button" className="note-text-button" onClick={onOpenHistory}>
+            이력 {historyCount > 0 ? `(${historyCount})` : ""}
+          </button>
+          <button type="button" className="note-text-button danger" onClick={onDelete}>
+            삭제
+          </button>
+        </div>
       </div>
 
       {overlay ? (
@@ -228,18 +192,12 @@ export function NoteEditor({
         </div>
       )}
 
-      <footer className="note-editor-footer">
-        <div className="note-editor-footer-left">
-          <button type="button" className="note-text-button" onClick={onOpenHistory}>
-            이력 {historyCount > 0 ? `(${historyCount})` : ""}
-          </button>
+      {savedMessage || errorMessage ? (
+        <div className="note-editor-status">
           {savedMessage ? <span className="success-text">{savedMessage}</span> : null}
           {errorMessage ? <span className="error-text">{errorMessage}</span> : null}
         </div>
-        <button type="button" className="note-text-button danger" onClick={onDelete}>
-          삭제
-        </button>
-      </footer>
+      ) : null}
     </section>
   );
 }

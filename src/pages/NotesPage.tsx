@@ -747,7 +747,29 @@ export function NotesPage() {
         }
       },
     });
+    items.push({
+      id: "ai-extract",
+      label: "📅 일정 추출",
+      description: "할 일을 뽑아 일정으로",
+      onSelect: () => void handleExtractActions(),
+    });
+    items.push({
+      id: "ai-manage",
+      label: "기능 관리…",
+      description: "AI 편집 기능 추가·수정",
+      onSelect: () => navigate("/settings"),
+    });
     return items;
+  }
+
+  // ✨AI 버튼: 우클릭과 동일한 메뉴를 버튼 바로 아래에 연다
+  function handleOpenAiMenuButton(event: MouseEvent<HTMLElement>) {
+    const textarea = textareaRef.current;
+    selectionRef.current = textarea
+      ? { start: textarea.selectionStart, end: textarea.selectionEnd }
+      : { start: 0, end: 0 };
+    const rect = event.currentTarget.getBoundingClientRect();
+    setAiMenu({ x: rect.left, y: rect.bottom + 4 });
   }
 
   async function handleRestoreVersion(versionId: string) {
@@ -896,41 +918,41 @@ export function NotesPage() {
 
   return (
     <div className="notes-workspace">
-      <aside className="notes-tree-pane">
-        <div className="notes-tree-header">
-          <h2>노트</h2>
+      {/* 탐색기: 검색·트리·목록을 한 컬럼으로 — 편집기에 나머지 공간을 몰아준다 */}
+      <aside className="notes-explorer">
+        <div className="notes-explorer-head">
+          <input
+            className="notes-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="노트 검색"
+            aria-label="노트 검색"
+          />
           <button type="button" className="btn btn-primary btn-compact" onClick={() => void handleCreateNote()}>
             + 새 노트
           </button>
         </div>
-        <input
-          className="notes-search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="노트 검색"
-          aria-label="노트 검색"
-        />
-        <ProjectNoteTree
-          projects={projects}
-          subcategories={projectSubcategories}
-          notes={notes}
-          openChecklistCount={openChecklistItems.length}
-          selected={filterNode}
-          onSelect={(node) => {
-            setFilterNode(node);
-          }}
-          onAddSubcategory={(projectId, name) => void createSubcategory(projectId, name)}
-        />
-      </aside>
 
-      <section className="notes-list-pane">
-        <header className="notes-list-header">
-          <div>
-            <p className="eyebrow">NOTES</p>
-            <h3>{listTitle}</h3>
-          </div>
-          <span className="notes-list-count">{filteredNotes.length}</span>
-        </header>
+        <div className="notes-explorer-tree">
+          <ProjectNoteTree
+            projects={projects}
+            subcategories={projectSubcategories}
+            notes={notes}
+            openChecklistCount={openChecklistItems.length}
+            selected={filterNode}
+            onSelect={(node) => {
+              setFilterNode(node);
+            }}
+            onAddSubcategory={(projectId, name) => void createSubcategory(projectId, name)}
+          />
+        </div>
+
+        <div className="notes-explorer-label">
+          <span>{listTitle}</span>
+          <span className="notes-list-count">
+            {filterNode.kind === "checklist" ? openChecklistItems.length : filteredNotes.length}
+          </span>
+        </div>
 
         {checkedCount > 0 ? (
           <div className="notes-bulk-bar">
@@ -949,6 +971,7 @@ export function NotesPage() {
           </div>
         ) : null}
 
+        <div className="notes-explorer-list">
         {filterNode.kind === "checklist" ? (
           <div className="notes-checklist-view">
             {openChecklistItems.length === 0 ? (
@@ -996,7 +1019,8 @@ export function NotesPage() {
             )}
           </div>
         )}
-      </section>
+        </div>
+      </aside>
 
       <main className="notes-detail-pane">
         {selectedNote && draft && currentProject ? (
@@ -1007,7 +1031,6 @@ export function NotesPage() {
               projectName={currentProject.name}
               projectColor={currentProject.color}
               subcategoryName={currentSubcategoryName}
-              aiActions={aiActions}
               aiEnabled={hasApiConfig}
               isAiRunning={isAiRunning}
               overlay={editorOverlay}
@@ -1018,16 +1041,7 @@ export function NotesPage() {
                 setAiProgress("");
               }}
               onToggleChecklist={(lineIndex, checked) => void handleToggleChecklist(lineIndex, checked)}
-              onRunAiAction={(prompt) => void runEditAgent(prompt)}
-              onInlineAssist={() => void runInlineAssist()}
-              onCustomAi={() => {
-                const prompt = window.prompt("AI에게 어떻게 편집할지 알려주세요.");
-                if (prompt?.trim()) {
-                  void runEditAgent(prompt.trim());
-                }
-              }}
-              onExtractActions={() => void handleExtractActions()}
-              onManageAi={() => navigate("/settings")}
+              onOpenAiMenu={handleOpenAiMenuButton}
               onChangeTitle={(value) => setDraft((prev) => (prev ? { ...prev, title: value } : prev))}
               onChangeContent={(value) =>
                 setDraft((prev) => {

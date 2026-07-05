@@ -5187,8 +5187,8 @@ textarea:focus-visible,
 /* ===== AI Notes (redesigned) ===== */
 .notes-workspace {
   display: grid;
-  grid-template-columns: 244px 320px 1fr;
-  gap: var(--space-md);
+  grid-template-columns: minmax(280px, 336px) minmax(0, 1fr);
+  gap: var(--space-lg);
   align-items: start;
   max-width: var(--max-content);
   margin: 0 auto;
@@ -5196,24 +5196,59 @@ textarea:focus-visible,
   min-height: calc(100vh - 140px);
 }
 
-/* --- Tree pane --- */
-.notes-tree-pane {
+/* --- 탐색기 (검색 + 트리 + 목록을 한 컬럼으로) --- */
+.notes-explorer {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   position: sticky;
   top: var(--space-md);
+  max-height: calc(100vh - 96px);
+  min-height: 0;
 }
 
-.notes-tree-header {
+.notes-explorer-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  gap: var(--space-xs);
+  align-items: stretch;
 }
 
-.notes-tree-header h2 {
-  margin: 0;
-  font-size: 19px;
+.notes-explorer-head .notes-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.notes-explorer-head .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 트리는 위쪽 고정 높이 안에서 스크롤, 목록이 남은 공간을 차지 */
+.notes-explorer-tree {
+  flex: 0 1 auto;
+  max-height: 38vh;
+  overflow-y: auto;
+  padding-right: 2px;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: var(--space-xs);
+}
+
+.notes-explorer-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--body-muted);
+  padding: 2px 2px 0;
+}
+
+.notes-explorer-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .notes-search {
@@ -5381,27 +5416,6 @@ textarea:focus-visible,
 
 .note-tree-add-input:focus {
   outline: none;
-}
-
-/* --- List pane --- */
-.notes-list-pane {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  position: sticky;
-  top: var(--space-md);
-  max-height: calc(100vh - 160px);
-}
-
-.notes-list-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-}
-
-.notes-list-header h3 {
-  margin: 2px 0 0;
-  font-size: 17px;
 }
 
 .notes-list-count {
@@ -5598,8 +5612,49 @@ textarea:focus-visible,
   font-weight: 600;
 }
 
-.note-meta-bar {
+/* 분류 칩(왼쪽) + 도구(오른쪽)를 한 줄에 담는 툴바 */
+.note-toolbar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.note-toolbar-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.note-ai-button {
+  border: 1px solid var(--primary);
+  background: var(--tint-lavender);
+  color: var(--primary-focus);
+  border-radius: var(--radius-pill);
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.note-ai-button:hover:not(:disabled) {
+  background: var(--canvas);
+  box-shadow: var(--card-shadow);
+}
+
+.note-ai-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.note-editor-status {
+  display: flex;
+  gap: var(--space-sm);
+  font-size: 13px;
 }
 
 .note-meta-chips {
@@ -5612,7 +5667,8 @@ textarea:focus-visible,
   cursor: pointer;
   padding: 4px;
   border-radius: var(--radius-md);
-  width: 100%;
+  flex: 1 1 240px;
+  min-width: 0;
   text-align: left;
 }
 
@@ -6148,28 +6204,24 @@ textarea:focus-visible,
   color: var(--primary-focus);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 880px) {
   .notes-workspace {
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 1fr;
     min-height: 0;
   }
 
-  /* 2단 이하에서는 상세가 아래 행으로 내려가므로 sticky를 해제해
-     스크롤 시 트리/목록이 상세 위에 겹치는 문제를 막는다. */
-  .notes-tree-pane,
-  .notes-list-pane {
+  /* 한 컬럼으로 쌓일 때는 sticky를 해제해 탐색기가 편집기 위에 겹치지 않게 한다 */
+  .notes-explorer {
     position: static;
     max-height: none;
   }
 
-  .notes-detail-pane {
-    grid-column: 1 / -1;
+  .notes-explorer-tree {
+    max-height: 32vh;
   }
-}
 
-@media (max-width: 720px) {
-  .notes-workspace {
-    grid-template-columns: 1fr;
+  .notes-explorer-list {
+    max-height: 40vh;
   }
 }
 
