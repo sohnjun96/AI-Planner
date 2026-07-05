@@ -151,6 +151,20 @@ export async function runQaAgent(input: RunQaInput): Promise<QaResult> {
   const callCache = new ToolCallCache();
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    // 마지막 라운드는 도구 예산 소진을 알리고 답변만 받는다 — 도구만 반복하다 빈손으로 끝나는 것을 방지
+    const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+    if (isFinalRound && accumulated.length > 0) {
+      accumulated.push({
+        tool: "system_notice",
+        args: {},
+        ok: true,
+        result: {
+          notice:
+            "도구 호출 예산이 소진되었습니다. toolCalls를 더 반환하지 말고, 지금까지의 toolResults만으로 최종 answer를 작성하세요.",
+        },
+      });
+    }
+
     let chars = 0;
     const writingLabel = toolCounts.size > 0 ? "답변 작성 중" : "질문 분석 중";
     const { payload, raw } = await requestJsonWithRetry({
@@ -175,24 +189,32 @@ export async function runQaAgent(input: RunQaInput): Promise<QaResult> {
       };
     }
 
+    // 모델이 answer와 toolCalls를 한 응답에 함께 담는 경우가 많다 — 답변을 버리지 않도록 먼저 뽑아둔다
+    const answerText = pickFirstString(payload, ["answer", "response", "text"]);
     const toolCalls = parseToolCalls(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
       const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
-      if (freshCalls.length === 0) {
+      if (freshCalls.length > 0 && !isFinalRound) {
+        for (const call of freshCalls) {
+          callCache.add(call.tool, call.args);
+          accumulated.push(executeToolCall(call, input));
+          const label = TOOL_LABELS[call.tool];
+          toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
+        }
+        input.onProgress?.({ phase: "tools", label: summarize(toolCounts) });
+        continue;
+      }
+      // 전부 중복이거나 예산 소진 — 함께 온 답변이 있으면 그걸 쓰고, 없으면 안내 후 재시도
+      if (!answerText) {
+        if (isFinalRound) {
+          break;
+        }
         accumulated.push(duplicateCallNotice());
         continue;
       }
-      for (const call of freshCalls) {
-        callCache.add(call.tool, call.args);
-        accumulated.push(executeToolCall(call, input));
-        const label = TOOL_LABELS[call.tool];
-        toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
-      }
-      input.onProgress?.({ phase: "tools", label: summarize(toolCounts) });
-      continue;
     }
 
-    const answer = pickFirstString(payload, ["answer", "response", "text"]) || "관련 정보를 찾지 못했습니다.";
+    const answer = answerText || "관련 정보를 찾지 못했습니다.";
     const referencesRaw = Array.isArray(payload.references) ? payload.references : [];
     const references: QaReference[] = [];
     for (const entry of referencesRaw) {

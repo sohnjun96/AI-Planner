@@ -34327,6 +34327,17 @@ async function runQaAgent(input) {
   const taskMap = Object.fromEntries(input.tasks.map((task) => [task.id, task]));
   const callCache = new ToolCallCache();
   for (let round = 0; round < MAX_TOOL_ROUNDS2; round += 1) {
+    const isFinalRound = round === MAX_TOOL_ROUNDS2 - 1;
+    if (isFinalRound && accumulated.length > 0) {
+      accumulated.push({
+        tool: "system_notice",
+        args: {},
+        ok: true,
+        result: {
+          notice: "도구 호출 예산이 소진되었습니다. toolCalls를 더 반환하지 말고, 지금까지의 toolResults만으로 최종 answer를 작성하세요."
+        }
+      });
+    }
     let chars = 0;
     const writingLabel = toolCounts.size > 0 ? "답변 작성 중" : "질문 분석 중";
     const { payload, raw } = await requestJsonWithRetry({
@@ -34347,23 +34358,29 @@ async function runQaAgent(input) {
         trace: toolCounts.size > 0 ? summarize(toolCounts) : void 0
       };
     }
+    const answerText = pickFirstString(payload, ["answer", "response", "text"]);
     const toolCalls = parseToolCalls2(payload.toolCalls).slice(0, 4);
     if (toolCalls.length > 0) {
       const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
-      if (freshCalls.length === 0) {
+      if (freshCalls.length > 0 && !isFinalRound) {
+        for (const call of freshCalls) {
+          callCache.add(call.tool, call.args);
+          accumulated.push(executeToolCall2(call, input));
+          const label = TOOL_LABELS[call.tool];
+          toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
+        }
+        input.onProgress?.({ phase: "tools", label: summarize(toolCounts) });
+        continue;
+      }
+      if (!answerText) {
+        if (isFinalRound) {
+          break;
+        }
         accumulated.push(duplicateCallNotice());
         continue;
       }
-      for (const call of freshCalls) {
-        callCache.add(call.tool, call.args);
-        accumulated.push(executeToolCall2(call, input));
-        const label = TOOL_LABELS[call.tool];
-        toolCounts.set(label, (toolCounts.get(label) ?? 0) + 1);
-      }
-      input.onProgress?.({ phase: "tools", label: summarize(toolCounts) });
-      continue;
     }
-    const answer = pickFirstString(payload, ["answer", "response", "text"]) || "관련 정보를 찾지 못했습니다.";
+    const answer = answerText || "관련 정보를 찾지 못했습니다.";
     const referencesRaw = Array.isArray(payload.references) ? payload.references : [];
     const references = [];
     for (const entry of referencesRaw) {
