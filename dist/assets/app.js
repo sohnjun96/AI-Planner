@@ -35345,12 +35345,15 @@ function ContextMenu({ x, y, title, items, onClose }) {
         onClose();
       }
     };
-    window.addEventListener("click", close);
-    window.addEventListener("contextmenu", close);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    const timerId = window.setTimeout(() => {
+      window.addEventListener("click", close);
+      window.addEventListener("contextmenu", close);
+      window.addEventListener("resize", close);
+      window.addEventListener("scroll", close, true);
+    }, 0);
     window.addEventListener("keydown", handleKeyDown);
     return () => {
+      window.clearTimeout(timerId);
       window.removeEventListener("click", close);
       window.removeEventListener("contextmenu", close);
       window.removeEventListener("resize", close);

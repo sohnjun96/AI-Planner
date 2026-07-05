@@ -41,13 +41,19 @@ export function ContextMenu({ x, y, title, items, onClose }: ContextMenuProps) {
       }
     };
 
-    window.addEventListener("click", close);
-    window.addEventListener("contextmenu", close);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    // 메뉴를 연 바로 그 이벤트(실제 우클릭/클릭)는 아직 window까지 버블링되는 중이다.
+    // 리스너를 즉시 등록하면 그 이벤트를 받아 메뉴가 열리자마자 닫히므로,
+    // 등록을 다음 태스크로 미룬다.
+    const timerId = window.setTimeout(() => {
+      window.addEventListener("click", close);
+      window.addEventListener("contextmenu", close);
+      window.addEventListener("resize", close);
+      window.addEventListener("scroll", close, true);
+    }, 0);
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      window.clearTimeout(timerId);
       window.removeEventListener("click", close);
       window.removeEventListener("contextmenu", close);
       window.removeEventListener("resize", close);
