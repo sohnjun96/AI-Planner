@@ -34681,6 +34681,7 @@ var GROUPS = [
   {
     title: "공통",
     items: [
+      { keys: "Ctrl + Z", desc: "마지막 일정 변경 실행 취소" },
       { keys: "?", desc: "이 도움말 열기" },
       { keys: "Esc", desc: "모달·메뉴 닫기" }
     ]
@@ -34890,7 +34891,7 @@ var NAV_ITEMS = [
   { to: "/settings", label: "설정" }
 ];
 function AppShell() {
-  const { canUndo, undoLastChange, undoDescription, projects, createNote } = useAppData();
+  const { undoLastChange, projects, createNote } = useAppData();
   const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = (0, import_react8.useState)(false);
   const [aiInitialDraft, setAiInitialDraft] = (0, import_react8.useState)("");
@@ -34934,6 +34935,12 @@ function AppShell() {
         setIsHelpOpen(true);
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        void undoLastChange().catch(() => {
+        });
+        return;
+      }
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setAiInitialDraft("");
@@ -34949,7 +34956,7 @@ function AppShell() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [undoLastChange]);
   (0, import_react8.useEffect)(() => {
     const handleOpenAiSchedule = (event) => {
       const detail = event.detail;
@@ -34990,20 +34997,6 @@ function AppShell() {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("nav", { className: "top-nav-list", "aria-label": "페이지 이동", children: NAV_ITEMS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(NavLink, { to: item.to, className: ({ isActive }) => `nav-link ${isActive ? "active" : ""}`, children: item.label }, item.to)) }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "top-nav-actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-          "button",
-          {
-            type: "button",
-            className: "btn btn-outline",
-            onClick: () => {
-              void undoLastChange().catch(() => {
-              });
-            },
-            disabled: !canUndo,
-            title: undoDescription ?? "되돌릴 작업이 없습니다.",
-            children: "되돌리기"
-          }
-        ),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {

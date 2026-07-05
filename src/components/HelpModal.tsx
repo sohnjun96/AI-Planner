@@ -31,6 +31,7 @@ const GROUPS: ShortcutGroup[] = [
   {
     title: "공통",
     items: [
+      { keys: "Ctrl + Z", desc: "마지막 일정 변경 실행 취소" },
       { keys: "?", desc: "이 도움말 열기" },
       { keys: "Esc", desc: "모달·메뉴 닫기" },
     ],

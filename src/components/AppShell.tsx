@@ -22,7 +22,7 @@ type AiScheduleOpenDetail = {
 };
 
 export function AppShell() {
-  const { canUndo, undoLastChange, undoDescription, projects, createNote } = useAppData();
+  const { undoLastChange, projects, createNote } = useAppData();
   const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
   const [aiInitialDraft, setAiInitialDraft] = useState("");
@@ -77,6 +77,13 @@ export function AppShell() {
         return;
       }
 
+      // Ctrl+Z: 마지막 일정 변경 실행 취소 (입력 필드 밖에서만 — 텍스트 undo와 충돌 방지)
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        void undoLastChange().catch(() => {});
+        return;
+      }
+
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setAiInitialDraft("");
@@ -92,7 +99,7 @@ export function AppShell() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [undoLastChange]);
 
   useEffect(() => {
     const handleOpenAiSchedule = (event: Event) => {
@@ -149,18 +156,7 @@ export function AppShell() {
         </nav>
 
         <div className="top-nav-actions">
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={() => {
-              void undoLastChange().catch(() => {});
-            }}
-            disabled={!canUndo}
-            title={undoDescription ?? "되돌릴 작업이 없습니다."}
-          >
-            되돌리기
-          </button>
-
+          {/* 되돌리기 버튼은 제거 — 변경 직후 토스트의 '실행 취소'와 Ctrl+Z가 대체한다 */}
           <button
             type="button"
             className="btn btn-icon"
