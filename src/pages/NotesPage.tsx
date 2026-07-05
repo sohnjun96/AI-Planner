@@ -8,6 +8,7 @@ import { NoteHistoryPanel } from "../components/NoteHistoryPanel";
 import { NoteMetaModal } from "../components/NoteMetaModal";
 import { NoteActionModal, type ConfirmedAction } from "../components/NoteActionModal";
 import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteTree";
+import { showToast } from "../components/ToastHost";
 import { isAbortError } from "../agent/agentUtils";
 import {
   extractNoteActions,
@@ -417,6 +418,7 @@ export function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
+    showToast("노트를 삭제했습니다.");
   }
 
   // 체크박스 토글 → 해당 노트 본문 반영 + 저장 (선택 노트/집계 뷰 공용)
@@ -455,6 +457,7 @@ export function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(noteId);
     if (selectedNoteId === noteId) setSelectedNoteId(null);
+    showToast("노트를 삭제했습니다.");
   }
 
   async function handleSummarizeNote(noteId: string) {

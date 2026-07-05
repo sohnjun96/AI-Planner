@@ -1,5 +1,5 @@
 ﻿/* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
@@ -567,6 +567,9 @@ function compareNewestFirst(a: { createdAt: string }, b: { createdAt: string }):
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  // setState 업데이터는 렌더 시점에 실행되므로, 이벤트 핸들러에서 즉시 읽을 수 있는
+  // 동기 미러를 유지한다. (업데이터 안에서 top을 캡처하면 pop만 되고 복원이 누락될 수 있음)
+  const undoStackRef = useRef<UndoEntry[]>([]);
   const [autoBackups, setAutoBackups] = useState<AutoBackupSummary[]>([]);
 
   useEffect(() => {
@@ -588,27 +591,28 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const userContext = useMemo(() => normalizeUserContext(rawUserContext), [rawUserContext]);
 
   const pushUndo = useCallback((entry: UndoEntry) => {
-    setUndoStack((prev) => {
-      const merged = [...prev];
+    const prev = undoStackRef.current;
 
-      if (entry.kind === "upsert_tasks" && entry.tasks.length === 1) {
-        const last = merged[merged.length - 1];
-        if (
-          last?.kind === "upsert_tasks" &&
-          last.tasks.length === 1 &&
-          last.tasks[0].id === entry.tasks[0].id &&
-          Date.now() - new Date(last.createdAt).getTime() < UPDATE_UNDO_MERGE_WINDOW_MS
-        ) {
-          return merged;
-        }
+    // 같은 일정을 15초 내 연속 수정하면 하나의 undo로 병합 (새 항목/토스트 없음)
+    if (entry.kind === "upsert_tasks" && entry.tasks.length === 1) {
+      const last = prev[prev.length - 1];
+      if (
+        last?.kind === "upsert_tasks" &&
+        last.tasks.length === 1 &&
+        last.tasks[0].id === entry.tasks[0].id &&
+        Date.now() - new Date(last.createdAt).getTime() < UPDATE_UNDO_MERGE_WINDOW_MS
+      ) {
+        return;
       }
+    }
 
-      merged.push(entry);
-      if (merged.length > MAX_UNDO_STACK) {
-        return merged.slice(merged.length - MAX_UNDO_STACK);
-      }
-      return merged;
-    });
+    const merged = [...prev, entry];
+    const next = merged.length > MAX_UNDO_STACK ? merged.slice(merged.length - MAX_UNDO_STACK) : merged;
+    undoStackRef.current = next;
+    setUndoStack(next);
+
+    // 되돌리기 가능한 변경을 UI(토스트)에 알린다 — 실행 취소 발견성용
+    window.dispatchEvent(new CustomEvent("ai-planner:undoable", { detail: { description: entry.description } }));
   }, []);
 
   const createTask = useCallback(
@@ -960,19 +964,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const undoLastChange = useCallback(async () => {
-    let target: UndoEntry | undefined;
-
-    setUndoStack((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-      target = prev[prev.length - 1];
-      return prev.slice(0, -1);
-    });
-
+    const target = undoStackRef.current[undoStackRef.current.length - 1];
     if (!target) {
       return;
     }
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    setUndoStack(undoStackRef.current);
 
     if (target.kind === "delete_tasks") {
       await db.tasks.bulkDelete(target.taskIds);
@@ -1292,6 +1289,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       },
     );
 
+    undoStackRef.current = [];
     setUndoStack([]);
     await bootstrapDatabase();
   }, []);

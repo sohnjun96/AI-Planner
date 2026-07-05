@@ -1074,13 +1074,13 @@ export function DashboardPage() {
         <div className="dashboard-hero-actions">
           <DailyBriefing />
           <TaskViewSegmentedControl value={calendarViewMode} onChange={setCalendarViewMode} ariaLabel="대시보드 일정 보기 방식" />
+          {/* 제목 버튼과 같은 패널을 여닫는 보조 버튼 — 보조기술에는 중복이라 숨긴다 */}
           <button
             type="button"
             className={`btn btn-soft dashboard-summary-toggle ${isTopbarExpanded ? "expanded" : ""}`}
             onClick={() => setIsTopbarExpanded((prev) => !prev)}
-            aria-expanded={isTopbarExpanded}
-            aria-controls="dashboard-summary-panel"
-            aria-label={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
+            aria-hidden="true"
+            tabIndex={-1}
             title={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
           >
             {isTopbarExpanded ? "요약 접기" : "요약 펼치기"}

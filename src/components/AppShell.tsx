@@ -7,6 +7,7 @@ import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
 import { AskDataModal } from "./AskDataModal";
 import { HelpModal } from "./HelpModal";
 import { NoteQuickAddModal } from "./NoteQuickAddModal";
+import { ToastHost, showToast } from "./ToastHost";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
@@ -45,6 +46,7 @@ export function AppShell() {
       isPinned: false,
     });
     setIsNoteAddOpen(false);
+    showToast("노트를 만들었습니다.");
     navigate("/notes");
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent("ai-planner:focus-note", { detail: { noteId: id } }));
@@ -104,6 +106,24 @@ export function AppShell() {
       window.removeEventListener("ai-planner:open-ai-schedule", handleOpenAiSchedule);
     };
   }, []);
+
+  // 일정 변경(추가/수정/삭제)마다 "실행 취소" 액션이 달린 토스트로 알려준다.
+  useEffect(() => {
+    const handleUndoable = (event: Event) => {
+      const detail = (event as CustomEvent<{ description?: string }>).detail;
+      if (!detail?.description) {
+        return;
+      }
+      showToast(detail.description, {
+        actionLabel: "실행 취소",
+        onAction: () => {
+          void undoLastChange().catch(() => {});
+        },
+      });
+    };
+    window.addEventListener("ai-planner:undoable", handleUndoable);
+    return () => window.removeEventListener("ai-planner:undoable", handleUndoable);
+  }, [undoLastChange]);
 
   return (
     <div className="app-shell">
@@ -235,6 +255,8 @@ export function AppShell() {
       {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} /> : null}
 
       {isAskOpen ? <AskDataModal onClose={() => setIsAskOpen(false)} /> : null}
+
+      <ToastHost />
     </div>
   );
 }
