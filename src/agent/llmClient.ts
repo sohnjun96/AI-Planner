@@ -1,4 +1,5 @@
 import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL } from "../constants";
+import { estimateTokensFromChars, recordAiUsage } from "../utils/aiUsage";
 
 export interface LlmChatMessage {
   role: "system" | "user" | "assistant";
@@ -15,6 +16,10 @@ interface LlmChatResponse {
     content?: unknown;
   };
   content?: unknown;
+  usage?: {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+  };
 }
 
 function readTextContent(content: unknown): string {
@@ -131,6 +136,9 @@ export async function requestLlmResponse(params: {
     throw new Error(`LLM 호출 실패 (${response.status}): ${errorBody.slice(0, 240)}`);
   }
 
+  // 통계용: 서버가 usage를 안 주면 문자 수로 추정한다 (설정 > 통계에 표시)
+  const promptChars = params.messages.reduce((sum, message) => sum + message.content.length, 0);
+
   // 스트리밍 요청이고 서버가 실제 event-stream을 반환하면 SSE로 처리한다.
   const contentType = response.headers.get("content-type") ?? "";
   if (useStream && response.body && contentType.includes("text/event-stream")) {
@@ -138,6 +146,11 @@ export async function requestLlmResponse(params: {
     if (!streamed.trim()) {
       throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
     }
+    recordAiUsage({
+      promptTokens: estimateTokensFromChars(promptChars),
+      completionTokens: estimateTokensFromChars(streamed.length),
+      estimated: true,
+    });
     return streamed.trim();
   }
 
@@ -147,6 +160,21 @@ export async function requestLlmResponse(params: {
 
   if (!content.trim()) {
     throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
+  }
+
+  const usage = payload.usage;
+  if (usage && typeof usage.prompt_tokens === "number") {
+    recordAiUsage({
+      promptTokens: usage.prompt_tokens,
+      completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0,
+      estimated: false,
+    });
+  } else {
+    recordAiUsage({
+      promptTokens: estimateTokensFromChars(promptChars),
+      completionTokens: estimateTokensFromChars(content.length),
+      estimated: true,
+    });
   }
 
   return content.trim();

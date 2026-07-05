@@ -81,6 +81,26 @@ export function NotesPage() {
   const deferredSearch = useDeferredValue(search);
   // 노트가 수백 개여도 DOM이 무거워지지 않게 목록을 점진적으로 렌더링한다
   const [visibleLimit, setVisibleLimit] = useState(80);
+  // 탐색기 접기 — 편집에 집중할 때 본문에 전체 폭을 준다 (새로고침 후에도 유지)
+  const [explorerCollapsed, setExplorerCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("notes_explorer_collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleExplorer = useCallback(() => {
+    setExplorerCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("notes_explorer_collapsed", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
@@ -951,8 +971,22 @@ export function NotesPage() {
   }, [filterNode, projectMap, subMap]);
 
   return (
-    <div className="notes-workspace">
-      {/* 탐색기: 검색·트리·목록을 한 컬럼으로 — 편집기에 나머지 공간을 몰아준다 */}
+    <div className={`notes-workspace ${explorerCollapsed ? "explorer-collapsed" : ""}`}>
+      {explorerCollapsed ? (
+        /* 접힌 탐색기: 얇은 레일만 남기고 편집기에 전체 폭을 준다 */
+        <aside className="notes-explorer-rail">
+          <button type="button" className="notes-rail-btn" onClick={toggleExplorer} title="탐색기 펼치기" aria-label="탐색기 펼치기">
+            »
+          </button>
+          <button type="button" className="notes-rail-btn" onClick={() => void handleCreateNote()} title="새 노트" aria-label="새 노트">
+            +
+          </button>
+          <span className="notes-rail-count" title={`${listTitle} ${filteredNotes.length}개`}>
+            {filteredNotes.length}
+          </span>
+        </aside>
+      ) : (
+      /* 탐색기: 검색·트리·목록을 한 컬럼으로 — 편집기에 나머지 공간을 몰아준다 */
       <aside className="notes-explorer">
         <div className="notes-explorer-head">
           <input
@@ -964,6 +998,9 @@ export function NotesPage() {
           />
           <button type="button" className="btn btn-primary btn-compact" onClick={() => void handleCreateNote()}>
             + 새 노트
+          </button>
+          <button type="button" className="notes-collapse-btn" onClick={toggleExplorer} title="탐색기 접기" aria-label="탐색기 접기">
+            «
           </button>
         </div>
 
@@ -1073,6 +1110,7 @@ export function NotesPage() {
         )}
         </div>
       </aside>
+      )}
 
       <main className="notes-detail-pane">
         {selectedNote && draft && currentProject ? (

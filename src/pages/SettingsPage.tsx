@@ -13,6 +13,7 @@ import { useAppData } from "../context/AppDataContext";
 import { requestLlmResponse } from "../agent/llmClient";
 import type { NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
+import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
 
 function makeActionId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -129,10 +130,11 @@ function serializeTaskTypeInput(input: TaskTypeInputPayload): string {
   });
 }
 
-type SettingsSection = "overview" | "general" | "ai" | "noteAi" | "context" | "notify" | "types";
+type SettingsSection = "overview" | "stats" | "general" | "ai" | "noteAi" | "context" | "notify" | "types";
 
 const SETTINGS_TABS: Array<{ id: SettingsSection; label: string }> = [
   { id: "overview", label: "개요" },
+  { id: "stats", label: "통계" },
   { id: "general", label: "기본" },
   { id: "ai", label: "AI 연결" },
   { id: "noteAi", label: "노트 AI" },
@@ -140,6 +142,29 @@ const SETTINGS_TABS: Array<{ id: SettingsSection; label: string }> = [
   { id: "notify", label: "알림·백업" },
   { id: "types", label: "일정 종류" },
 ];
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes}B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)}KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`;
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens < 1000) {
+    return String(tokens);
+  }
+  if (tokens < 1_000_000) {
+    return `${(tokens / 1000).toFixed(1)}k`;
+  }
+  return `${(tokens / 1_000_000).toFixed(2)}M`;
+}
 
 export function SettingsPage() {
   const {
@@ -158,6 +183,11 @@ export function SettingsPage() {
     restoreAutoBackup,
     deleteAutoBackup,
     refreshAutoBackups,
+    tasks,
+    projects,
+    notes,
+    noteVersions,
+    noteTaskLinks,
   } = useAppData();
 
   const [message, setMessage] = useState("");
@@ -185,6 +215,73 @@ export function SettingsPage() {
   const sortedTypes = useMemo(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
   const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
   const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
+
+  // ===== 통계 탭 데이터 =====
+  const taskStats = useMemo(() => {
+    let notDone = 0;
+    let onHold = 0;
+    let done = 0;
+    let canceled = 0;
+    let major = 0;
+    let thisWeek = 0;
+    const weekStart = new Date();
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // 월요일 기준
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    for (const task of tasks) {
+      if (task.status === "NOT_DONE") notDone += 1;
+      else if (task.status === "ON_HOLD") onHold += 1;
+      else if (task.status === "DONE") done += 1;
+      else canceled += 1;
+      if (task.isMajor) major += 1;
+      const start = new Date(task.startAt);
+      if (start >= weekStart && start < weekEnd) thisWeek += 1;
+    }
+    return { total: tasks.length, notDone, onHold, done, canceled, major, thisWeek };
+  }, [tasks]);
+
+  const noteStats = useMemo(() => {
+    let archived = 0;
+    let pinned = 0;
+    let openChecks = 0;
+    let contentChars = 0;
+    for (const note of notes) {
+      if (note.status === "archived") archived += 1;
+      if (note.isPinned) pinned += 1;
+      openChecks += note.content.match(/^\s*[-*+]\s+\[ \]/gm)?.length ?? 0;
+      contentChars += note.content.length;
+    }
+    return {
+      total: notes.length,
+      active: notes.length - archived,
+      archived,
+      pinned,
+      openChecks,
+      versions: noteVersions.length,
+      links: noteTaskLinks.length,
+      contentChars,
+    };
+  }, [notes, noteVersions, noteTaskLinks]);
+
+  const [storageEstimate, setStorageEstimate] = useState<{ usage?: number; quota?: number } | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsageStats>(() => getAiUsageStats());
+
+  useEffect(() => {
+    if (activeSection !== "stats") {
+      return;
+    }
+    setAiUsage(getAiUsageStats());
+    if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
+      navigator.storage
+        .estimate()
+        .then((estimate) => setStorageEstimate({ usage: estimate.usage, quota: estimate.quota }))
+        .catch(() => setStorageEstimate(null));
+    }
+  }, [activeSection]);
+
+  const todayUsage = getTodayUsage(aiUsage);
+  const backupBytes = useMemo(() => autoBackups.reduce((sum, backup) => sum + (backup.size ?? 0), 0), [autoBackups]);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -556,10 +653,187 @@ export function SettingsPage() {
             <span>일정 종류</span>
             <strong>{sortedTypes.length}개</strong>
           </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("stats")}>
+            <span>통계</span>
+            <strong>
+              일정 {taskStats.total} · 노트 {noteStats.total}
+            </strong>
+          </button>
         </section>
       ) : null}
 
       <div className="settings-section-host">
+        {activeSection === "stats" ? (
+        <section className="settings-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">STATS</p>
+              <h3>사용 통계</h3>
+            </div>
+          </header>
+
+          <div className="stats-groups">
+            <div className="stats-group">
+              <h4 className="stats-group-title">📅 일정</h4>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-label">전체</span>
+                  <strong className="stat-value">{taskStats.total}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">미완료</span>
+                  <strong className="stat-value">{taskStats.notDone}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">완료</span>
+                  <strong className="stat-value">{taskStats.done}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">보류 · 취소</span>
+                  <strong className="stat-value">
+                    {taskStats.onHold} · {taskStats.canceled}
+                  </strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">이번 주</span>
+                  <strong className="stat-value">{taskStats.thisWeek}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">중요 일정</span>
+                  <strong className="stat-value">{taskStats.major}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">프로젝트</span>
+                  <strong className="stat-value">{projects.length}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-group">
+              <h4 className="stats-group-title">📝 노트</h4>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-label">활성</span>
+                  <strong className="stat-value">{noteStats.active}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">보관됨</span>
+                  <strong className="stat-value">{noteStats.archived}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">고정</span>
+                  <strong className="stat-value">{noteStats.pinned}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">미완료 체크</span>
+                  <strong className="stat-value">{noteStats.openChecks}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">일정 연결</span>
+                  <strong className="stat-value">{noteStats.links}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">저장된 버전</span>
+                  <strong className="stat-value">{noteStats.versions}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">본문 분량</span>
+                  <strong className="stat-value">{formatBytes(noteStats.contentChars * 2)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-group">
+              <h4 className="stats-group-title">💾 저장공간</h4>
+              {storageEstimate?.quota ? (
+                <>
+                  <div className="stats-grid">
+                    <div className="stat-item">
+                      <span className="stat-label">사용 중</span>
+                      <strong className="stat-value">{formatBytes(storageEstimate.usage ?? 0)}</strong>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">할당량</span>
+                      <strong className="stat-value">{formatBytes(storageEstimate.quota)}</strong>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">자동 백업</span>
+                      <strong className="stat-value">
+                        {autoBackups.length}개 · {formatBytes(backupBytes)}
+                      </strong>
+                    </div>
+                  </div>
+                  <div
+                    className="stats-storage-bar"
+                    role="progressbar"
+                    aria-valuenow={Math.round(((storageEstimate.usage ?? 0) / storageEstimate.quota) * 100)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div
+                      className="stats-storage-fill"
+                      style={{ width: `${Math.max(0.5, ((storageEstimate.usage ?? 0) / storageEstimate.quota) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="description-text">
+                    브라우저가 이 앱(IndexedDB 포함)에 배정한 공간 기준입니다. 사용률{" "}
+                    {(((storageEstimate.usage ?? 0) / storageEstimate.quota) * 100).toFixed(2)}%
+                  </p>
+                </>
+              ) : (
+                <p className="description-text">이 브라우저에서는 저장공간 정보를 제공하지 않습니다.</p>
+              )}
+            </div>
+
+            <div className="stats-group">
+              <div className="stats-group-head">
+                <h4 className="stats-group-title">✨ AI 사용 (토큰)</h4>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-compact"
+                  onClick={() => {
+                    resetAiUsage();
+                    setAiUsage(getAiUsageStats());
+                  }}
+                  disabled={aiUsage.totalRequests === 0}
+                >
+                  초기화
+                </button>
+              </div>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-label">오늘 요청</span>
+                  <strong className="stat-value">{todayUsage.requests}회</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">오늘 토큰</span>
+                  <strong className="stat-value">{formatTokens(todayUsage.promptTokens + todayUsage.completionTokens)}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">누적 요청</span>
+                  <strong className="stat-value">{aiUsage.totalRequests}회</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">누적 입력 토큰</span>
+                  <strong className="stat-value">{formatTokens(aiUsage.promptTokens)}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">누적 출력 토큰</span>
+                  <strong className="stat-value">{formatTokens(aiUsage.completionTokens)}</strong>
+                </div>
+              </div>
+              {aiUsage.totalRequests === 0 ? (
+                <p className="description-text">아직 기록된 AI 사용량이 없습니다. AI 기능을 사용하면 여기에 집계됩니다.</p>
+              ) : aiUsage.estimatedRequests > 0 ? (
+                <p className="description-text">
+                  {aiUsage.estimatedRequests}건은 서버가 토큰 수를 제공하지 않아 문자 수 기반 추정치입니다.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+        ) : null}
+
         {activeSection === "general" ? (
         <section className="settings-card">
           <header className="settings-card-header">
