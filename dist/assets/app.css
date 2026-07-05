@@ -4580,6 +4580,10 @@ textarea:focus-visible,
   top: var(--space-md);
   max-height: calc(100vh - 96px);
   min-height: 0;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  padding: var(--space-md);
 }
 .notes-explorer-head {
   display: flex;
@@ -6217,41 +6221,26 @@ textarea:focus-visible,
   transition: width 240ms ease;
 }
 .notes-workspace.explorer-collapsed {
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
 }
-.notes-explorer-rail {
-  position: sticky;
-  top: var(--space-md);
+.notes-collapsed-bar {
   display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: var(--space-xs);
-  padding: var(--space-xs) 0;
-}
-.notes-rail-btn {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--hairline);
+  align-items: stretch;
   background: var(--canvas);
-  border-radius: var(--radius-md);
-  font-size: 16px;
-  line-height: 1;
-  color: var(--body-muted);
-  cursor: pointer;
-  transition:
-    border-color 120ms ease,
-    color 120ms ease,
-    background 120ms ease;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xs);
 }
-.notes-rail-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary-focus);
-  background: var(--primary-soft, rgba(37, 99, 235, 0.08));
+.notes-collapsed-bar .notes-search {
+  flex: 1;
+  min-width: 0;
 }
-.notes-rail-count {
-  font-size: 11px;
-  color: var(--body-muted);
-  font-variant-numeric: tabular-nums;
+.notes-collapsed-bar .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .notes-collapse-btn {
   flex: 0 0 auto;
@@ -6267,15 +6256,4 @@ textarea:focus-visible,
 .notes-collapse-btn:hover {
   border-color: var(--primary);
   color: var(--primary-focus);
-}
-@media (max-width: 880px) {
-  .notes-workspace.explorer-collapsed {
-    grid-template-columns: 1fr;
-  }
-  .notes-explorer-rail {
-    position: static;
-    flex-direction: row;
-    justify-content: flex-start;
-    padding: 0;
-  }
 }

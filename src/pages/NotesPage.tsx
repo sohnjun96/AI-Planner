@@ -90,16 +90,13 @@ export function NotesPage() {
     }
   });
 
-  const toggleExplorer = useCallback(() => {
-    setExplorerCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("notes_explorer_collapsed", next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+  const setExplorerCollapsedPersisted = useCallback((next: boolean) => {
+    setExplorerCollapsed(next);
+    try {
+      localStorage.setItem("notes_explorer_collapsed", next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -973,18 +970,33 @@ export function NotesPage() {
   return (
     <div className={`notes-workspace ${explorerCollapsed ? "explorer-collapsed" : ""}`}>
       {explorerCollapsed ? (
-        /* 접힌 탐색기: 얇은 레일만 남기고 편집기에 전체 폭을 준다 */
-        <aside className="notes-explorer-rail">
-          <button type="button" className="notes-rail-btn" onClick={toggleExplorer} title="탐색기 펼치기" aria-label="탐색기 펼치기">
+        /* 접힌 탐색기: 편집기 위 한 줄 바 — 검색을 시작하면 자동으로 펼쳐진다 */
+        <div className="notes-collapsed-bar">
+          <button
+            type="button"
+            className="notes-collapse-btn"
+            onClick={() => setExplorerCollapsedPersisted(false)}
+            title="탐색기 펼치기"
+            aria-label="탐색기 펼치기"
+          >
             »
           </button>
-          <button type="button" className="notes-rail-btn" onClick={() => void handleCreateNote()} title="새 노트" aria-label="새 노트">
-            +
+          <input
+            className="notes-search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              if (event.target.value.trim()) {
+                setExplorerCollapsedPersisted(false);
+              }
+            }}
+            placeholder={`노트 검색 · ${listTitle} ${filteredNotes.length}개`}
+            aria-label="노트 검색"
+          />
+          <button type="button" className="btn btn-primary btn-compact" onClick={() => void handleCreateNote()}>
+            + 새 노트
           </button>
-          <span className="notes-rail-count" title={`${listTitle} ${filteredNotes.length}개`}>
-            {filteredNotes.length}
-          </span>
-        </aside>
+        </div>
       ) : (
       /* 탐색기: 검색·트리·목록을 한 컬럼으로 — 편집기에 나머지 공간을 몰아준다 */
       <aside className="notes-explorer">
@@ -999,7 +1011,13 @@ export function NotesPage() {
           <button type="button" className="btn btn-primary btn-compact" onClick={() => void handleCreateNote()}>
             + 새 노트
           </button>
-          <button type="button" className="notes-collapse-btn" onClick={toggleExplorer} title="탐색기 접기" aria-label="탐색기 접기">
+          <button
+            type="button"
+            className="notes-collapse-btn"
+            onClick={() => setExplorerCollapsedPersisted(true)}
+            title="탐색기 접기"
+            aria-label="탐색기 접기"
+          >
             «
           </button>
         </div>

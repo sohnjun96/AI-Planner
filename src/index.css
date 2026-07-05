@@ -5196,7 +5196,7 @@ textarea:focus-visible,
   min-height: calc(100vh - 140px);
 }
 
-/* --- 탐색기 (검색 + 트리 + 목록을 한 컬럼으로) --- */
+/* --- 탐색기: 편집기와 같은 격의 카드 섹션 (검색 + 트리 + 목록) --- */
 .notes-explorer {
   display: flex;
   flex-direction: column;
@@ -5205,6 +5205,10 @@ textarea:focus-visible,
   top: var(--space-md);
   max-height: calc(100vh - 96px);
   min-height: 0;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  padding: var(--space-md);
 }
 
 .notes-explorer-head {
@@ -7112,43 +7116,32 @@ textarea:focus-visible,
 }
 
 /* ===== 노트 탐색기 접기/펴기 ===== */
+/* 접힘: 한 컬럼으로 전환하고 검색·새 노트·펼치기를 편집기 위 한 줄 바로 올린다 */
 .notes-workspace.explorer-collapsed {
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  /* min-height의 남는 공간이 바 행에 분배되지 않도록 바는 auto, 본문이 나머지를 차지 */
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
 }
 
-.notes-explorer-rail {
-  position: sticky;
-  top: var(--space-md);
+.notes-collapsed-bar {
   display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: var(--space-xs);
-  padding: var(--space-xs) 0;
-}
-
-.notes-rail-btn {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--hairline);
+  align-items: stretch;
   background: var(--canvas);
-  border-radius: var(--radius-md);
-  font-size: 16px;
-  line-height: 1;
-  color: var(--body-muted);
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xs);
 }
 
-.notes-rail-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary-focus);
-  background: var(--primary-soft, rgba(37, 99, 235, 0.08));
+.notes-collapsed-bar .notes-search {
+  flex: 1;
+  min-width: 0;
 }
 
-.notes-rail-count {
-  font-size: 11px;
-  color: var(--body-muted);
-  font-variant-numeric: tabular-nums;
+.notes-collapsed-bar .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .notes-collapse-btn {
@@ -7166,17 +7159,4 @@ textarea:focus-visible,
 .notes-collapse-btn:hover {
   border-color: var(--primary);
   color: var(--primary-focus);
-}
-
-@media (max-width: 880px) {
-  .notes-workspace.explorer-collapsed {
-    grid-template-columns: 1fr;
-  }
-
-  .notes-explorer-rail {
-    position: static;
-    flex-direction: row;
-    justify-content: flex-start;
-    padding: 0;
-  }
 }

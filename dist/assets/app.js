@@ -39159,7 +39159,7 @@ function extractKeywords(text) {
 
 // src/pages/NotesPage.tsx
 var import_jsx_runtime25 = (
-  /* 접힌 탐색기: 얇은 레일만 남기고 편집기에 전체 폭을 준다 */
+  /* 접힌 탐색기: 편집기 위 한 줄 바 — 검색을 시작하면 자동으로 펼쳐진다 */
   __toESM(require_jsx_runtime(), 1)
 );
 function noteToInput(note) {
@@ -39209,15 +39209,12 @@ function NotesPage() {
       return false;
     }
   });
-  const toggleExplorer = (0, import_react21.useCallback)(() => {
-    setExplorerCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("notes_explorer_collapsed", next ? "1" : "0");
-      } catch {
-      }
-      return next;
-    });
+  const setExplorerCollapsedPersisted = (0, import_react21.useCallback)((next) => {
+    setExplorerCollapsed(next);
+    try {
+      localStorage.setItem("notes_explorer_collapsed", next ? "1" : "0");
+    } catch {
+    }
   }, []);
   const [isSaving, setIsSaving] = (0, import_react21.useState)(false);
   const [savedMessage, setSavedMessage] = (0, import_react21.useState)("");
@@ -39992,10 +39989,34 @@ function NotesPage() {
     }
   }, [filterNode, projectMap, subMap]);
   return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: `notes-workspace ${explorerCollapsed ? "explorer-collapsed" : ""}`, children: [
-    explorerCollapsed ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("aside", { className: "notes-explorer-rail", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "notes-rail-btn", onClick: toggleExplorer, title: "탐색기 펼치기", "aria-label": "탐색기 펼치기", children: "»" }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "notes-rail-btn", onClick: () => void handleCreateNote(), title: "새 노트", "aria-label": "새 노트", children: "+" }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-rail-count", title: `${listTitle} ${filteredNotes.length}개`, children: filteredNotes.length })
+    explorerCollapsed ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-collapsed-bar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "notes-collapse-btn",
+          onClick: () => setExplorerCollapsedPersisted(false),
+          title: "탐색기 펼치기",
+          "aria-label": "탐색기 펼치기",
+          children: "»"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        "input",
+        {
+          className: "notes-search",
+          value: search,
+          onChange: (event) => {
+            setSearch(event.target.value);
+            if (event.target.value.trim()) {
+              setExplorerCollapsedPersisted(false);
+            }
+          },
+          placeholder: `노트 검색 · ${listTitle} ${filteredNotes.length}개`,
+          "aria-label": "노트 검색"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-primary btn-compact", onClick: () => void handleCreateNote(), children: "+ 새 노트" })
     ] }) : (
       /* 탐색기: 검색·트리·목록을 한 컬럼으로 — 편집기에 나머지 공간을 몰아준다 */
       /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("aside", { className: "notes-explorer", children: [
@@ -40011,7 +40032,17 @@ function NotesPage() {
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-primary btn-compact", onClick: () => void handleCreateNote(), children: "+ 새 노트" }),
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "notes-collapse-btn", onClick: toggleExplorer, title: "탐색기 접기", "aria-label": "탐색기 접기", children: "«" })
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "notes-collapse-btn",
+              onClick: () => setExplorerCollapsedPersisted(true),
+              title: "탐색기 접기",
+              "aria-label": "탐색기 접기",
+              children: "«"
+            }
+          )
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-explorer-tree", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
           ProjectNoteTree,
