@@ -38551,7 +38551,12 @@ function ProjectNoteTree({ projects, subcategories, notes, openChecklistCount, s
     const sub = /* @__PURE__ */ new Map();
     const uncategorized = /* @__PURE__ */ new Map();
     let pinned = 0;
+    let archived = 0;
     for (const note of notes) {
+      if (note.status === "archived") {
+        archived += 1;
+        continue;
+      }
       project.set(note.projectId, (project.get(note.projectId) ?? 0) + 1);
       if (note.subcategoryId) {
         sub.set(note.subcategoryId, (sub.get(note.subcategoryId) ?? 0) + 1);
@@ -38562,7 +38567,7 @@ function ProjectNoteTree({ projects, subcategories, notes, openChecklistCount, s
         pinned += 1;
       }
     }
-    return { project, sub, uncategorized, pinned };
+    return { project, sub, uncategorized, pinned, archived };
   }, [notes]);
   const sortedProjects = (0, import_react20.useMemo)(() => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")), [projects]);
   function toggleExpand(projectId) {
@@ -38593,7 +38598,7 @@ function ProjectNoteTree({ projects, subcategories, notes, openChecklistCount, s
         onClick: () => onSelect({ kind: "all" }),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "note-tree-label", children: "전체 노트" }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "note-tree-count", children: notes.length })
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "note-tree-count", children: notes.length - counts.archived })
         ]
       }
     ),
@@ -38713,7 +38718,20 @@ function ProjectNoteTree({ projects, subcategories, notes, openChecklistCount, s
           )
         ] }) : null
       ] }, project.id);
-    })
+    }),
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "note-tree-divider" }),
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: `note-tree-row root muted ${selected.kind === "archived" ? "active" : ""}`,
+        onClick: () => onSelect({ kind: "archived" }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "note-tree-label", children: "🗄 보관됨" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "note-tree-count", children: counts.archived })
+        ]
+      }
+    )
   ] });
 }
 
@@ -39092,6 +39110,8 @@ function NotesPage() {
   const [draft, setDraft] = (0, import_react21.useState)(null);
   const [checkedIds, setCheckedIds] = (0, import_react21.useState)(/* @__PURE__ */ new Set());
   const [search, setSearch] = (0, import_react21.useState)("");
+  const deferredSearch = (0, import_react21.useDeferredValue)(search);
+  const [visibleLimit, setVisibleLimit] = (0, import_react21.useState)(80);
   const [isSaving, setIsSaving] = (0, import_react21.useState)(false);
   const [savedMessage, setSavedMessage] = (0, import_react21.useState)("");
   const [errorMessage, setErrorMessage] = (0, import_react21.useState)("");
@@ -39175,7 +39195,7 @@ function NotesPage() {
     const timer = window.setTimeout(() => {
       void (async () => {
         for (const note of notes) {
-          if (note.id === selectedNoteId) {
+          if (note.id === selectedNoteId || note.status === "archived") {
             continue;
           }
           const patch = {};
@@ -39221,6 +39241,9 @@ function NotesPage() {
   const openChecklistItems = (0, import_react21.useMemo)(() => {
     const items = [];
     for (const note of notes) {
+      if (note.status === "archived") {
+        continue;
+      }
       const lines = note.content.replace(/\r\n/g, "\n").split("\n");
       lines.forEach((line, lineIndex) => {
         const match = line.match(/^\s*[-*+]\s+\[ \]\s+(.+)$/);
@@ -39238,24 +39261,29 @@ function NotesPage() {
     return items;
   }, [notes, projectMap]);
   const filteredNotes = (0, import_react21.useMemo)(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     return notes.filter((note) => {
+      const isArchived = note.status === "archived";
       switch (filterNode.kind) {
+        case "archived":
+          if (!isArchived) return false;
+          break;
         case "all":
+          if (isArchived) return false;
           break;
         case "pinned":
-          if (!note.isPinned) return false;
+          if (!note.isPinned || isArchived) return false;
           break;
         case "checklist":
           return false;
         case "project":
-          if (note.projectId !== filterNode.projectId) return false;
+          if (note.projectId !== filterNode.projectId || isArchived) return false;
           break;
         case "subcategory":
-          if (note.subcategoryId !== filterNode.subcategoryId) return false;
+          if (note.subcategoryId !== filterNode.subcategoryId || isArchived) return false;
           break;
         case "uncategorized":
-          if (note.projectId !== filterNode.projectId || note.subcategoryId) return false;
+          if (note.projectId !== filterNode.projectId || note.subcategoryId || isArchived) return false;
           break;
       }
       if (keyword) {
@@ -39269,7 +39297,18 @@ function NotesPage() {
       }
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
-  }, [notes, filterNode, search]);
+  }, [notes, filterNode, deferredSearch]);
+  const archivedMatchCount = (0, import_react21.useMemo)(() => {
+    const keyword = deferredSearch.trim().toLowerCase();
+    if (!keyword || filterNode.kind === "archived") return 0;
+    return notes.filter(
+      (note) => note.status === "archived" && `${note.title} ${note.content} ${note.tags.join(" ")}`.toLowerCase().includes(keyword)
+    ).length;
+  }, [notes, deferredSearch, filterNode]);
+  (0, import_react21.useEffect)(() => {
+    setVisibleLimit(80);
+  }, [filterNode, deferredSearch]);
+  const visibleNotes = (0, import_react21.useMemo)(() => filteredNotes.slice(0, visibleLimit), [filteredNotes, visibleLimit]);
   const selectedVersions = (0, import_react21.useMemo)(
     () => noteVersions.filter((version) => version.noteId === selectedNoteId),
     [noteVersions, selectedNoteId]
@@ -39835,6 +39874,8 @@ function NotesPage() {
         return "고정된 노트";
       case "checklist":
         return "전체 체크리스트";
+      case "archived":
+        return "보관된 노트";
       case "project":
         return projectMap[filterNode.projectId]?.name ?? "프로젝트";
       case "subcategory":
@@ -39910,20 +39951,40 @@ function NotesPage() {
             ]
           }
         )
-      ] }, `${item.noteId}-${item.lineIndex}`)) }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-list", children: filteredNotes.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: '노트가 없습니다. "새 노트"로 시작하세요.' }) : filteredNotes.map((note) => /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-        NoteCard,
-        {
-          note,
-          project: projectMap[note.projectId],
-          isSelected: note.id === selectedNoteId,
-          isChecked: checkedIds.has(note.id),
-          linkedTaskCount: note.linkedTaskIds.length,
-          onSelect: () => setSelectedNoteId(note.id),
-          onToggleCheck: (checked) => toggleCheck(note.id, checked),
-          onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })
-        },
-        note.id
-      )) }) })
+      ] }, `${item.noteId}-${item.lineIndex}`)) }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-list", children: [
+        filteredNotes.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: filterNode.kind === "archived" ? "보관된 노트가 없습니다. 노트 우클릭 → 보관으로 정리할 수 있어요." : '노트가 없습니다. "새 노트"로 시작하세요.' }) : visibleNotes.map((note) => /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+          NoteCard,
+          {
+            note,
+            project: projectMap[note.projectId],
+            isSelected: note.id === selectedNoteId,
+            isChecked: checkedIds.has(note.id),
+            linkedTaskCount: note.linkedTaskIds.length,
+            onSelect: () => setSelectedNoteId(note.id),
+            onToggleCheck: (checked) => toggleCheck(note.id, checked),
+            onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })
+          },
+          note.id
+        )),
+        filteredNotes.length > visibleLimit ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-soft btn-compact notes-load-more",
+            onClick: () => setVisibleLimit((limit) => limit + 120),
+            children: [
+              "노트 ",
+              filteredNotes.length - visibleLimit,
+              "개 더 보기"
+            ]
+          }
+        ) : null,
+        archivedMatchCount > 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-archived-hint", onClick: () => setFilterNode({ kind: "archived" }), children: [
+          "🗄 보관된 노트에서 ",
+          archivedMatchCount,
+          "개 일치 — 보관함에서 보기"
+        ] }) : null
+      ] }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("main", { className: "notes-detail-pane", children: selectedNote && draft && currentProject ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(import_jsx_runtime25.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(

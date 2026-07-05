@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { NoteCard } from "../components/NoteCard";
@@ -77,6 +77,10 @@ export function NotesPage() {
   const [draft, setDraft] = useState<NoteFormInput | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  // 타이핑 중 전체 노트 스캔이 입력을 막지 않도록 검색어 반영을 지연시킨다
+  const deferredSearch = useDeferredValue(search);
+  // 노트가 수백 개여도 DOM이 무거워지지 않게 목록을 점진적으로 렌더링한다
+  const [visibleLimit, setVisibleLimit] = useState(80);
 
   const [isSaving, setIsSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
@@ -177,7 +181,8 @@ export function NotesPage() {
     const timer = window.setTimeout(() => {
       void (async () => {
         for (const note of notes) {
-          if (note.id === selectedNoteId) {
+          // 선택 중이거나 보관된 노트는 자동 제목/분류 대상에서 제외
+          if (note.id === selectedNoteId || note.status === "archived") {
             continue;
           }
           const patch: Partial<NoteFormInput> = {};
@@ -234,10 +239,13 @@ export function NotesPage() {
     return () => window.clearTimeout(timer);
   }, [notes, projects, projectSubcategories, selectedNoteId, updateNote]);
 
-  // 모든 노트의 미완료 체크리스트 항목 집계
+  // 모든 노트의 미완료 체크리스트 항목 집계 (보관된 노트 제외)
   const openChecklistItems = useMemo(() => {
     const items: Array<{ noteId: string; noteTitle: string; projectColor: string; lineIndex: number; text: string }> = [];
     for (const note of notes) {
+      if (note.status === "archived") {
+        continue;
+      }
       const lines = note.content.replace(/\r\n/g, "\n").split("\n");
       lines.forEach((line, lineIndex) => {
         const match = line.match(/^\s*[-*+]\s+\[ \]\s+(.+)$/);
@@ -256,25 +264,31 @@ export function NotesPage() {
   }, [notes, projectMap]);
 
   const filteredNotes = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     return notes
       .filter((note) => {
+        // 보관된 노트는 '보관됨' 뷰에서만 보인다 — 일반 뷰를 깔끔하게 유지
+        const isArchived = note.status === "archived";
         switch (filterNode.kind) {
+          case "archived":
+            if (!isArchived) return false;
+            break;
           case "all":
+            if (isArchived) return false;
             break;
           case "pinned":
-            if (!note.isPinned) return false;
+            if (!note.isPinned || isArchived) return false;
             break;
           case "checklist":
             return false;
           case "project":
-            if (note.projectId !== filterNode.projectId) return false;
+            if (note.projectId !== filterNode.projectId || isArchived) return false;
             break;
           case "subcategory":
-            if (note.subcategoryId !== filterNode.subcategoryId) return false;
+            if (note.subcategoryId !== filterNode.subcategoryId || isArchived) return false;
             break;
           case "uncategorized":
-            if (note.projectId !== filterNode.projectId || note.subcategoryId) return false;
+            if (note.projectId !== filterNode.projectId || note.subcategoryId || isArchived) return false;
             break;
         }
         if (keyword) {
@@ -289,7 +303,25 @@ export function NotesPage() {
         }
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       });
-  }, [notes, filterNode, search]);
+  }, [notes, filterNode, deferredSearch]);
+
+  // 일반 뷰에서 검색했는데 보관함에만 일치가 있으면 안내한다 ("노트가 사라졌다" 혼란 방지)
+  const archivedMatchCount = useMemo(() => {
+    const keyword = deferredSearch.trim().toLowerCase();
+    if (!keyword || filterNode.kind === "archived") return 0;
+    return notes.filter(
+      (note) =>
+        note.status === "archived" &&
+        `${note.title} ${note.content} ${note.tags.join(" ")}`.toLowerCase().includes(keyword),
+    ).length;
+  }, [notes, deferredSearch, filterNode]);
+
+  // 필터/검색이 바뀌면 점진 렌더링 한도를 초기화
+  useEffect(() => {
+    setVisibleLimit(80);
+  }, [filterNode, deferredSearch]);
+
+  const visibleNotes = useMemo(() => filteredNotes.slice(0, visibleLimit), [filteredNotes, visibleLimit]);
 
   const selectedVersions = useMemo(
     () => noteVersions.filter((version) => version.noteId === selectedNoteId),
@@ -907,6 +939,8 @@ export function NotesPage() {
         return "고정된 노트";
       case "checklist":
         return "전체 체크리스트";
+      case "archived":
+        return "보관된 노트";
       case "project":
         return projectMap[filterNode.projectId]?.name ?? "프로젝트";
       case "subcategory":
@@ -1001,9 +1035,13 @@ export function NotesPage() {
         ) : (
           <div className="notes-list">
             {filteredNotes.length === 0 ? (
-              <p className="empty-text">노트가 없습니다. "새 노트"로 시작하세요.</p>
+              <p className="empty-text">
+                {filterNode.kind === "archived"
+                  ? "보관된 노트가 없습니다. 노트 우클릭 → 보관으로 정리할 수 있어요."
+                  : "노트가 없습니다. \"새 노트\"로 시작하세요."}
+              </p>
             ) : (
-              filteredNotes.map((note) => (
+              visibleNotes.map((note) => (
                 <NoteCard
                   key={note.id}
                   note={note}
@@ -1017,6 +1055,20 @@ export function NotesPage() {
                 />
               ))
             )}
+            {filteredNotes.length > visibleLimit ? (
+              <button
+                type="button"
+                className="btn btn-soft btn-compact notes-load-more"
+                onClick={() => setVisibleLimit((limit) => limit + 120)}
+              >
+                노트 {filteredNotes.length - visibleLimit}개 더 보기
+              </button>
+            ) : null}
+            {archivedMatchCount > 0 ? (
+              <button type="button" className="notes-archived-hint" onClick={() => setFilterNode({ kind: "archived" })}>
+                🗄 보관된 노트에서 {archivedMatchCount}개 일치 — 보관함에서 보기
+              </button>
+            ) : null}
           </div>
         )}
         </div>

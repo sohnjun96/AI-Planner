@@ -5,6 +5,7 @@ export type NoteFilterNode =
   | { kind: "all" }
   | { kind: "pinned" }
   | { kind: "checklist" }
+  | { kind: "archived" }
   | { kind: "project"; projectId: string }
   | { kind: "subcategory"; projectId: string; subcategoryId: string }
   | { kind: "uncategorized"; projectId: string };
@@ -51,7 +52,13 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
     const sub = new Map<string, number>();
     const uncategorized = new Map<string, number>();
     let pinned = 0;
+    let archived = 0;
     for (const note of notes) {
+      // 보관된 노트는 별도 보관함에서만 집계 — 목록 카운트와 일치시킨다
+      if (note.status === "archived") {
+        archived += 1;
+        continue;
+      }
       project.set(note.projectId, (project.get(note.projectId) ?? 0) + 1);
       if (note.subcategoryId) {
         sub.set(note.subcategoryId, (sub.get(note.subcategoryId) ?? 0) + 1);
@@ -62,7 +69,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
         pinned += 1;
       }
     }
-    return { project, sub, uncategorized, pinned };
+    return { project, sub, uncategorized, pinned, archived };
   }, [notes]);
 
   const sortedProjects = useMemo(() => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")), [projects]);
@@ -96,7 +103,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
         onClick={() => onSelect({ kind: "all" })}
       >
         <span className="note-tree-label">전체 노트</span>
-        <span className="note-tree-count">{notes.length}</span>
+        <span className="note-tree-count">{notes.length - counts.archived}</span>
       </button>
       <button
         type="button"
@@ -211,6 +218,17 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
           </div>
         );
       })}
+
+      <div className="note-tree-divider" />
+
+      <button
+        type="button"
+        className={`note-tree-row root muted ${selected.kind === "archived" ? "active" : ""}`}
+        onClick={() => onSelect({ kind: "archived" })}
+      >
+        <span className="note-tree-label">🗄 보관됨</span>
+        <span className="note-tree-count">{counts.archived}</span>
+      </button>
     </nav>
   );
 }
