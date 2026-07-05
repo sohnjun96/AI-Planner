@@ -34609,7 +34609,7 @@ function AskDataModal({ onClose }) {
               autoFocus: true,
               disabled: isRunning,
               onKeyDown: (event) => {
-                if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   void handleAsk();
                 }
@@ -34618,6 +34618,7 @@ function AskDataModal({ onClose }) {
           ),
           /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => void handleAsk(), disabled: isRunning || !hasApiConfig || !question.trim(), children: isRunning ? "찾는 중…" : "질문" })
         ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "ai-composer-kbd", children: "Enter 질문 · Shift+Enter 줄바꿈" }),
         !answer && !isRunning && !error ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "ask-examples", children: EXAMPLES.map((example) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", className: "ask-example-chip", onClick: () => setQuestion(example), children: example }, example)) }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "ask-answer", children: [
           isRunning ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { className: "note-ai-running", children: [

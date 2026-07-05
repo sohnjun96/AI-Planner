@@ -136,7 +136,8 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
             autoFocus
             disabled={isRunning}
             onKeyDown={(event) => {
-              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              // AI 일정 추가 입력창과 동일하게: Enter 제출, Shift+Enter 줄바꿈 (한글 조합 중엔 무시)
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 void handleAsk();
               }
@@ -146,6 +147,8 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
             {isRunning ? "찾는 중…" : "질문"}
           </button>
         </div>
+
+        <span className="ai-composer-kbd">Enter 질문 · Shift+Enter 줄바꿈</span>
 
         {!answer && !isRunning && !error ? (
           <div className="ask-examples">
