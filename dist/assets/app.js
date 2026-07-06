@@ -39324,6 +39324,10 @@ function noteToInput(note) {
 function tagsEqual(a, b) {
   return a.length === b.length && a.every((tag, index) => tag === b[index]);
 }
+function isDraftDifferentFromNote(note, draft) {
+  return note.title !== draft.title || note.content !== draft.content || note.projectId !== draft.projectId || (note.subcategoryId ?? "") !== (draft.subcategoryId ?? "") || note.status !== draft.status || note.isPinned !== draft.isPinned || !tagsEqual(note.tags, draft.tags);
+}
+var AUTOSAVE_DELAY_MS = 1e3;
 function NotesPage() {
   const {
     notes,
@@ -39382,6 +39386,30 @@ function NotesPage() {
   const loadedNoteIdRef = (0, import_react21.useRef)(null);
   const selectionRef = (0, import_react21.useRef)({ start: 0, end: 0 });
   const abortRef = (0, import_react21.useRef)(null);
+  const draftRef = (0, import_react21.useRef)(null);
+  const notesRef = (0, import_react21.useRef)(notes);
+  (0, import_react21.useEffect)(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  (0, import_react21.useEffect)(() => {
+    notesRef.current = notes;
+  }, [notes]);
+  const flushPendingDraft = (0, import_react21.useCallback)(() => {
+    const pendingId = loadedNoteIdRef.current;
+    const pendingDraft = draftRef.current;
+    if (!pendingId || !pendingDraft) {
+      return;
+    }
+    const pendingNote = notesRef.current.find((note) => note.id === pendingId);
+    if (pendingNote && isDraftDifferentFromNote(pendingNote, pendingDraft)) {
+      void updateNote(pendingId, pendingDraft, "autosave");
+    }
+  }, [updateNote]);
+  (0, import_react21.useEffect)(() => {
+    return () => {
+      flushPendingDraft();
+    };
+  }, [flushPendingDraft]);
   const beginAiRequest = (0, import_react21.useCallback)(() => {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -39411,11 +39439,13 @@ function NotesPage() {
   );
   (0, import_react21.useEffect)(() => {
     if (!selectedNote) {
+      flushPendingDraft();
       loadedNoteIdRef.current = null;
       setDraft(null);
       return;
     }
     if (loadedNoteIdRef.current !== selectedNote.id) {
+      flushPendingDraft();
       loadedNoteIdRef.current = selectedNote.id;
       setDraft(noteToInput(selectedNote));
       setAiProposal(null);
@@ -39427,7 +39457,7 @@ function NotesPage() {
       setAiError("");
       setAiProgress("");
     }
-  }, [selectedNote]);
+  }, [selectedNote, flushPendingDraft]);
   (0, import_react21.useEffect)(() => {
     if (selectedNoteId && !notes.some((note) => note.id === selectedNoteId)) {
       setSelectedNoteId(null);
@@ -39589,8 +39619,24 @@ function NotesPage() {
   }, [selectedNote, notes]);
   const isDirty = (0, import_react21.useMemo)(() => {
     if (!selectedNote || !draft) return false;
-    return selectedNote.title !== draft.title || selectedNote.content !== draft.content || selectedNote.projectId !== draft.projectId || (selectedNote.subcategoryId ?? "") !== (draft.subcategoryId ?? "") || selectedNote.status !== draft.status || selectedNote.isPinned !== draft.isPinned || !tagsEqual(selectedNote.tags, draft.tags);
+    return isDraftDifferentFromNote(selectedNote, draft);
   }, [selectedNote, draft]);
+  (0, import_react21.useEffect)(() => {
+    if (!selectedNoteId || !draft || !isDirty || isSaving) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          await updateNote(selectedNoteId, draft, "autosave");
+          setSavedMessage("자동 저장됨");
+          window.setTimeout(() => setSavedMessage(""), 1500);
+        } catch {
+        }
+      })();
+    }, AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [selectedNoteId, draft, isDirty, isSaving, updateNote]);
   const currentSubcategoryName = draft?.subcategoryId ? subMap[draft.subcategoryId]?.name : void 0;
   const currentProject = draft ? projectMap[draft.projectId] : void 0;
   const editorOverlay = (0, import_react21.useMemo)(() => {

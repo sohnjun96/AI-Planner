@@ -51,6 +51,20 @@ function tagsEqual(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((tag, index) => tag === b[index]);
 }
 
+function isDraftDifferentFromNote(note: Note, draft: NoteFormInput): boolean {
+  return (
+    note.title !== draft.title ||
+    note.content !== draft.content ||
+    note.projectId !== draft.projectId ||
+    (note.subcategoryId ?? "") !== (draft.subcategoryId ?? "") ||
+    note.status !== draft.status ||
+    note.isPinned !== draft.isPinned ||
+    !tagsEqual(note.tags, draft.tags)
+  );
+}
+
+const AUTOSAVE_DELAY_MS = 1000;
+
 export function NotesPage() {
   const {
     notes,
@@ -120,6 +134,37 @@ export function NotesPage() {
   const loadedNoteIdRef = useRef<string | null>(null);
   const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const abortRef = useRef<AbortController | null>(null);
+  // 노트 전환/페이지 이탈 시점에 미저장 수정분을 플러시하기 위한 최신 상태 미러
+  const draftRef = useRef<NoteFormInput | null>(null);
+  const notesRef = useRef<Note[]>(notes);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
+
+  // 미저장 수정분이 있으면 조용히 자동 저장한다 (전환·이탈로 인한 유실 방지)
+  const flushPendingDraft = useCallback(() => {
+    const pendingId = loadedNoteIdRef.current;
+    const pendingDraft = draftRef.current;
+    if (!pendingId || !pendingDraft) {
+      return;
+    }
+    const pendingNote = notesRef.current.find((note) => note.id === pendingId);
+    if (pendingNote && isDraftDifferentFromNote(pendingNote, pendingDraft)) {
+      void updateNote(pendingId, pendingDraft, "autosave");
+    }
+  }, [updateNote]);
+
+  // 노트 탭을 떠날 때(언마운트) 마지막 수정분 저장
+  useEffect(() => {
+    return () => {
+      flushPendingDraft();
+    };
+  }, [flushPendingDraft]);
 
   // 새 AI 요청 시작: 진행 중이던 요청은 중단한다.
   const beginAiRequest = useCallback(() => {
@@ -157,11 +202,15 @@ export function NotesPage() {
   // 선택 노트가 바뀔 때만 draft 로드 (live query 지연 대응)
   useEffect(() => {
     if (!selectedNote) {
+      // 선택 해제 시에도 미저장분이 있으면 저장 (삭제된 노트는 flush 내부에서 걸러진다)
+      flushPendingDraft();
       loadedNoteIdRef.current = null;
       setDraft(null);
       return;
     }
     if (loadedNoteIdRef.current !== selectedNote.id) {
+      // 다른 노트로 전환: 이전 노트의 수정분을 먼저 자동 저장해 유실을 막는다
+      flushPendingDraft();
       loadedNoteIdRef.current = selectedNote.id;
       setDraft(noteToInput(selectedNote));
       setAiProposal(null);
@@ -173,7 +222,7 @@ export function NotesPage() {
       setAiError("");
       setAiProgress("");
     }
-  }, [selectedNote]);
+  }, [selectedNote, flushPendingDraft]);
 
   useEffect(() => {
     if (selectedNoteId && !notes.some((note) => note.id === selectedNoteId)) {
@@ -378,16 +427,27 @@ export function NotesPage() {
 
   const isDirty = useMemo(() => {
     if (!selectedNote || !draft) return false;
-    return (
-      selectedNote.title !== draft.title ||
-      selectedNote.content !== draft.content ||
-      selectedNote.projectId !== draft.projectId ||
-      (selectedNote.subcategoryId ?? "") !== (draft.subcategoryId ?? "") ||
-      selectedNote.status !== draft.status ||
-      selectedNote.isPinned !== draft.isPinned ||
-      !tagsEqual(selectedNote.tags, draft.tags)
-    );
+    return isDraftDifferentFromNote(selectedNote, draft);
   }, [selectedNote, draft]);
+
+  // 입력이 멈추면 자동 저장 — 저장 버튼을 안 눌러도 수정분이 유실되지 않는다
+  useEffect(() => {
+    if (!selectedNoteId || !draft || !isDirty || isSaving) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          await updateNote(selectedNoteId, draft, "autosave");
+          setSavedMessage("자동 저장됨");
+          window.setTimeout(() => setSavedMessage(""), 1500);
+        } catch {
+          // 자동 저장 실패는 조용히 넘기고 다음 변경/수동 저장에서 재시도한다
+        }
+      })();
+    }, AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [selectedNoteId, draft, isDirty, isSaving, updateNote]);
 
   const currentSubcategoryName = draft?.subcategoryId ? subMap[draft.subcategoryId]?.name : undefined;
   const currentProject = draft ? projectMap[draft.projectId] : undefined;
