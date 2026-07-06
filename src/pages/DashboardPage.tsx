@@ -545,17 +545,45 @@ export function DashboardPage() {
       if (!isCanceled) {
         applyCalendarMarkerRules(current, task, { projectMap, typeMap });
       }
-      if (isTaskVisibleOnBoard(task)) {
+      // 월간 셀에는 미완료만 보이는 게 기본. "지난 완료 업무를 기본으로 표시"가 켜지면 완료도 보여준다
+      if (isTaskVisibleOnBoard(task) || (setting.showPastCompleted && isTaskDone(task.status))) {
         current.titles.push(task.title);
       }
       summaryMap[key] = current;
       return summaryMap;
     }, {});
-  }, [calendarConflictMap, calendarTasks, projectMap, typeMap]);
+  }, [calendarConflictMap, calendarTasks, projectMap, typeMap, setting.showPastCompleted]);
 
   const weekViewSourceTasks = useMemo(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = useMemo(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
   const listViewSummary = useMemo(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
+
+  // 월간 보기에서 일정 보드 아래(메모 위)에 보여줄 선택일 일정 — 상태 뱃지로 필터링 가능
+  const [selectedDayFilter, setSelectedDayFilter] = useState<"all" | TaskStatus>("all");
+
+  useEffect(() => {
+    setSelectedDayFilter("all");
+  }, [selectedDate]);
+
+  const selectedDayTasks = useMemo(
+    () =>
+      calendarTasks
+        .filter((task) => getDateKey(task.startAt) === selectedDate)
+        .sort(compareByStatusThenStartAt),
+    [calendarTasks, selectedDate],
+  );
+  const selectedDaySummary = useMemo(
+    () => summarizeTasks(selectedDayTasks, calendarConflictMap),
+    [calendarConflictMap, selectedDayTasks],
+  );
+  const selectedDayFilteredTasks = useMemo(
+    () => (selectedDayFilter === "all" ? selectedDayTasks : selectedDayTasks.filter((task) => task.status === selectedDayFilter)),
+    [selectedDayFilter, selectedDayTasks],
+  );
+
+  function toggleSelectedDayFilter(status: TaskStatus) {
+    setSelectedDayFilter((prev) => (prev === status ? "all" : status));
+  }
 
   const editingTask = useMemo(() => {
     if (!taskModalState || taskModalState.mode !== "edit") {
@@ -1227,6 +1255,68 @@ export function DashboardPage() {
           </section>
         </aside>
       </div>
+
+      {calendarViewMode === "MONTH" ? (
+        <section className="dashboard-card dashboard-selected-day-card" aria-label="선택한 날짜의 일정">
+          <header className="dashboard-card-header">
+            <div>
+              <p className="eyebrow">SELECTED DAY</p>
+              <h3>{formatDateLabel(selectedDate)} 일정</h3>
+            </div>
+            <button type="button" className="btn btn-soft btn-compact" onClick={() => openCreateTask(selectedDate)}>
+              일정 추가
+            </button>
+          </header>
+
+          <div className="agenda-stat-grid selected-day-filter" role="group" aria-label="상태별 필터">
+            <button
+              type="button"
+              className={`all ${selectedDayFilter === "all" ? "active" : ""}`}
+              onClick={() => setSelectedDayFilter("all")}
+              aria-pressed={selectedDayFilter === "all"}
+            >
+              전체 {selectedDaySummary.total}
+            </button>
+            <button
+              type="button"
+              className={`not_done ${selectedDayFilter === "NOT_DONE" ? "active" : ""}`}
+              onClick={() => toggleSelectedDayFilter("NOT_DONE")}
+              aria-pressed={selectedDayFilter === "NOT_DONE"}
+            >
+              미완료 {selectedDaySummary.pending}
+            </button>
+            <button
+              type="button"
+              className={`on_hold ${selectedDayFilter === "ON_HOLD" ? "active" : ""}`}
+              onClick={() => toggleSelectedDayFilter("ON_HOLD")}
+              aria-pressed={selectedDayFilter === "ON_HOLD"}
+            >
+              보류 {selectedDaySummary.onHold}
+            </button>
+            <button
+              type="button"
+              className={`done ${selectedDayFilter === "DONE" ? "active" : ""}`}
+              onClick={() => toggleSelectedDayFilter("DONE")}
+              aria-pressed={selectedDayFilter === "DONE"}
+            >
+              완료 {selectedDaySummary.done}
+            </button>
+            <button
+              type="button"
+              className={`canceled ${selectedDayFilter === "CANCELED" ? "active" : ""}`}
+              onClick={() => toggleSelectedDayFilter("CANCELED")}
+              aria-pressed={selectedDayFilter === "CANCELED"}
+            >
+              취소 {selectedDaySummary.canceled}
+            </button>
+          </div>
+
+          {renderCalendarTaskCards(
+            selectedDayFilteredTasks,
+            selectedDayFilter === "all" ? "이 날짜에 일정이 없습니다." : "해당 상태의 일정이 없습니다.",
+          )}
+        </section>
+      ) : null}
 
       <section className="dashboard-memo-section">
         <MarkdownMemo

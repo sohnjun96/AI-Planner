@@ -37196,16 +37196,35 @@ function DashboardPage() {
       if (!isCanceled) {
         applyCalendarMarkerRules(current, task, { projectMap, typeMap });
       }
-      if (isTaskVisibleOnBoard(task)) {
+      if (isTaskVisibleOnBoard(task) || setting.showPastCompleted && isTaskDone(task.status)) {
         current.titles.push(task.title);
       }
       summaryMap[key] = current;
       return summaryMap;
     }, {});
-  }, [calendarConflictMap, calendarTasks, projectMap, typeMap]);
+  }, [calendarConflictMap, calendarTasks, projectMap, typeMap, setting.showPastCompleted]);
   const weekViewSourceTasks = (0, import_react15.useMemo)(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = (0, import_react15.useMemo)(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
   const listViewSummary = (0, import_react15.useMemo)(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
+  const [selectedDayFilter, setSelectedDayFilter] = (0, import_react15.useState)("all");
+  (0, import_react15.useEffect)(() => {
+    setSelectedDayFilter("all");
+  }, [selectedDate]);
+  const selectedDayTasks = (0, import_react15.useMemo)(
+    () => calendarTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStatusThenStartAt),
+    [calendarTasks, selectedDate]
+  );
+  const selectedDaySummary = (0, import_react15.useMemo)(
+    () => summarizeTasks(selectedDayTasks, calendarConflictMap),
+    [calendarConflictMap, selectedDayTasks]
+  );
+  const selectedDayFilteredTasks = (0, import_react15.useMemo)(
+    () => selectedDayFilter === "all" ? selectedDayTasks : selectedDayTasks.filter((task) => task.status === selectedDayFilter),
+    [selectedDayFilter, selectedDayTasks]
+  );
+  function toggleSelectedDayFilter(status) {
+    setSelectedDayFilter((prev) => prev === status ? "all" : status);
+  }
   const editingTask = (0, import_react15.useMemo)(() => {
     if (!taskModalState || taskModalState.mode !== "edit") {
       return void 0;
@@ -37816,6 +37835,89 @@ function DashboardPage() {
         renderCompactTasks(todayTasks, "오늘 등록된 일정이 없습니다.")
       ] }) })
     ] }),
+    calendarViewMode === "MONTH" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "dashboard-card dashboard-selected-day-card", "aria-label": "선택한 날짜의 일정", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("header", { className: "dashboard-card-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "eyebrow", children: "SELECTED DAY" }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("h3", { children: [
+            formatDateLabel(selectedDate),
+            " 일정"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", className: "btn btn-soft btn-compact", onClick: () => openCreateTask(selectedDate), children: "일정 추가" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "agenda-stat-grid selected-day-filter", role: "group", "aria-label": "상태별 필터", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `all ${selectedDayFilter === "all" ? "active" : ""}`,
+            onClick: () => setSelectedDayFilter("all"),
+            "aria-pressed": selectedDayFilter === "all",
+            children: [
+              "전체 ",
+              selectedDaySummary.total
+            ]
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `not_done ${selectedDayFilter === "NOT_DONE" ? "active" : ""}`,
+            onClick: () => toggleSelectedDayFilter("NOT_DONE"),
+            "aria-pressed": selectedDayFilter === "NOT_DONE",
+            children: [
+              "미완료 ",
+              selectedDaySummary.pending
+            ]
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `on_hold ${selectedDayFilter === "ON_HOLD" ? "active" : ""}`,
+            onClick: () => toggleSelectedDayFilter("ON_HOLD"),
+            "aria-pressed": selectedDayFilter === "ON_HOLD",
+            children: [
+              "보류 ",
+              selectedDaySummary.onHold
+            ]
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `done ${selectedDayFilter === "DONE" ? "active" : ""}`,
+            onClick: () => toggleSelectedDayFilter("DONE"),
+            "aria-pressed": selectedDayFilter === "DONE",
+            children: [
+              "완료 ",
+              selectedDaySummary.done
+            ]
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: `canceled ${selectedDayFilter === "CANCELED" ? "active" : ""}`,
+            onClick: () => toggleSelectedDayFilter("CANCELED"),
+            "aria-pressed": selectedDayFilter === "CANCELED",
+            children: [
+              "취소 ",
+              selectedDaySummary.canceled
+            ]
+          }
+        )
+      ] }),
+      renderCalendarTaskCards(
+        selectedDayFilteredTasks,
+        selectedDayFilter === "all" ? "이 날짜에 일정이 없습니다." : "해당 상태의 일정이 없습니다."
+      )
+    ] }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("section", { className: "dashboard-memo-section", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
       MarkdownMemo,
       {

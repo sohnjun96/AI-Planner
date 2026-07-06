@@ -7175,3 +7175,32 @@ textarea:focus-visible,
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary) inset;
 }
+
+/* ===== 대시보드 월간: 선택일 일정 섹션 (일정 보드와 메모 사이) ===== */
+.dashboard-selected-day-card .compact-task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-xs);
+}
+
+.dashboard-selected-day-card .selected-day-filter {
+  margin-bottom: var(--space-sm);
+}
+
+/* 미완료 외 상태(보류/완료/취소)는 회색으로 가라앉혀 확실히 구분한다 */
+.dashboard-selected-day-card .compact-task-card:not(.not_done) {
+  filter: grayscale(0.85);
+  opacity: 0.6;
+  border-left-color: var(--body-muted);
+}
+
+.dashboard-selected-day-card .compact-task-card:not(.not_done):hover {
+  filter: none;
+  opacity: 1;
+}
+
+.dashboard-selected-day-card .compact-task-card.done .compact-task-title,
+.dashboard-selected-day-card .compact-task-card.canceled .compact-task-title {
+  text-decoration: line-through;
+  color: var(--body-muted);
+}
