@@ -978,15 +978,15 @@ textarea:focus-visible,
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.24px;
 }
 .markdown-renderer h2 {
-  font-size: 23px;
+  font-size: 19px;
 }
 .markdown-renderer h3 {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
 }
 .markdown-renderer h4 {
