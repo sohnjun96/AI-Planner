@@ -571,18 +571,35 @@ export function AiAssistantWorkspace({
     }
   }
 
-  function describeContextSuggestion(suggestion: AgentContextSuggestion): string {
+  async function handleAcceptAllContextSuggestions() {
+    try {
+      for (const suggestion of pendingContextSuggestions) {
+        await acceptUserContextSuggestion(suggestion);
+      }
+      setPendingContextSuggestions([]);
+      setApplyResult("user.md에 규칙을 모두 저장했습니다.");
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
+    }
+  }
+
+  /** 규칙 내용을 구조화된 칩으로 렌더링한다 (슬래시로 이어붙인 문자열보다 훑기 쉽다) */
+  function renderContextSuggestionChips(suggestion: AgentContextSuggestion) {
     const projectName = suggestion.projectId ? projectMap[suggestion.projectId]?.name ?? suggestion.projectId : "";
     const taskTypeName = suggestion.taskTypeId ? taskTypeMap[suggestion.taskTypeId]?.name ?? suggestion.taskTypeId : "";
-    return [
-      suggestion.trigger.length > 0 ? `키워드 ${suggestion.trigger.join(", ")}` : "",
-      suggestion.defaultTime ? `기본 시간 ${suggestion.defaultTime}` : "",
-      projectName ? `프로젝트 ${projectName}` : "",
-      taskTypeName ? `종류 ${taskTypeName}` : "",
-      suggestion.isMajor ? "중요 표시" : "",
-    ]
-      .filter(Boolean)
-      .join(" / ");
+    return (
+      <div className="ctx-chip-row">
+        {suggestion.trigger.map((keyword) => (
+          <span key={keyword} className="ctx-chip keyword">
+            {keyword}
+          </span>
+        ))}
+        {suggestion.defaultTime ? <span className="ctx-chip time">🕐 {suggestion.defaultTime}</span> : null}
+        {projectName ? <span className="ctx-chip">📁 {projectName}</span> : null}
+        {taskTypeName ? <span className="ctx-chip">{taskTypeName}</span> : null}
+        {suggestion.isMajor ? <span className="ctx-chip major">중요 표시</span> : null}
+      </div>
+    );
   }
 
   function renderOperation(operation: AgentOperation, index: number) {
@@ -678,6 +695,62 @@ export function AiAssistantWorkspace({
 
       {!isLoading && lastTrace ? <p className="ai-trace-line">🔎 AI 참고: {lastTrace}</p> : null}
 
+      {pendingContextSuggestions.length > 0 ? (
+        /* 초안보다 먼저 배치 — 규칙을 검토·저장한 뒤 초안을 반영하는 흐름 */
+        <div className="context-suggestion-block">
+          <div className="context-suggestion-head">
+            <div>
+              <span className="badge-pill">user.md</span>
+              <strong>💡 AI가 학습한 규칙 {pendingContextSuggestions.length}개</strong>
+              <p className="description-text">
+                {pendingProposal
+                  ? "규칙을 먼저 검토하세요. 저장하면 다음 요청부터 자동 적용됩니다. 일정 초안은 아래에 있어요."
+                  : "반복해서 쓸 수 있는 일정 해석 규칙만 저장하세요."}
+              </p>
+            </div>
+            <div className="button-row compact">
+              {pendingContextSuggestions.length > 1 ? (
+                <button className="btn btn-primary btn-compact" type="button" onClick={() => void handleAcceptAllContextSuggestions()}>
+                  모두 저장
+                </button>
+              ) : null}
+              <button className="btn btn-outline btn-compact" type="button" onClick={() => setPendingContextSuggestions([])}>
+                모두 무시
+              </button>
+            </div>
+          </div>
+          <ul className="context-suggestion-list">
+            {pendingContextSuggestions.map((suggestion, index) => (
+              <li key={`${suggestion.category}-${suggestion.trigger.join("-")}-${index}`}>
+                <div className="context-suggestion-body">
+                  <strong>{suggestion.label ?? suggestion.trigger.join(", ")}</strong>
+                  {renderContextSuggestionChips(suggestion)}
+                  {suggestion.reason || suggestion.note ? <small>{suggestion.reason ?? suggestion.note}</small> : null}
+                </div>
+                <div className="context-suggestion-actions">
+                  <button
+                    className="btn btn-primary btn-compact"
+                    type="button"
+                    onClick={() => {
+                      void handleAcceptContextSuggestion(suggestion, index);
+                    }}
+                  >
+                    규칙 저장
+                  </button>
+                  <button
+                    className="btn btn-outline btn-compact"
+                    type="button"
+                    onClick={() => setPendingContextSuggestions((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    무시
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {pendingProposal ? (
         <div className="proposal-block compact-review">
           <div className="proposal-summary-row">
@@ -743,36 +816,6 @@ export function AiAssistantWorkspace({
       ) : hideInitialResult ? null : (
         <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
       )}
-
-      {pendingContextSuggestions.length > 0 ? (
-        <div className="context-suggestion-block">
-          <div>
-            <span className="badge-pill">user.md</span>
-            <strong>AI가 학습한 규칙</strong>
-            <p className="description-text">반복해서 쓸 수 있는 일정 해석 규칙만 저장하세요.</p>
-          </div>
-          <ul className="context-suggestion-list">
-            {pendingContextSuggestions.map((suggestion, index) => (
-              <li key={`${suggestion.category}-${suggestion.trigger.join("-")}-${index}`}>
-                <div>
-                  <strong>{suggestion.label ?? suggestion.trigger.join(", ")}</strong>
-                  <p>{describeContextSuggestion(suggestion)}</p>
-                  {suggestion.reason || suggestion.note ? <small>{suggestion.reason ?? suggestion.note}</small> : null}
-                </div>
-                <button
-                  className="btn btn-soft"
-                  type="button"
-                  onClick={() => {
-                    void handleAcceptContextSuggestion(suggestion, index);
-                  }}
-                >
-                  규칙 저장
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
 
       {applyResult ? <p className="success-text">{applyResult}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}

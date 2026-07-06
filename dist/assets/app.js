@@ -34039,16 +34039,33 @@ function AiAssistantWorkspace({
       setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
     }
   }
-  function describeContextSuggestion(suggestion) {
+  async function handleAcceptAllContextSuggestions() {
+    try {
+      for (const suggestion of pendingContextSuggestions) {
+        await acceptUserContextSuggestion(suggestion);
+      }
+      setPendingContextSuggestions([]);
+      setApplyResult("user.md에 규칙을 모두 저장했습니다.");
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
+    }
+  }
+  function renderContextSuggestionChips(suggestion) {
     const projectName = suggestion.projectId ? projectMap[suggestion.projectId]?.name ?? suggestion.projectId : "";
     const taskTypeName = suggestion.taskTypeId ? taskTypeMap[suggestion.taskTypeId]?.name ?? suggestion.taskTypeId : "";
-    return [
-      suggestion.trigger.length > 0 ? `키워드 ${suggestion.trigger.join(", ")}` : "",
-      suggestion.defaultTime ? `기본 시간 ${suggestion.defaultTime}` : "",
-      projectName ? `프로젝트 ${projectName}` : "",
-      taskTypeName ? `종류 ${taskTypeName}` : "",
-      suggestion.isMajor ? "중요 표시" : ""
-    ].filter(Boolean).join(" / ");
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ctx-chip-row", children: [
+      suggestion.trigger.map((keyword) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ctx-chip keyword", children: keyword }, keyword)),
+      suggestion.defaultTime ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "ctx-chip time", children: [
+        "🕐 ",
+        suggestion.defaultTime
+      ] }) : null,
+      projectName ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "ctx-chip", children: [
+        "📁 ",
+        projectName
+      ] }) : null,
+      taskTypeName ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ctx-chip", children: taskTypeName }) : null,
+      suggestion.isMajor ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ctx-chip major", children: "중요 표시" }) : null
+    ] });
   }
   function renderOperation(operation, index) {
     const isSelected = selectedOperationSet.has(index);
@@ -34119,6 +34136,55 @@ function AiAssistantWorkspace({
       "🔎 AI 참고: ",
       lastTrace
     ] }) : null,
+    pendingContextSuggestions.length > 0 ? (
+      /* 초안보다 먼저 배치 — 규칙을 검토·저장한 뒤 초안을 반영하는 흐름 */
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "context-suggestion-block", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "context-suggestion-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "user.md" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("strong", { children: [
+              "💡 AI가 학습한 규칙 ",
+              pendingContextSuggestions.length,
+              "개"
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: pendingProposal ? "규칙을 먼저 검토하세요. 저장하면 다음 요청부터 자동 적용됩니다. 일정 초안은 아래에 있어요." : "반복해서 쓸 수 있는 일정 해석 규칙만 저장하세요." })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "button-row compact", children: [
+            pendingContextSuggestions.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-primary btn-compact", type: "button", onClick: () => void handleAcceptAllContextSuggestions(), children: "모두 저장" }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "btn btn-outline btn-compact", type: "button", onClick: () => setPendingContextSuggestions([]), children: "모두 무시" })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: "context-suggestion-list", children: pendingContextSuggestions.map((suggestion, index) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("li", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "context-suggestion-body", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: suggestion.label ?? suggestion.trigger.join(", ") }),
+            renderContextSuggestionChips(suggestion),
+            suggestion.reason || suggestion.note ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: suggestion.reason ?? suggestion.note }) : null
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "context-suggestion-actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+              "button",
+              {
+                className: "btn btn-primary btn-compact",
+                type: "button",
+                onClick: () => {
+                  void handleAcceptContextSuggestion(suggestion, index);
+                },
+                children: "규칙 저장"
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+              "button",
+              {
+                className: "btn btn-outline btn-compact",
+                type: "button",
+                onClick: () => setPendingContextSuggestions((prev) => prev.filter((_, itemIndex) => itemIndex !== index)),
+                children: "무시"
+              }
+            )
+          ] })
+        ] }, `${suggestion.category}-${suggestion.trigger.join("-")}-${index}`)) })
+      ] })
+    ) : null,
     pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-block compact-review", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-summary-row", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
@@ -34172,31 +34238,6 @@ function AiAssistantWorkspace({
         )
       ] }) : null
     ] }) : isLoading ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: responseText }) : hideInitialResult ? null : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "empty-text", children: "대기 중인 초안이나 변경안이 없습니다." }),
-    pendingContextSuggestions.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "context-suggestion-block", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "user.md" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "AI가 학습한 규칙" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: "반복해서 쓸 수 있는 일정 해석 규칙만 저장하세요." })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: "context-suggestion-list", children: pendingContextSuggestions.map((suggestion, index) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("li", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: suggestion.label ?? suggestion.trigger.join(", ") }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: describeContextSuggestion(suggestion) }),
-          suggestion.reason || suggestion.note ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: suggestion.reason ?? suggestion.note }) : null
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "button",
-          {
-            className: "btn btn-soft",
-            type: "button",
-            onClick: () => {
-              void handleAcceptContextSuggestion(suggestion, index);
-            },
-            children: "규칙 저장"
-          }
-        )
-      ] }, `${suggestion.category}-${suggestion.trigger.join("-")}-${index}`)) })
-    ] }) : null,
     applyResult ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "success-text", children: applyResult }) : null,
     error ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "error-text", children: error }) : null
   ] }) : null;
