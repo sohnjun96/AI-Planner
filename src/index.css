@@ -7201,6 +7201,5 @@ textarea:focus-visible,
 
 .dashboard-selected-day-card .compact-task-card.done .compact-task-title,
 .dashboard-selected-day-card .compact-task-card.canceled .compact-task-title {
-  text-decoration: line-through;
   color: var(--body-muted);
 }
