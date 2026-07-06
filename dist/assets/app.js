@@ -31668,14 +31668,28 @@ function AppDataProvider({ children }) {
       });
       return;
     }
+    const existingProjects = await db.projects.toArray();
+    const maxOrder = existingProjects.reduce((max, project) => Math.max(max, project.order ?? -1), -1);
     await db.projects.add({
       id: getId("project"),
       name,
       color: input.color,
       description: input.description?.trim(),
       isActive: input.isActive,
+      order: maxOrder + 1,
       createdAt: now,
       updatedAt: now
+    });
+  }, []);
+  const reorderProjects = (0, import_react2.useCallback)(async (orderedIds) => {
+    const now = toIsoNow();
+    await db.transaction("rw", db.projects, async () => {
+      for (let index = 0; index < orderedIds.length; index += 1) {
+        const existing = await db.projects.get(orderedIds[index]);
+        if (existing && existing.order !== index) {
+          await db.projects.put({ ...existing, order: index, updatedAt: now });
+        }
+      }
     });
   }, []);
   const deleteProject = (0, import_react2.useCallback)(async (id) => {
@@ -32015,6 +32029,7 @@ function AppDataProvider({ children }) {
       deleteSubcategory,
       upsertProject,
       deleteProject,
+      reorderProjects,
       upsertTaskType,
       deleteTaskType,
       saveMemo,
@@ -32058,6 +32073,7 @@ function AppDataProvider({ children }) {
       deleteSubcategory,
       upsertProject,
       deleteProject,
+      reorderProjects,
       upsertTaskType,
       deleteTaskType,
       saveMemo,
@@ -36321,6 +36337,18 @@ function MonthCalendar({
 
 // src/components/TaskForm.tsx
 var import_react14 = __toESM(require_react(), 1);
+
+// src/utils/projectOrder.ts
+function compareProjects(a, b) {
+  const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+  const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+  if (orderA !== orderB) {
+    return orderA - orderB;
+  }
+  return a.name.localeCompare(b.name, "ko");
+}
+
+// src/components/TaskForm.tsx
 var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
 function buildDefaultState(projects, taskTypes, defaultStartDate) {
   const now = /* @__PURE__ */ new Date();
@@ -36434,8 +36462,9 @@ function TaskForm({
   onDelete,
   onCancel
 }) {
+  const orderedProjects = (0, import_react14.useMemo)(() => [...projects].sort(compareProjects), [projects]);
   const [form, setForm] = (0, import_react14.useState)(() => {
-    return initialTask ? buildStateFromTask(initialTask) : buildDefaultState(projects, taskTypes, defaultStartDate);
+    return initialTask ? buildStateFromTask(initialTask) : buildDefaultState(orderedProjects, taskTypes, defaultStartDate);
   });
   const [error, setError] = (0, import_react14.useState)("");
   const [isSubmitting, setIsSubmitting] = (0, import_react14.useState)(false);
@@ -36507,7 +36536,7 @@ function TaskForm({
       autoSaveSnapshotRef.current = serializeTaskMetadataInput(built.input);
       setAutoSaveMessage("저장됨");
       if (!isEdit) {
-        setForm(buildDefaultState(projects, taskTypes, defaultStartDate));
+        setForm(buildDefaultState(orderedProjects, taskTypes, defaultStartDate));
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
@@ -36572,7 +36601,7 @@ function TaskForm({
           {
             value: form.projectId,
             onChange: (event) => setForm((prev) => ({ ...prev, projectId: event.target.value })),
-            children: projects.filter((item) => item.isActive || item.id === form.projectId).map((project) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: project.id, children: project.name }, project.id))
+            children: orderedProjects.filter((item) => item.isActive || item.id === form.projectId).map((project) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: project.id, children: project.name }, project.id))
           }
         )
       ] })
@@ -40814,6 +40843,7 @@ function ProjectsPage() {
     removeTask,
     upsertProject,
     deleteProject,
+    reorderProjects,
     createSubcategory,
     renameSubcategory,
     deleteSubcategory
@@ -40835,9 +40865,29 @@ function ProjectsPage() {
         return true;
       }
       return `${project.name} ${project.description ?? ""}`.toLowerCase().includes(keyword);
-    }).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    }).sort(compareProjects);
   }, [projectKeyword, projects]);
-  const allSortedProjects = (0, import_react22.useMemo)(() => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")), [projects]);
+  const allSortedProjects = (0, import_react22.useMemo)(() => [...projects].sort(compareProjects), [projects]);
+  const [dragProjectId, setDragProjectId] = (0, import_react22.useState)(null);
+  const [dragOverProjectId, setDragOverProjectId] = (0, import_react22.useState)(null);
+  const isDragEnabled = !projectKeyword.trim();
+  function handleProjectDrop(targetId) {
+    const draggedId = dragProjectId;
+    setDragProjectId(null);
+    setDragOverProjectId(null);
+    if (!draggedId || draggedId === targetId) {
+      return;
+    }
+    const ids = sortedProjects.map((project) => project.id);
+    const fromIndex = ids.indexOf(draggedId);
+    const toIndex = ids.indexOf(targetId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return;
+    }
+    ids.splice(fromIndex, 1);
+    ids.splice(toIndex, 0, draggedId);
+    void reorderProjects(ids);
+  }
   const selectedProject = (0, import_react22.useMemo)(() => {
     if (selectedProjectIdFromQuery) {
       const byQuery = projects.find((project) => project.id === selectedProjectIdFromQuery);
@@ -41072,7 +41122,7 @@ function ProjectsPage() {
       /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("p", { className: "eyebrow", children: "PROJECTS" }),
         /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("h2", { children: "프로젝트" }),
-        /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("p", { className: "description-text", children: "프로젝트별 진행 상황을 먼저 보고, 필요한 프로젝트 안에서 일정을 관리합니다." })
+        /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("p", { className: "description-text", children: "프로젝트별 진행 상황을 먼저 보고, 필요한 프로젝트 안에서 일정을 관리합니다. 카드를 드래그하면 순서를 바꿀 수 있어요." })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { className: "projects-actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("label", { className: "search-field", children: [
@@ -41101,8 +41151,33 @@ function ProjectsPage() {
           "button",
           {
             type: "button",
-            className: `project-summary-card ${selectedProject?.id === project.id ? "selected" : ""}`,
+            className: `project-summary-card ${selectedProject?.id === project.id ? "selected" : ""} ${dragProjectId === project.id ? "dragging" : ""} ${dragOverProjectId === project.id && dragProjectId !== project.id ? "drag-over" : ""}`,
             onClick: () => selectProject(project.id),
+            draggable: isDragEnabled,
+            title: isDragEnabled ? "드래그해서 순서 변경" : void 0,
+            onDragStart: (event) => {
+              setDragProjectId(project.id);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", project.id);
+            },
+            onDragOver: (event) => {
+              if (dragProjectId && dragProjectId !== project.id) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDragOverProjectId(project.id);
+              }
+            },
+            onDragLeave: () => {
+              setDragOverProjectId((prev) => prev === project.id ? null : prev);
+            },
+            onDrop: (event) => {
+              event.preventDefault();
+              handleProjectDrop(project.id);
+            },
+            onDragEnd: () => {
+              setDragProjectId(null);
+              setDragOverProjectId(null);
+            },
             children: [
               /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { className: "project-color-bar", style: { backgroundColor: project.color } }),
               /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("span", { className: "project-card-title", children: [

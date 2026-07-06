@@ -88,6 +88,8 @@ export interface Project {
   color: string;
   description?: string;
   isActive: boolean;
+  /** 프로젝트 탭에서 드래그앤드롭으로 정한 표시 순서. 없으면 이름순으로 뒤에 배치된다. */
+  order?: number;
   createdAt: string;
   updatedAt: string;
 }

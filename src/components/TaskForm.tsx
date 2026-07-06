@@ -8,6 +8,7 @@ import {
   toLocalDateInputValue,
   toLocalTimeInputValue,
 } from "../utils/date";
+import { compareProjects } from "../utils/projectOrder";
 import { findTaskConflictsForRange } from "../utils/taskConflicts";
 
 interface TaskFormProps {
@@ -168,8 +169,10 @@ export function TaskForm({
   onDelete,
   onCancel,
 }: TaskFormProps) {
+  // 프로젝트 탭에서 정한 표시 순서를 선택리스트에도 그대로 적용한다
+  const orderedProjects = useMemo(() => [...projects].sort(compareProjects), [projects]);
   const [form, setForm] = useState<FormState>(() => {
-    return initialTask ? buildStateFromTask(initialTask) : buildDefaultState(projects, taskTypes, defaultStartDate);
+    return initialTask ? buildStateFromTask(initialTask) : buildDefaultState(orderedProjects, taskTypes, defaultStartDate);
   });
   const [error, setError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -260,7 +263,7 @@ export function TaskForm({
       setAutoSaveMessage("저장됨");
 
       if (!isEdit) {
-        setForm(buildDefaultState(projects, taskTypes, defaultStartDate));
+        setForm(buildDefaultState(orderedProjects, taskTypes, defaultStartDate));
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
@@ -328,7 +331,7 @@ export function TaskForm({
               value={form.projectId}
               onChange={(event) => setForm((prev) => ({ ...prev, projectId: event.target.value }))}
             >
-              {projects
+              {orderedProjects
                 .filter((item) => item.isActive || item.id === form.projectId)
                 .map((project) => (
                   <option key={project.id} value={project.id}>

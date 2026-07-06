@@ -91,6 +91,7 @@ interface AppDataContextValue {
   deleteSubcategory: (id: string) => Promise<void>;
   upsertProject: (input: ProjectInput) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
+  reorderProjects: (orderedIds: string[]) => Promise<void>;
   upsertTaskType: (input: TaskTypeInput) => Promise<void>;
   deleteTaskType: (id: string) => Promise<void>;
   saveMemo: (date: string, content: string) => Promise<void>;
@@ -1002,14 +1003,31 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // 새 프로젝트는 목록 맨 뒤 순서로 추가한다
+    const existingProjects = await db.projects.toArray();
+    const maxOrder = existingProjects.reduce((max, project) => Math.max(max, project.order ?? -1), -1);
     await db.projects.add({
       id: getId("project"),
       name,
       color: input.color,
       description: input.description?.trim(),
       isActive: input.isActive,
+      order: maxOrder + 1,
       createdAt: now,
       updatedAt: now,
+    });
+  }, []);
+
+  /** 프로젝트 탭 드래그앤드롭 순서를 저장한다. orderedIds의 인덱스가 곧 표시 순서다. */
+  const reorderProjects = useCallback(async (orderedIds: string[]) => {
+    const now = toIsoNow();
+    await db.transaction("rw", db.projects, async () => {
+      for (let index = 0; index < orderedIds.length; index += 1) {
+        const existing = await db.projects.get(orderedIds[index]);
+        if (existing && existing.order !== index) {
+          await db.projects.put({ ...existing, order: index, updatedAt: now });
+        }
+      }
     });
   }, []);
 
@@ -1412,6 +1430,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       deleteSubcategory,
       upsertProject,
       deleteProject,
+      reorderProjects,
       upsertTaskType,
       deleteTaskType,
       saveMemo,
@@ -1455,6 +1474,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       deleteSubcategory,
       upsertProject,
       deleteProject,
+      reorderProjects,
       upsertTaskType,
       deleteTaskType,
       saveMemo,

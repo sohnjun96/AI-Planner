@@ -8,6 +8,7 @@ import { DEFAULT_PROJECT_IDS, STATUS_LABELS, pickRandomPresetColor } from "../co
 import { useAppData } from "../context/AppDataContext";
 import type { Project, ProjectSubcategory, Task, TaskFormInput, TaskStatus } from "../models";
 import { addDays, compareByStartAtAsc, formatDateTime, getDateKey } from "../utils/date";
+import { compareProjects } from "../utils/projectOrder";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 import { isTaskActive, isTaskDone } from "../utils/taskStatus";
 
@@ -437,6 +438,7 @@ export function ProjectsPage() {
     removeTask,
     upsertProject,
     deleteProject,
+    reorderProjects,
     createSubcategory,
     renameSubcategory,
     deleteSubcategory,
@@ -462,10 +464,34 @@ export function ProjectsPage() {
         }
         return `${project.name} ${project.description ?? ""}`.toLowerCase().includes(keyword);
       })
-      .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+      .sort(compareProjects);
   }, [projectKeyword, projects]);
 
-  const allSortedProjects = useMemo(() => [...projects].sort((a, b) => a.name.localeCompare(b.name, "ko")), [projects]);
+  const allSortedProjects = useMemo(() => [...projects].sort(compareProjects), [projects]);
+
+  // 드래그앤드롭 순서 변경 — 검색 중에는 부분 목록이라 순서가 모호해 비활성화한다
+  const [dragProjectId, setDragProjectId] = useState<string | null>(null);
+  const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
+  const isDragEnabled = !projectKeyword.trim();
+
+  function handleProjectDrop(targetId: string) {
+    const draggedId = dragProjectId;
+    setDragProjectId(null);
+    setDragOverProjectId(null);
+    if (!draggedId || draggedId === targetId) {
+      return;
+    }
+    // 끌어온 카드가 대상 카드의 자리를 차지하도록 이동 (array-move)
+    const ids = sortedProjects.map((project) => project.id);
+    const fromIndex = ids.indexOf(draggedId);
+    const toIndex = ids.indexOf(targetId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return;
+    }
+    ids.splice(fromIndex, 1);
+    ids.splice(toIndex, 0, draggedId);
+    void reorderProjects(ids);
+  }
 
   const selectedProject = useMemo(() => {
     if (selectedProjectIdFromQuery) {
@@ -742,7 +768,10 @@ export function ProjectsPage() {
         <div>
           <p className="eyebrow">PROJECTS</p>
           <h2>프로젝트</h2>
-          <p className="description-text">프로젝트별 진행 상황을 먼저 보고, 필요한 프로젝트 안에서 일정을 관리합니다.</p>
+          <p className="description-text">
+            프로젝트별 진행 상황을 먼저 보고, 필요한 프로젝트 안에서 일정을 관리합니다. 카드를 드래그하면 순서를 바꿀 수
+            있어요.
+          </p>
         </div>
         <div className="projects-actions">
           <label className="search-field">
@@ -774,8 +803,35 @@ export function ProjectsPage() {
             <button
               key={project.id}
               type="button"
-              className={`project-summary-card ${selectedProject?.id === project.id ? "selected" : ""}`}
+              className={`project-summary-card ${selectedProject?.id === project.id ? "selected" : ""} ${
+                dragProjectId === project.id ? "dragging" : ""
+              } ${dragOverProjectId === project.id && dragProjectId !== project.id ? "drag-over" : ""}`}
               onClick={() => selectProject(project.id)}
+              draggable={isDragEnabled}
+              title={isDragEnabled ? "드래그해서 순서 변경" : undefined}
+              onDragStart={(event) => {
+                setDragProjectId(project.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", project.id);
+              }}
+              onDragOver={(event) => {
+                if (dragProjectId && dragProjectId !== project.id) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDragOverProjectId(project.id);
+                }
+              }}
+              onDragLeave={() => {
+                setDragOverProjectId((prev) => (prev === project.id ? null : prev));
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                handleProjectDrop(project.id);
+              }}
+              onDragEnd={() => {
+                setDragProjectId(null);
+                setDragOverProjectId(null);
+              }}
             >
               <span className="project-color-bar" style={{ backgroundColor: project.color }} />
               <span className="project-card-title">
