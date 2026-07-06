@@ -14,7 +14,9 @@ import {
 import {
   extractJsonText,
   isRecord,
+  parseFlexibleToolCalls,
   pickFirstString,
+  pickToolCallsValue,
   requestJsonWithRetry,
   type LlmChatMessage,
 } from "./agentUtils";
@@ -72,37 +74,61 @@ const TOOL_LABELS: Record<QaToolName, string> = {
 
 const SYSTEM_PROMPT = `
 You answer questions about a Korean user's own notes and schedule (tasks).
-Use the tools to find relevant notes and tasks before answering. Do not invent facts; rely only on tool results.
-Answer in Korean, concise and specific. Cite the concrete notes/tasks you used as references.
+Answer in Korean, concise and specific. Do not invent facts; rely only on the provided catalogs and tool results.
+Cite the concrete notes/tasks you used as references.
 
 Return exactly ONE JSON object with every key:
 {
   "answer": "Korean answer in short Markdown",
-  "references": [ { "type": "note" | "task", "id": "id from tool results", "title": "title" } ],
+  "references": [ { "type": "note" | "task", "id": "real id", "title": "title" } ],
   "toolCalls": []
 }
+
+The payload always includes quick catalogs:
+- noteIndex: [{ id, title, projectId }] — every note title.
+- taskIndex: [{ id, title, startAt, status }] — task titles with schedule info.
+Match the question against these titles first. You may cite catalog ids directly in references.
+Call get_note / get_task when you need the body or details, and search tools for content keywords not visible in titles.
 
 Rules:
 1. To look things up, return toolCalls (and leave answer empty). Do not answer and call tools in the same response.
 2. Tools: search_notes { keyword?, projectId?, status?, limit? }, get_note { noteId }, search_tasks { keyword?, status?, date?, startDate?, endDate?, projectId?, limit? }, get_task { taskId }.
-3. Only put ids that came from tool results in references. If you found nothing, say so honestly and return empty references.
+3. Only put ids from the catalogs or tool results in references. If you found nothing, say so honestly and return empty references.
 4. No markdown fences, no text outside the JSON.
 5. The current date/time is already provided as "now" in the payload — never call a tool for it.
 6. Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
 `.trim();
 
+const MAX_INDEX_NOTES = 150;
+const MAX_INDEX_TASKS = 200;
+
+/** 도구를 못 쓰는(또는 안 쓰는) 모델도 답할 수 있도록 노트 제목 카탈로그를 만든다. */
+function buildNoteIndex(notes: Note[]): Array<{ id: string; title: string; projectId: string }> {
+  return notes
+    .filter((note) => note.status !== "archived")
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, MAX_INDEX_NOTES)
+    .map((note) => ({ id: note.id, title: note.title, projectId: note.projectId }));
+}
+
+/** 오늘과 가까운 일정 우선으로 일정 카탈로그를 만든다. */
+function buildTaskIndex(tasks: Task[]): Array<{ id: string; title: string; startAt: string; status: string }> {
+  const now = Date.now();
+  return [...tasks]
+    .sort(
+      (a, b) =>
+        Math.abs(new Date(a.startAt).getTime() - now) - Math.abs(new Date(b.startAt).getTime() - now),
+    )
+    .slice(0, MAX_INDEX_TASKS)
+    .map((task) => ({ id: task.id, title: task.title, startAt: task.startAt, status: task.status }));
+}
+
 function parseToolCalls(value: unknown): QaToolCall[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((item) => {
-      if (!isRecord(item) || typeof item.tool !== "string" || !ALLOWED_TOOLS.includes(item.tool as QaToolName)) {
-        return null;
-      }
-      return { tool: item.tool as QaToolName, args: isRecord(item.args) ? item.args : {} } satisfies QaToolCall;
-    })
-    .filter((item): item is QaToolCall => item !== null);
+  // tool/name/function.name, args/arguments 등 모델별 표기 편차를 흡수한다
+  return parseFlexibleToolCalls(value, ALLOWED_TOOLS).map((call) => ({
+    tool: call.tool as QaToolName,
+    args: call.args,
+  }));
 }
 
 function executeToolCall(call: QaToolCall, input: RunQaInput): ToolExecutionResult {
@@ -128,6 +154,8 @@ function buildMessages(input: RunQaInput, toolResults: ToolExecutionResult[]): L
     now: toIsoNow(),
     question: input.question,
     knownProjects: input.projects.map((project) => ({ id: project.id, name: project.name })),
+    noteIndex: buildNoteIndex(input.notes),
+    taskIndex: buildTaskIndex(input.tasks),
     toolResults,
   };
   return [
@@ -191,7 +219,7 @@ export async function runQaAgent(input: RunQaInput): Promise<QaResult> {
 
     // 모델이 answer와 toolCalls를 한 응답에 함께 담는 경우가 많다 — 답변을 버리지 않도록 먼저 뽑아둔다
     const answerText = pickFirstString(payload, ["answer", "response", "text"]);
-    const toolCalls = parseToolCalls(payload.toolCalls).slice(0, 4);
+    const toolCalls = parseToolCalls(pickToolCallsValue(payload)).slice(0, 4);
     if (toolCalls.length > 0) {
       const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
       if (freshCalls.length > 0 && !isFinalRound) {

@@ -120,6 +120,52 @@ export function isAbortError(error: unknown): boolean {
   return Boolean(error) && (error as { name?: string }).name === "AbortError";
 }
 
+export interface FlexibleToolCall {
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * 모델별 도구 호출 표기 편차를 흡수하는 관대한 파서.
+ * - 이름 키: tool / name / tool_name / function.name (OpenAI 네이티브 중첩 형식 포함)
+ * - 인자 키: args / arguments / parameters / input / function.arguments
+ * - 인자가 JSON 문자열이면 파싱해서 객체로 변환
+ * allowedTools에 없는 호출은 버린다.
+ */
+export function parseFlexibleToolCalls(value: unknown, allowedTools: readonly string[]): FlexibleToolCall[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const calls: FlexibleToolCall[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    const fn = isRecord(item.function) ? item.function : undefined;
+    const nameCandidate = [item.tool, item.name, item.tool_name, fn?.name].find(
+      (candidate) => typeof candidate === "string" && candidate.trim(),
+    );
+    if (typeof nameCandidate !== "string") {
+      continue;
+    }
+    const name = nameCandidate.trim();
+    if (!allowedTools.includes(name)) {
+      continue;
+    }
+    const argsCandidate = [item.args, item.arguments, item.parameters, item.input, fn?.arguments].find(
+      (candidate) => candidate !== undefined && candidate !== null,
+    );
+    const parsedArgs = tryParseJsonLikeValue(argsCandidate);
+    calls.push({ tool: name, args: isRecord(parsedArgs) ? parsedArgs : {} });
+  }
+  return calls;
+}
+
+/** 응답 페이로드에서 도구 호출 배열을 키 이름 편차(toolCalls/tool_calls/actions)까지 감안해 꺼낸다. */
+export function pickToolCallsValue(payload: Record<string, unknown>): unknown {
+  return payload.toolCalls ?? payload.tool_calls ?? payload.actions;
+}
+
 const JSON_RETRY_NUDGE =
   "Your previous reply was not one valid JSON object. Respond again with exactly one valid JSON object matching the required schema — no markdown fences, no text before or after the JSON.";
 

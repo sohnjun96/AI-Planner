@@ -32742,6 +32742,37 @@ function resolveEntityId(rawValue, items, fallbackId) {
 function isAbortError(error) {
   return Boolean(error) && error.name === "AbortError";
 }
+function parseFlexibleToolCalls(value, allowedTools) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const calls = [];
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    const fn = isRecord(item.function) ? item.function : void 0;
+    const nameCandidate = [item.tool, item.name, item.tool_name, fn?.name].find(
+      (candidate) => typeof candidate === "string" && candidate.trim()
+    );
+    if (typeof nameCandidate !== "string") {
+      continue;
+    }
+    const name = nameCandidate.trim();
+    if (!allowedTools.includes(name)) {
+      continue;
+    }
+    const argsCandidate = [item.args, item.arguments, item.parameters, item.input, fn?.arguments].find(
+      (candidate) => candidate !== void 0 && candidate !== null
+    );
+    const parsedArgs = tryParseJsonLikeValue(argsCandidate);
+    calls.push({ tool: name, args: isRecord(parsedArgs) ? parsedArgs : {} });
+  }
+  return calls;
+}
+function pickToolCallsValue(payload) {
+  return payload.toolCalls ?? payload.tool_calls ?? payload.actions;
+}
 var JSON_RETRY_NUDGE = "Your previous reply was not one valid JSON object. Respond again with exactly one valid JSON object matching the required schema — no markdown fences, no text before or after the JSON.";
 async function requestJsonWithRetry(params) {
   const raw = await requestLlmResponse(params);
@@ -34288,34 +34319,46 @@ var TOOL_LABELS = {
 };
 var SYSTEM_PROMPT2 = `
 You answer questions about a Korean user's own notes and schedule (tasks).
-Use the tools to find relevant notes and tasks before answering. Do not invent facts; rely only on tool results.
-Answer in Korean, concise and specific. Cite the concrete notes/tasks you used as references.
+Answer in Korean, concise and specific. Do not invent facts; rely only on the provided catalogs and tool results.
+Cite the concrete notes/tasks you used as references.
 
 Return exactly ONE JSON object with every key:
 {
   "answer": "Korean answer in short Markdown",
-  "references": [ { "type": "note" | "task", "id": "id from tool results", "title": "title" } ],
+  "references": [ { "type": "note" | "task", "id": "real id", "title": "title" } ],
   "toolCalls": []
 }
+
+The payload always includes quick catalogs:
+- noteIndex: [{ id, title, projectId }] — every note title.
+- taskIndex: [{ id, title, startAt, status }] — task titles with schedule info.
+Match the question against these titles first. You may cite catalog ids directly in references.
+Call get_note / get_task when you need the body or details, and search tools for content keywords not visible in titles.
 
 Rules:
 1. To look things up, return toolCalls (and leave answer empty). Do not answer and call tools in the same response.
 2. Tools: search_notes { keyword?, projectId?, status?, limit? }, get_note { noteId }, search_tasks { keyword?, status?, date?, startDate?, endDate?, projectId?, limit? }, get_task { taskId }.
-3. Only put ids that came from tool results in references. If you found nothing, say so honestly and return empty references.
+3. Only put ids from the catalogs or tool results in references. If you found nothing, say so honestly and return empty references.
 4. No markdown fences, no text outside the JSON.
 5. The current date/time is already provided as "now" in the payload — never call a tool for it.
 6. Never repeat a tool call with the same arguments; earlier results stay available in toolResults.
 `.trim();
+var MAX_INDEX_NOTES = 150;
+var MAX_INDEX_TASKS = 200;
+function buildNoteIndex(notes) {
+  return notes.filter((note) => note.status !== "archived").sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, MAX_INDEX_NOTES).map((note) => ({ id: note.id, title: note.title, projectId: note.projectId }));
+}
+function buildTaskIndex(tasks) {
+  const now = Date.now();
+  return [...tasks].sort(
+    (a, b) => Math.abs(new Date(a.startAt).getTime() - now) - Math.abs(new Date(b.startAt).getTime() - now)
+  ).slice(0, MAX_INDEX_TASKS).map((task) => ({ id: task.id, title: task.title, startAt: task.startAt, status: task.status }));
+}
 function parseToolCalls2(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.map((item) => {
-    if (!isRecord(item) || typeof item.tool !== "string" || !ALLOWED_TOOLS.includes(item.tool)) {
-      return null;
-    }
-    return { tool: item.tool, args: isRecord(item.args) ? item.args : {} };
-  }).filter((item) => item !== null);
+  return parseFlexibleToolCalls(value, ALLOWED_TOOLS).map((call) => ({
+    tool: call.tool,
+    args: call.args
+  }));
 }
 function executeToolCall2(call, input) {
   const ctx = { tasks: input.tasks, projects: input.projects, taskTypes: input.taskTypes, notes: input.notes };
@@ -34338,6 +34381,8 @@ function buildMessages(input, toolResults) {
     now: toIsoNow(),
     question: input.question,
     knownProjects: input.projects.map((project) => ({ id: project.id, name: project.name })),
+    noteIndex: buildNoteIndex(input.notes),
+    taskIndex: buildTaskIndex(input.tasks),
     toolResults
   };
   return [
@@ -34387,7 +34432,7 @@ async function runQaAgent(input) {
       };
     }
     const answerText = pickFirstString(payload, ["answer", "response", "text"]);
-    const toolCalls = parseToolCalls2(payload.toolCalls).slice(0, 4);
+    const toolCalls = parseToolCalls2(pickToolCallsValue(payload)).slice(0, 4);
     if (toolCalls.length > 0) {
       const freshCalls = toolCalls.filter((call) => !callCache.has(call.tool, call.args));
       if (freshCalls.length > 0 && !isFinalRound) {
