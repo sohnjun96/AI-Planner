@@ -92,6 +92,7 @@ interface AppDataContextValue {
   upsertProject: (input: ProjectInput) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   reorderProjects: (orderedIds: string[]) => Promise<void>;
+  reorderNotes: (orderedIds: string[]) => Promise<void>;
   upsertTaskType: (input: TaskTypeInput) => Promise<void>;
   deleteTaskType: (id: string) => Promise<void>;
   saveMemo: (date: string, content: string) => Promise<void>;
@@ -1031,6 +1032,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  /** 노트 탐색기 드래그앤드롭 순서 저장. updatedAt은 건드리지 않아 최근 수정순 정렬을 오염시키지 않는다. */
+  const reorderNotes = useCallback(async (orderedIds: string[]) => {
+    await db.transaction("rw", db.notes, async () => {
+      for (let index = 0; index < orderedIds.length; index += 1) {
+        const existing = await db.notes.get(orderedIds[index]);
+        if (existing && existing.sortOrder !== index) {
+          await db.notes.put({ ...existing, sortOrder: index });
+        }
+      }
+    });
+  }, []);
+
   const deleteProject = useCallback(async (id: string) => {
     if (DEFAULT_PROJECT_IDS.includes(id)) {
       throw new Error("기본 프로젝트는 삭제할 수 없습니다.");
@@ -1431,6 +1444,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       upsertProject,
       deleteProject,
       reorderProjects,
+      reorderNotes,
       upsertTaskType,
       deleteTaskType,
       saveMemo,
@@ -1475,6 +1489,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       upsertProject,
       deleteProject,
       reorderProjects,
+      reorderNotes,
       upsertTaskType,
       deleteTaskType,
       saveMemo,

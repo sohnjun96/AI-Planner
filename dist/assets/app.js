@@ -31692,6 +31692,16 @@ function AppDataProvider({ children }) {
       }
     });
   }, []);
+  const reorderNotes = (0, import_react2.useCallback)(async (orderedIds) => {
+    await db.transaction("rw", db.notes, async () => {
+      for (let index = 0; index < orderedIds.length; index += 1) {
+        const existing = await db.notes.get(orderedIds[index]);
+        if (existing && existing.sortOrder !== index) {
+          await db.notes.put({ ...existing, sortOrder: index });
+        }
+      }
+    });
+  }, []);
   const deleteProject = (0, import_react2.useCallback)(async (id) => {
     if (DEFAULT_PROJECT_IDS.includes(id)) {
       throw new Error("기본 프로젝트는 삭제할 수 없습니다.");
@@ -32030,6 +32040,7 @@ function AppDataProvider({ children }) {
       upsertProject,
       deleteProject,
       reorderProjects,
+      reorderNotes,
       upsertTaskType,
       deleteTaskType,
       saveMemo,
@@ -32074,6 +32085,7 @@ function AppDataProvider({ children }) {
       upsertProject,
       deleteProject,
       reorderProjects,
+      reorderNotes,
       upsertTaskType,
       deleteTaskType,
       saveMemo,
@@ -38013,7 +38025,24 @@ function toSnippet2(content) {
   const plain = content.replace(/```[\s\S]*?```/g, " ").replace(/[#>*`_\-[\]()]/g, " ").replace(/\s+/g, " ").trim();
   return plain.slice(0, 90);
 }
-function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck, onOpenMenu }) {
+function NoteCard({
+  note,
+  project,
+  isSelected,
+  isChecked,
+  linkedTaskCount,
+  onSelect,
+  onToggleCheck,
+  onOpenMenu,
+  draggable,
+  dragging,
+  dragOver,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd
+}) {
   const snippet = toSnippet2(note.content);
   function handleCheckClick(event) {
     event.stopPropagation();
@@ -38026,8 +38055,14 @@ function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSel
   return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
     "article",
     {
-      className: `note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""}`,
+      className: `note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""} ${dragging ? "dragging" : ""} ${dragOver ? "drag-over" : ""}`,
       style: { "--note-project-color": project?.color ?? "var(--body-muted)" },
+      draggable,
+      onDragStart,
+      onDragOver,
+      onDragLeave,
+      onDrop,
+      onDragEnd,
       onClick: onSelect,
       onContextMenu: (event) => {
         event.preventDefault();
@@ -39344,7 +39379,8 @@ function NotesPage() {
     restoreNoteVersion,
     linkNoteToTask,
     unlinkNoteFromTask,
-    createSubcategory
+    createSubcategory,
+    reorderNotes
   } = useAppData();
   const navigate = useNavigate();
   const [filterNode, setFilterNode] = (0, import_react21.useState)({ kind: "all" });
@@ -39577,6 +39613,11 @@ function NotesPage() {
       if (a.isPinned !== b.isPinned) {
         return a.isPinned ? -1 : 1;
       }
+      const orderA = a.sortOrder ?? -1;
+      const orderB = b.sortOrder ?? -1;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
   }, [notes, filterNode, deferredSearch]);
@@ -39591,6 +39632,30 @@ function NotesPage() {
     setVisibleLimit(80);
   }, [filterNode, deferredSearch]);
   const visibleNotes = (0, import_react21.useMemo)(() => filteredNotes.slice(0, visibleLimit), [filteredNotes, visibleLimit]);
+  const [stackLimit, setStackLimit] = (0, import_react21.useState)(20);
+  (0, import_react21.useEffect)(() => {
+    setStackLimit(20);
+  }, [filterNode]);
+  const [dragNoteId, setDragNoteId] = (0, import_react21.useState)(null);
+  const [dragOverNoteId, setDragOverNoteId] = (0, import_react21.useState)(null);
+  const isNoteDragEnabled = !search.trim() && filterNode.kind !== "checklist";
+  function handleNoteDrop(targetId) {
+    const draggedId = dragNoteId;
+    setDragNoteId(null);
+    setDragOverNoteId(null);
+    if (!draggedId || draggedId === targetId) {
+      return;
+    }
+    const ids = filteredNotes.map((note) => note.id);
+    const fromIndex = ids.indexOf(draggedId);
+    const toIndex = ids.indexOf(targetId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return;
+    }
+    ids.splice(fromIndex, 1);
+    ids.splice(toIndex, 0, draggedId);
+    void reorderNotes(ids);
+  }
   const selectedVersions = (0, import_react21.useMemo)(
     () => noteVersions.filter((version) => version.noteId === selectedNoteId),
     [noteVersions, selectedNoteId]
@@ -40248,6 +40313,7 @@ function NotesPage() {
             selected: filterNode,
             onSelect: (node) => {
               setFilterNode(node);
+              setSelectedNoteId(null);
             },
             onAddSubcategory: (projectId, name) => void createSubcategory(projectId, name)
           }
@@ -40301,7 +40367,33 @@ function NotesPage() {
               linkedTaskCount: note.linkedTaskIds.length,
               onSelect: () => setSelectedNoteId(note.id),
               onToggleCheck: (checked) => toggleCheck(note.id, checked),
-              onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })
+              onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id }),
+              draggable: isNoteDragEnabled,
+              dragging: dragNoteId === note.id,
+              dragOver: dragOverNoteId === note.id && dragNoteId !== note.id,
+              onDragStart: (event) => {
+                setDragNoteId(note.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", note.id);
+              },
+              onDragOver: (event) => {
+                if (dragNoteId && dragNoteId !== note.id) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDragOverNoteId(note.id);
+                }
+              },
+              onDragLeave: () => {
+                setDragOverNoteId((prev) => prev === note.id ? null : prev);
+              },
+              onDrop: (event) => {
+                event.preventDefault();
+                handleNoteDrop(note.id);
+              },
+              onDragEnd: () => {
+                setDragNoteId(null);
+                setDragOverNoteId(null);
+              }
             },
             note.id
           )),
@@ -40387,7 +40479,77 @@ function NotesPage() {
           isBusy: isSaving
         }
       )
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-empty-detail", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "노트를 선택하거나 새 노트를 만들어 시작하세요." }) }) }),
+    ] }) : filterNode.kind !== "checklist" && filteredNotes.length > 0 ? (
+      /* 카테고리 선택 상태: 해당 노트들을 위아래로 이어서 보여준다 */
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-view", "aria-label": `${listTitle} 이어보기`, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "eyebrow", children: "READ ALL" }),
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("h3", { children: [
+              listTitle,
+              " ",
+              filteredNotes.length,
+              "개"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-hint", children: "왼쪽 카드를 위아래로 끌면 순서가 바뀝니다 · 노트를 클릭하면 편집" })
+        ] }),
+        filteredNotes.slice(0, stackLimit).map((note) => {
+          const project = projectMap[note.projectId];
+          const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : void 0;
+          return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+            "article",
+            {
+              className: "notes-stack-item",
+              style: { "--note-project-color": project?.color ?? "var(--body-muted)" },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-item-head", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-stack-item-title", onClick: () => setSelectedNoteId(note.id), children: [
+                    note.isPinned ? "📌 " : "",
+                    note.title
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-item-meta", children: [
+                    project ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip project", children: project.name }) : null,
+                    subName ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip", children: subName }) : null,
+                    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                      "button",
+                      {
+                        type: "button",
+                        className: "btn btn-soft btn-compact",
+                        onClick: () => setSelectedNoteId(note.id),
+                        children: "편집"
+                      }
+                    )
+                  ] })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-stack-item-body", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                  MarkdownRenderer,
+                  {
+                    content: note.content,
+                    emptyText: "내용이 없습니다.",
+                    onChecklistToggle: (lineIndex, checked) => void toggleChecklistLine(note.id, lineIndex, checked)
+                  }
+                ) })
+              ]
+            },
+            note.id
+          );
+        }),
+        filteredNotes.length > stackLimit ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-soft notes-stack-more",
+            onClick: () => setStackLimit((limit) => limit + 20),
+            children: [
+              "노트 ",
+              filteredNotes.length - stackLimit,
+              "개 더 보기"
+            ]
+          }
+        ) : null
+      ] })
+    ) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-empty-detail", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "노트를 선택하거나 새 노트를 만들어 시작하세요." }) }) }),
     metaModalOpen && draft ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
       NoteMetaModal,
       {

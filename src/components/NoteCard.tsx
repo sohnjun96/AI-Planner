@@ -1,4 +1,4 @@
-import { type CSSProperties, type MouseEvent } from "react";
+import { type CSSProperties, type DragEvent, type MouseEvent } from "react";
 import { NOTE_STATUS_LABELS } from "../constants";
 import type { Note, Project } from "../models";
 
@@ -11,6 +11,15 @@ interface NoteCardProps {
   onSelect: () => void;
   onToggleCheck: (checked: boolean) => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
+  /** 탐색기 목록에서 위아래 순서 변경용 드래그 지원 (선택적) */
+  draggable?: boolean;
+  dragging?: boolean;
+  dragOver?: boolean;
+  onDragStart?: (event: DragEvent<HTMLElement>) => void;
+  onDragOver?: (event: DragEvent<HTMLElement>) => void;
+  onDragLeave?: (event: DragEvent<HTMLElement>) => void;
+  onDrop?: (event: DragEvent<HTMLElement>) => void;
+  onDragEnd?: (event: DragEvent<HTMLElement>) => void;
 }
 
 function toSnippet(content: string): string {
@@ -22,7 +31,24 @@ function toSnippet(content: string): string {
   return plain.slice(0, 90);
 }
 
-export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount, onSelect, onToggleCheck, onOpenMenu }: NoteCardProps) {
+export function NoteCard({
+  note,
+  project,
+  isSelected,
+  isChecked,
+  linkedTaskCount,
+  onSelect,
+  onToggleCheck,
+  onOpenMenu,
+  draggable,
+  dragging,
+  dragOver,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+}: NoteCardProps) {
   const snippet = toSnippet(note.content);
 
   function handleCheckClick(event: MouseEvent<HTMLInputElement>) {
@@ -37,8 +63,16 @@ export function NoteCard({ note, project, isSelected, isChecked, linkedTaskCount
 
   return (
     <article
-      className={`note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""}`}
+      className={`note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""} ${dragging ? "dragging" : ""} ${
+        dragOver ? "drag-over" : ""
+      }`}
       style={{ "--note-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       onClick={onSelect}
       onContextMenu={(event) => {
         event.preventDefault();

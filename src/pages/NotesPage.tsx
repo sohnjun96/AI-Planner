@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { NoteCard } from "../components/NoteCard";
 import { NoteConnections } from "../components/NoteConnections";
 import { NoteEditor, type NoteEditorOverlay } from "../components/NoteEditor";
@@ -82,6 +83,7 @@ export function NotesPage() {
     linkNoteToTask,
     unlinkNoteFromTask,
     createSubcategory,
+    reorderNotes,
   } = useAppData();
 
   const navigate = useNavigate();
@@ -367,6 +369,12 @@ export function NotesPage() {
         if (a.isPinned !== b.isPinned) {
           return a.isPinned ? -1 : 1;
         }
+        // 드래그로 정한 순서 우선. 순서가 없는 노트(-1)는 최근 수정순으로 맨 위 그룹에 온다
+        const orderA = a.sortOrder ?? -1;
+        const orderB = b.sortOrder ?? -1;
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       });
   }, [notes, filterNode, deferredSearch]);
@@ -388,6 +396,37 @@ export function NotesPage() {
   }, [filterNode, deferredSearch]);
 
   const visibleNotes = useMemo(() => filteredNotes.slice(0, visibleLimit), [filteredNotes, visibleLimit]);
+
+  // 카테고리 선택 시 노트들을 이어서 보여주는 스택 뷰 — 점진 렌더링 한도
+  const [stackLimit, setStackLimit] = useState(20);
+
+  useEffect(() => {
+    setStackLimit(20);
+  }, [filterNode]);
+
+  // 탐색기 카드 드래그로 순서 변경 — 검색 중에는 부분 목록이라 비활성화
+  const [dragNoteId, setDragNoteId] = useState<string | null>(null);
+  const [dragOverNoteId, setDragOverNoteId] = useState<string | null>(null);
+  const isNoteDragEnabled = !search.trim() && filterNode.kind !== "checklist";
+
+  function handleNoteDrop(targetId: string) {
+    const draggedId = dragNoteId;
+    setDragNoteId(null);
+    setDragOverNoteId(null);
+    if (!draggedId || draggedId === targetId) {
+      return;
+    }
+    // 끌어온 카드가 대상 카드의 자리를 차지 (array-move)
+    const ids = filteredNotes.map((note) => note.id);
+    const fromIndex = ids.indexOf(draggedId);
+    const toIndex = ids.indexOf(targetId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return;
+    }
+    ids.splice(fromIndex, 1);
+    ids.splice(toIndex, 0, draggedId);
+    void reorderNotes(ids);
+  }
 
   const selectedVersions = useMemo(
     () => noteVersions.filter((version) => version.noteId === selectedNoteId),
@@ -1091,6 +1130,8 @@ export function NotesPage() {
             selected={filterNode}
             onSelect={(node) => {
               setFilterNode(node);
+              // 카테고리를 고르면 단일 편집 대신 해당 노트들을 이어서 보여준다
+              setSelectedNoteId(null);
             }}
             onAddSubcategory={(projectId, name) => void createSubcategory(projectId, name)}
           />
@@ -1167,6 +1208,32 @@ export function NotesPage() {
                   onSelect={() => setSelectedNoteId(note.id)}
                   onToggleCheck={(checked) => toggleCheck(note.id, checked)}
                   onOpenMenu={(pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })}
+                  draggable={isNoteDragEnabled}
+                  dragging={dragNoteId === note.id}
+                  dragOver={dragOverNoteId === note.id && dragNoteId !== note.id}
+                  onDragStart={(event) => {
+                    setDragNoteId(note.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", note.id);
+                  }}
+                  onDragOver={(event) => {
+                    if (dragNoteId && dragNoteId !== note.id) {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      setDragOverNoteId(note.id);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    setDragOverNoteId((prev) => (prev === note.id ? null : prev));
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    handleNoteDrop(note.id);
+                  }}
+                  onDragEnd={() => {
+                    setDragNoteId(null);
+                    setDragOverNoteId(null);
+                  }}
                 />
               ))
             )}
@@ -1257,6 +1324,64 @@ export function NotesPage() {
               isBusy={isSaving}
             />
           </>
+        ) : filterNode.kind !== "checklist" && filteredNotes.length > 0 ? (
+          /* 카테고리 선택 상태: 해당 노트들을 위아래로 이어서 보여준다 */
+          <div className="notes-stack-view" aria-label={`${listTitle} 이어보기`}>
+            <header className="notes-stack-head">
+              <div>
+                <p className="eyebrow">READ ALL</p>
+                <h3>
+                  {listTitle} {filteredNotes.length}개
+                </h3>
+              </div>
+              <span className="notes-stack-hint">왼쪽 카드를 위아래로 끌면 순서가 바뀝니다 · 노트를 클릭하면 편집</span>
+            </header>
+            {filteredNotes.slice(0, stackLimit).map((note) => {
+              const project = projectMap[note.projectId];
+              const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : undefined;
+              return (
+                <article
+                  key={note.id}
+                  className="notes-stack-item"
+                  style={{ "--note-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
+                >
+                  <header className="notes-stack-item-head">
+                    <button type="button" className="notes-stack-item-title" onClick={() => setSelectedNoteId(note.id)}>
+                      {note.isPinned ? "📌 " : ""}
+                      {note.title}
+                    </button>
+                    <div className="notes-stack-item-meta">
+                      {project ? <span className="notes-stack-chip project">{project.name}</span> : null}
+                      {subName ? <span className="notes-stack-chip">{subName}</span> : null}
+                      <button
+                        type="button"
+                        className="btn btn-soft btn-compact"
+                        onClick={() => setSelectedNoteId(note.id)}
+                      >
+                        편집
+                      </button>
+                    </div>
+                  </header>
+                  <div className="notes-stack-item-body">
+                    <MarkdownRenderer
+                      content={note.content}
+                      emptyText="내용이 없습니다."
+                      onChecklistToggle={(lineIndex, checked) => void toggleChecklistLine(note.id, lineIndex, checked)}
+                    />
+                  </div>
+                </article>
+              );
+            })}
+            {filteredNotes.length > stackLimit ? (
+              <button
+                type="button"
+                className="btn btn-soft notes-stack-more"
+                onClick={() => setStackLimit((limit) => limit + 20)}
+              >
+                노트 {filteredNotes.length - stackLimit}개 더 보기
+              </button>
+            ) : null}
+          </div>
         ) : (
           <div className="notes-empty-detail">
             <p className="empty-text">노트를 선택하거나 새 노트를 만들어 시작하세요.</p>

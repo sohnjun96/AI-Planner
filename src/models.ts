@@ -44,6 +44,8 @@ export interface Note {
   status: NoteStatus;
   isPinned: boolean;
   linkedTaskIds: string[];
+  /** 탐색기에서 드래그로 정한 표시 순서. 없으면(-1 취급) 최근 수정순으로 맨 위 그룹에 온다. */
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
