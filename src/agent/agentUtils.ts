@@ -125,6 +125,24 @@ export interface FlexibleToolCall {
   args: Record<string, unknown>;
 }
 
+/** Model output is untrusted. Keep tool calls small and reject malformed calls
+ * before they reach the local data layer. */
+export function limitToolCalls<T extends FlexibleToolCall>(calls: T[], maxCalls = 2): T[] {
+  const seen = new Set<string>();
+  return calls.filter((call) => {
+    const key = `${call.tool}:${JSON.stringify(call.args)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, maxCalls);
+}
+
+export function asNonEmptyString(value: unknown, maxLength = 240): string | undefined {
+  return typeof value === "string" && value.trim() && value.trim().length <= maxLength
+    ? value.trim()
+    : undefined;
+}
+
 /**
  * 모델별 도구 호출 표기 편차를 흡수하는 관대한 파서.
  * - 이름 키: tool / name / tool_name / function.name (OpenAI 네이티브 중첩 형식 포함)
@@ -156,6 +174,8 @@ export function parseFlexibleToolCalls(value: unknown, allowedTools: readonly st
       (candidate) => candidate !== undefined && candidate !== null,
     );
     const parsedArgs = tryParseJsonLikeValue(argsCandidate);
+    // Empty arguments are valid only for explicitly argument-less tools. The
+    // caller still validates each tool's contract before executing it.
     calls.push({ tool: name, args: isRecord(parsedArgs) ? parsedArgs : {} });
   }
   return calls;
@@ -189,7 +209,8 @@ export async function requestJsonWithRetry(params: {
 
   const retryMessages: LlmChatMessage[] = [
     ...params.messages,
-    { role: "assistant", content: raw.slice(0, 2000) },
+    // A broken reply is context, not a second copy of the whole completion.
+    { role: "assistant", content: raw.slice(0, 800) },
     { role: "user", content: JSON_RETRY_NUDGE },
   ];
   const retryRaw = await requestLlmResponse({ ...params, messages: retryMessages });

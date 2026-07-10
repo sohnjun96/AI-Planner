@@ -31,6 +31,7 @@ const TASK_CONTENT_FULL = 500;
 const NOTE_SNIPPET_LENGTH = 200;
 const NOTE_CONTENT_MAX = 4000;
 const MAX_ACCUMULATED_RESULTS = 16;
+const MAX_TOOL_RESULTS_CHARS = 12_000;
 
 function clip(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
@@ -80,10 +81,26 @@ export function duplicateCallNotice(): SharedToolResult {
 
 /** 누적 도구 결과가 프롬프트를 무한정 키우지 않도록 오래된 항목을 정리한다. */
 export function capToolResults(results: SharedToolResult[]): SharedToolResult[] {
-  if (results.length <= MAX_ACCUMULATED_RESULTS) {
-    return results;
+  const recent = results.slice(-MAX_ACCUMULATED_RESULTS);
+  let remaining = MAX_TOOL_RESULTS_CHARS;
+  const bounded: SharedToolResult[] = [];
+  for (const item of recent) {
+    const serialized = JSON.stringify(item.result);
+    if (serialized.length <= remaining) {
+      bounded.push(item);
+      remaining -= serialized.length;
+      continue;
+    }
+    if (remaining > 400) {
+      bounded.push({
+        ...item,
+        result: { truncated: true, preview: serialized.slice(0, Math.max(0, remaining - 120)) },
+      });
+    }
+    break;
   }
-  const dropped = results.length - MAX_ACCUMULATED_RESULTS;
+  const dropped = results.length - bounded.length;
+  if (dropped <= 0) return bounded;
   return [
     {
       tool: "system_notice",
@@ -91,7 +108,7 @@ export function capToolResults(results: SharedToolResult[]): SharedToolResult[] 
       ok: true,
       result: { notice: `이전 도구 결과 ${dropped}건은 프롬프트 길이 관리를 위해 생략되었습니다.` },
     },
-    ...results.slice(dropped),
+    ...bounded,
   ];
 }
 

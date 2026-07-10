@@ -304,7 +304,7 @@ export function NotesPage() {
         model: setting.llmModel,
       })
         .then((classification) =>
-          applyNoteAiClassification(candidate.id, classification.projectId, classification.subcategoryId),
+          applyNoteAiClassification(candidate.id, classification.projectId, classification.subcategoryId, candidate.updatedAt),
         )
         .catch((error) => {
           console.warn("AI note classification failed", error);
@@ -788,6 +788,7 @@ export function NotesPage() {
       return;
     }
     const selectedText = draft.content.slice(start, end);
+    const noteIdAtRequest = selectedNote.id;
     const prompt = window.prompt("선택한 텍스트를 어떻게 편집할까요?", "더 명확하게 다듬어줘");
     if (!prompt) return;
 
@@ -799,7 +800,13 @@ export function NotesPage() {
       const result = await runNotesAgent({
         mode: "inline_edit",
         userMessage: prompt,
-        activeNote: { id: selectedNote.id, title: draft.title, content: draft.content, projectId: draft.projectId },
+        activeNote: {
+          id: selectedNote.id,
+          title: draft.title,
+          content: draft.content,
+          projectId: draft.projectId,
+          selectedContext: { before: draft.content.slice(Math.max(0, start - 800), start), after: draft.content.slice(end, end + 800) },
+        },
         selectedText,
         notes,
         tasks,
@@ -812,7 +819,8 @@ export function NotesPage() {
         signal: controller.signal,
       });
       setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
-      if (result.replacementText) {
+      // An empty replacement is a valid AI edit (delete the selection).
+      if (result.replacementText !== undefined && selectedNote.id === noteIdAtRequest) {
         const nextContent = draft.content.slice(0, start) + result.replacementText + draft.content.slice(end);
         setAiProposal({ content: nextContent, editType: "ai_inline", prompt, headline: "AI 인라인 편집 제안" });
       } else {

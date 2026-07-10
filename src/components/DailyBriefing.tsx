@@ -60,15 +60,20 @@ export function DailyBriefing() {
     const now = Date.now();
 
     const toBriefingTask = (task: (typeof tasks)[number]): BriefingTask => ({
+      id: task.id,
       title: task.title,
       time: formatDateTime(task.startAt, setting.timeFormat),
+      endAt: task.endAt,
       status: STATUS_LABELS[task.status],
       projectName: projectMap[task.projectId]?.name ?? "",
       typeName: typeMap[task.taskTypeId]?.name ?? "",
       isMajor: task.isMajor,
     });
 
-    const todayTasksRaw = tasks.filter((task) => getDateKey(task.startAt) === todayKey);
+    const todayTasksRaw = tasks
+      .filter((task) => getDateKey(task.startAt) === todayKey && !isTaskCanceled(task.status))
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
+      .slice(0, 20);
     const todayTasks = todayTasksRaw.map(toBriefingTask);
 
     const overdueTasks = tasks
@@ -104,9 +109,11 @@ export function DailyBriefing() {
     }, 0);
 
     const recentNotes: BriefingNote[] = [...notes]
+      .filter((note) => note.status !== "archived")
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, 6)
       .map((note) => ({
+        id: note.id,
         title: note.title,
         snippet: toSnippet(note.content),
         projectName: projectMap[note.projectId]?.name ?? "",
@@ -128,7 +135,9 @@ export function DailyBriefing() {
       const result = await runBriefing({
         nowText: formatDateTime(toIsoNow(), setting.timeFormat),
         ...context,
-        userContextMarkdown: userContext.markdown,
+        userPreferences: userContext.rules
+          .filter((rule) => rule.isActive && rule.category === "preference")
+          .map((rule) => ({ label: rule.label, note: rule.note })),
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,

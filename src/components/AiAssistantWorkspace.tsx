@@ -236,7 +236,12 @@ export function AiAssistantWorkspace({
       return;
     }
 
-    setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index));
+    // Destructive operations require an explicit opt-in in the review UI.
+    setSelectedOperationIndexes(
+      pendingProposal.operations
+        .map((operation, index) => (operation.action === "delete_task" ? -1 : index))
+        .filter((index) => index >= 0),
+    );
   }, [pendingProposal]);
 
   useEffect(() => {
@@ -410,6 +415,9 @@ export function AiAssistantWorkspace({
     if (!target) {
       throw new Error(`수정할 일정을 찾을 수 없습니다: ${operation.taskId}`);
     }
+    if (operation.expectedUpdatedAt && target.updatedAt !== operation.expectedUpdatedAt) {
+      throw new Error("AI가 조회한 뒤 일정이 변경되었습니다. 최신 상태로 다시 요청해 주세요.");
+    }
 
     const nextInput = toTaskInput(target);
     const { changes } = operation;
@@ -464,6 +472,9 @@ export function AiAssistantWorkspace({
   async function applyDeleteOperation(operation: AgentDeleteTaskOperation): Promise<void> {
     if (!taskMap[operation.taskId]) {
       throw new Error(`삭제할 일정을 찾을 수 없습니다: ${operation.taskId}`);
+    }
+    if (operation.expectedUpdatedAt && taskMap[operation.taskId].updatedAt !== operation.expectedUpdatedAt) {
+      throw new Error("AI가 조회한 뒤 일정이 변경되었습니다. 최신 상태로 다시 요청해 주세요.");
     }
     await removeTask(operation.taskId);
   }

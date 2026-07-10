@@ -82,7 +82,7 @@ interface AppDataContextValue {
   undoLastChange: () => Promise<void>;
   createNote: (input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<string>;
   updateNote: (id: string, input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<void>;
-  applyNoteAiClassification: (id: string, projectId: string, subcategoryId?: string) => Promise<void>;
+  applyNoteAiClassification: (id: string, projectId: string, subcategoryId?: string, expectedUpdatedAt?: string) => Promise<void>;
   removeNote: (id: string) => Promise<void>;
   restoreNoteVersion: (noteId: string, versionId: string) => Promise<void>;
   linkNoteToTask: (noteId: string, taskId: string, source?: NoteTaskLinkSource) => Promise<void>;
@@ -818,9 +818,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [pruneNoteVersions],
   );
 
-  const applyNoteAiClassification = useCallback(async (id: string, projectId: string, subcategoryId?: string) => {
+  const applyNoteAiClassification = useCallback(async (id: string, projectId: string, subcategoryId?: string, expectedUpdatedAt?: string) => {
     const existing = await db.notes.get(id);
-    if (!existing || existing.aiClassifiedAt) {
+    // Do not let a delayed background classification overwrite a user's edit.
+    if (!existing || existing.aiClassifiedAt || (expectedUpdatedAt && existing.updatedAt !== expectedUpdatedAt)) {
       return;
     }
     const now = toIsoNow();
