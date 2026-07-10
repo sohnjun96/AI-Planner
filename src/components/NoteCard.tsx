@@ -10,7 +10,6 @@ interface NoteCardProps {
   onOpenForEdit: () => void;
   onToggleCheck: (checked: boolean) => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
-  onOpenAiMenu: (position: { x: number; y: number }) => void;
   /** 탐색기 목록에서 위아래 순서 변경용 드래그 지원 (선택적) */
   draggable?: boolean;
   dragging?: boolean;
@@ -31,7 +30,6 @@ export function NoteCard({
   onOpenForEdit,
   onToggleCheck,
   onOpenMenu,
-  onOpenAiMenu,
   draggable,
   dragging,
   dragOver,
@@ -75,7 +73,8 @@ export function NoteCard({
       onDoubleClick={onOpenForEdit}
       onContextMenu={(event) => {
         event.preventDefault();
-        onOpenAiMenu({ x: event.clientX, y: event.clientY });
+        event.stopPropagation();
+        onOpenMenu({ x: event.clientX, y: event.clientY });
       }}
       role="button"
       tabIndex={0}

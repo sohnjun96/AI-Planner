@@ -716,7 +716,6 @@ export function NotesPage() {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return [];
     const items: ContextMenuItem[] = [
-      { id: "open", label: "열기", onSelect: () => editNoteInStack(noteId) },
       { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
       { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) },
     ];
@@ -1281,7 +1280,6 @@ export function NotesPage() {
                   onOpenForEdit={() => editNoteInStack(note.id)}
                   onToggleCheck={(checked) => toggleCheck(note.id, checked)}
                   onOpenMenu={(pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })}
-                  onOpenAiMenu={(pos) => handleOpenNoteAiMenu(note.id, pos)}
                   draggable={isNoteDragEnabled}
                   dragging={dragNoteId === note.id}
                   dragOver={dragOverNoteId === note.id && dragNoteId !== note.id}
@@ -1472,7 +1470,8 @@ export function NotesPage() {
                   onDoubleClick={() => editNoteInStack(note.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
+                    event.stopPropagation();
+                    setCardMenu({ x: event.clientX, y: event.clientY, noteId: note.id });
                   }}
                 >
                   <header className="notes-stack-item-head">
