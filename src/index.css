@@ -796,6 +796,7 @@ textarea:focus-visible,
   text-align: left;
   cursor: pointer;
   overflow: hidden;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .calendar-day-slot {
@@ -850,6 +851,32 @@ textarea:focus-visible,
 .calendar-day.selected {
   border-color: var(--primary-focus);
   box-shadow: inset 0 0 0 1px var(--primary-focus);
+}
+
+/* Give month cells the same clear affordance as task cards without changing
+   touch behavior or competing with the selected-date state. */
+@media (hover: hover) {
+  .calendar-day:not(.selected):hover {
+    z-index: 2;
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--primary) 55%, var(--hairline));
+    box-shadow: 0 8px 18px rgba(36, 40, 48, 0.1);
+  }
+
+  .calendar-day:not(.selected):hover .calendar-day-number,
+  .calendar-day:not(.selected):hover .calendar-day-count {
+    color: var(--primary);
+  }
+
+  .calendar-day.muted:not(.selected):hover {
+    opacity: 0.72;
+  }
+}
+
+.calendar-day:focus-visible {
+  z-index: 2;
+  outline: 3px solid color-mix(in srgb, var(--primary) 42%, transparent);
+  outline-offset: 2px;
 }
 
 .calendar-day.drag-target {
