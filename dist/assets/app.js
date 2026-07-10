@@ -38173,7 +38173,6 @@ function NoteCard({
   onOpenForEdit,
   onToggleCheck,
   onOpenMenu,
-  onOpenAiMenu,
   draggable,
   dragging,
   dragOver,
@@ -38212,7 +38211,8 @@ function NoteCard({
       onDoubleClick: onOpenForEdit,
       onContextMenu: (event) => {
         event.preventDefault();
-        onOpenAiMenu({ x: event.clientX, y: event.clientY });
+        event.stopPropagation();
+        onOpenMenu({ x: event.clientX, y: event.clientY });
       },
       role: "button",
       tabIndex: 0,
@@ -40116,7 +40116,6 @@ function NotesPage() {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return [];
     const items = [
-      { id: "open", label: "열기", onSelect: () => editNoteInStack(noteId) },
       { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
       { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) }
     ];
@@ -40367,11 +40366,6 @@ function NotesPage() {
     selectionRef.current = textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd } : { start: 0, end: 0 };
     const rect = event.currentTarget.getBoundingClientRect();
     setAiMenu({ x: rect.left, y: rect.bottom + 4 });
-  }
-  function handleOpenNoteAiMenu(noteId, position) {
-    editNoteInStack(noteId);
-    selectionRef.current = { start: 0, end: 0 };
-    setAiMenu(position);
   }
   async function handleRestoreVersion(versionId) {
     if (!selectedNoteId) return;
@@ -40637,7 +40631,6 @@ function NotesPage() {
               onOpenForEdit: () => editNoteInStack(note.id),
               onToggleCheck: (checked) => toggleCheck(note.id, checked),
               onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id }),
-              onOpenAiMenu: (pos) => handleOpenNoteAiMenu(note.id, pos),
               draggable: isNoteDragEnabled,
               dragging: dragNoteId === note.id,
               dragOver: dragOverNoteId === note.id && dragNoteId !== note.id,
@@ -40826,7 +40819,8 @@ function NotesPage() {
               onDoubleClick: () => editNoteInStack(note.id),
               onContextMenu: (event) => {
                 event.preventDefault();
-                handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
+                event.stopPropagation();
+                setCardMenu({ x: event.clientX, y: event.clientY, noteId: note.id });
               },
               children: [
                 /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-item-head", children: [

@@ -982,12 +982,6 @@ export function NotesPage() {
     setAiMenu({ x: rect.left, y: rect.bottom + 4 });
   }
 
-  function handleOpenNoteAiMenu(noteId: string, position: { x: number; y: number }) {
-    editNoteInStack(noteId);
-    selectionRef.current = { start: 0, end: 0 };
-    setAiMenu(position);
-  }
-
   async function handleRestoreVersion(versionId: string) {
     if (!selectedNoteId) return;
     await restoreNoteVersion(selectedNoteId, versionId);
