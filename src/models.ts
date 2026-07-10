@@ -44,6 +44,8 @@ export interface Note {
   status: NoteStatus;
   isPinned: boolean;
   linkedTaskIds: string[];
+  /** AI가 이 노트의 프로젝트/세부 항목을 최초 1회 분류한 시각. */
+  aiClassifiedAt?: string;
   /** 탐색기에서 드래그로 정한 표시 순서. 없으면(-1 취급) 최근 수정순으로 맨 위 그룹에 온다. */
   sortOrder?: number;
   createdAt: string;

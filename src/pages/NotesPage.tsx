@@ -12,6 +12,7 @@ import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteT
 import { showToast } from "../components/ToastHost";
 import { isAbortError } from "../agent/agentUtils";
 import {
+  classifyNoteWithAi,
   extractNoteActions,
   runNotesAgent,
   suggestRelatedNotes,
@@ -78,6 +79,7 @@ export function NotesPage() {
     createNote,
     createTask,
     updateNote,
+    applyNoteAiClassification,
     removeNote,
     restoreNoteVersion,
     linkNoteToTask,
@@ -90,6 +92,7 @@ export function NotesPage() {
 
   const [filterNode, setFilterNode] = useState<NoteFilterNode>({ kind: "all" });
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [focusedNoteId, setFocusedNoteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<NoteFormInput | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -123,6 +126,7 @@ export function NotesPage() {
   const [aiProgress, setAiProgress] = useState("");
   const [aiError, setAiError] = useState("");
   const [aiProposal, setAiProposal] = useState<AiProposal | null>(null);
+  const [classificationRevision, setClassificationRevision] = useState(0);
   const [compareVersion, setCompareVersion] = useState<NoteVersion | null>(null);
   const [actionItems, setActionItems] = useState<NoteActionItem[] | null>(null);
   const [isCreatingActions, setIsCreatingActions] = useState(false);
@@ -139,6 +143,9 @@ export function NotesPage() {
   // 노트 전환/페이지 이탈 시점에 미저장 수정분을 플러시하기 위한 최신 상태 미러
   const draftRef = useRef<NoteFormInput | null>(null);
   const notesRef = useRef<Note[]>(notes);
+  const stackItemRefs = useRef(new Map<string, HTMLElement>());
+  const classificationInFlightRef = useRef(false);
+  const classificationAttemptedRef = useRef(new Set<string>());
 
   useEffect(() => {
     draftRef.current = draft;
@@ -229,6 +236,7 @@ export function NotesPage() {
   useEffect(() => {
     if (selectedNoteId && !notes.some((note) => note.id === selectedNoteId)) {
       setSelectedNoteId(null);
+      setFocusedNoteId((current) => (current === selectedNoteId ? null : current));
     }
   }, [notes, selectedNoteId]);
 
@@ -237,6 +245,8 @@ export function NotesPage() {
     const handleFocusNote = (event: Event) => {
       const detail = (event as CustomEvent<{ noteId?: string }>).detail;
       if (detail?.noteId) {
+        setFilterNode({ kind: "all" });
+        setFocusedNoteId(detail.noteId);
         setSelectedNoteId(detail.noteId);
       }
     };
@@ -244,7 +254,7 @@ export function NotesPage() {
     return () => window.removeEventListener("ai-planner:focus-note", handleFocusNote);
   }, []);
 
-  // 백그라운드 자동화: 미선택 노트의 제목 자동 생성 + 세부항목 자동 분류
+  // 백그라운드 자동화: 미선택 노트의 기본 제목을 본문 첫 줄에서 생성한다.
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -253,59 +263,71 @@ export function NotesPage() {
           if (note.id === selectedNoteId || note.status === "archived") {
             continue;
           }
-          const patch: Partial<NoteFormInput> = {};
-
-          // 자동 제목: 기본 제목이고 본문이 있으면 첫 줄에서 파생
           if (isAutoTitle(note.title)) {
             const derived = deriveNoteTitle(note.content);
             if (derived && derived !== note.title) {
-              patch.title = derived;
+              await updateNote(note.id, { ...noteToInput(note), title: derived });
             }
-          }
-
-          const haystack = `${note.title} ${note.content}`.toLowerCase();
-
-          // 자동 프로젝트 분류: 기본(일반) 프로젝트에 있는 노트에 다른 프로젝트명이 있으면 이동
-          let effectiveProjectId = note.projectId;
-          if (note.projectId === DEFAULT_PROJECT_ID) {
-            const match = projects.find(
-              (project) =>
-                project.id !== DEFAULT_PROJECT_ID &&
-                project.isActive &&
-                project.name.trim().length >= 2 &&
-                haystack.includes(project.name.toLowerCase()),
-            );
-            if (match) {
-              patch.projectId = match.id;
-              patch.subcategoryId = undefined;
-              effectiveProjectId = match.id;
-            }
-          }
-
-          // 자동 세부항목 분류: 미분류 + 세부항목명이 본문에 있으면 배정
-          if (!note.subcategoryId && !patch.projectId) {
-            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
-            const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
-            if (match) {
-              patch.subcategoryId = match.id;
-            }
-          } else if (patch.projectId) {
-            // 프로젝트가 바뀌면 새 프로젝트의 세부항목으로 다시 매칭
-            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
-            const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
-            if (match) {
-              patch.subcategoryId = match.id;
-            }
-          }
-
-          if (Object.keys(patch).length > 0) {
-            await updateNote(note.id, { ...noteToInput(note), ...patch });
           }
         }
       })();
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [notes, projects, projectSubcategories, selectedNoteId, updateNote]);
+  }, [notes, selectedNoteId, updateNote]);
+
+  // 본문이 작성된 노트는 선택이 끝난 뒤 AI로 프로젝트/세부 항목을 최초 1회만 분류한다.
+  useEffect(() => {
+    if (!hasApiConfig || classificationInFlightRef.current) {
+      return;
+    }
+    const candidate = notes.find(
+      (note) =>
+        !note.aiClassifiedAt &&
+        note.id !== selectedNoteId &&
+        note.status !== "archived" &&
+        note.content.trim().length > 0 &&
+        !classificationAttemptedRef.current.has(note.id),
+    );
+    if (!candidate) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      classificationInFlightRef.current = true;
+      classificationAttemptedRef.current.add(candidate.id);
+      void classifyNoteWithAi({
+        note: candidate,
+        projects,
+        subcategories: projectSubcategories,
+        endpoint: setting.llmEndpoint,
+        apiKey: setting.llmApiKey ?? "",
+        model: setting.llmModel,
+      })
+        .then((classification) =>
+          applyNoteAiClassification(candidate.id, classification.projectId, classification.subcategoryId),
+        )
+        .catch((error) => {
+          console.warn("AI note classification failed", error);
+        })
+        .finally(() => {
+          classificationInFlightRef.current = false;
+          setClassificationRevision((value) => value + 1);
+        });
+    }, 1800);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    notes,
+    selectedNoteId,
+    hasApiConfig,
+    projects,
+    projectSubcategories,
+    setting.llmEndpoint,
+    setting.llmApiKey,
+    setting.llmModel,
+    applyNoteAiClassification,
+    classificationRevision,
+  ]);
 
   // 모든 노트의 미완료 체크리스트 항목 집계 (보관된 노트 제외)
   const openChecklistItems = useMemo(() => {
@@ -403,6 +425,33 @@ export function NotesPage() {
   useEffect(() => {
     setStackLimit(20);
   }, [filterNode]);
+
+  useEffect(() => {
+    if (!focusedNoteId) {
+      return;
+    }
+    const index = filteredNotes.findIndex((note) => note.id === focusedNoteId);
+    if (index < 0) {
+      return;
+    }
+    if (index >= stackLimit) {
+      setStackLimit(index + 1);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      stackItemRefs.current.get(focusedNoteId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedNoteId, filteredNotes, stackLimit]);
+
+  function focusNoteInStack(noteId: string) {
+    setFocusedNoteId(noteId);
+  }
+
+  function editNoteInStack(noteId: string) {
+    setFocusedNoteId(noteId);
+    setSelectedNoteId(noteId);
+  }
 
   // 탐색기 카드 드래그로 순서 변경 — 검색 중에는 부분 목록이라 비활성화
   const [dragNoteId, setDragNoteId] = useState<string | null>(null);
@@ -532,7 +581,7 @@ export function NotesPage() {
       base.projectId = filterNode.projectId;
     }
     const id = await createNote(base);
-    setSelectedNoteId(id);
+    editNoteInStack(id);
   }
 
   async function handleSave(editType: NoteVersionEditType = "manual") {
@@ -566,6 +615,7 @@ export function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
+    setFocusedNoteId(null);
     showToast("노트를 삭제했습니다.");
   }
 
@@ -605,6 +655,7 @@ export function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(noteId);
     if (selectedNoteId === noteId) setSelectedNoteId(null);
+    if (focusedNoteId === noteId) setFocusedNoteId(null);
     showToast("노트를 삭제했습니다.");
   }
 
@@ -643,7 +694,7 @@ export function NotesPage() {
           "ai_full",
           "노트 요약",
         );
-        setSelectedNoteId(id);
+        editNoteInStack(id);
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -661,7 +712,7 @@ export function NotesPage() {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return [];
     const items: ContextMenuItem[] = [
-      { id: "open", label: "열기", onSelect: () => setSelectedNoteId(noteId) },
+      { id: "open", label: "열기", onSelect: () => editNoteInStack(noteId) },
       { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
       { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) },
     ];
@@ -920,6 +971,12 @@ export function NotesPage() {
     setAiMenu({ x: rect.left, y: rect.bottom + 4 });
   }
 
+  function handleOpenNoteAiMenu(noteId: string, position: { x: number; y: number }) {
+    editNoteInStack(noteId);
+    selectionRef.current = { start: 0, end: 0 };
+    setAiMenu(position);
+  }
+
   async function handleRestoreVersion(versionId: string) {
     if (!selectedNoteId) return;
     await restoreNoteVersion(selectedNoteId, versionId);
@@ -970,7 +1027,7 @@ export function NotesPage() {
           "선택 노트 요약",
         );
         setCheckedIds(new Set());
-        setSelectedNoteId(id);
+        editNoteInStack(id);
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -1022,7 +1079,7 @@ export function NotesPage() {
           "선택 노트 통합",
         );
         setCheckedIds(new Set());
-        setSelectedNoteId(id);
+        editNoteInStack(id);
       } else {
         setAiError(result.assistantMessage || "통합 결과를 만들지 못했습니다.");
       }
@@ -1132,6 +1189,7 @@ export function NotesPage() {
               setFilterNode(node);
               // 카테고리를 고르면 단일 편집 대신 해당 노트들을 이어서 보여준다
               setSelectedNoteId(null);
+              setFocusedNoteId(null);
             }}
             onAddSubcategory={(projectId, name) => void createSubcategory(projectId, name)}
           />
@@ -1178,7 +1236,10 @@ export function NotesPage() {
                   <button
                     type="button"
                     className="global-check-body"
-                    onClick={() => setSelectedNoteId(item.noteId)}
+                    onClick={() => {
+                      setFilterNode({ kind: "all" });
+                      editNoteInStack(item.noteId);
+                    }}
                     style={{ "--note-project-color": item.projectColor } as CSSProperties}
                   >
                     <span className="global-check-text">{item.text}</span>
@@ -1202,12 +1263,12 @@ export function NotesPage() {
                   key={note.id}
                   note={note}
                   project={projectMap[note.projectId]}
-                  isSelected={note.id === selectedNoteId}
+                  isSelected={note.id === focusedNoteId || note.id === selectedNoteId}
                   isChecked={checkedIds.has(note.id)}
-                  linkedTaskCount={note.linkedTaskIds.length}
-                  onSelect={() => setSelectedNoteId(note.id)}
+                  onSelect={() => focusNoteInStack(note.id)}
                   onToggleCheck={(checked) => toggleCheck(note.id, checked)}
                   onOpenMenu={(pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })}
+                  onOpenAiMenu={(pos) => handleOpenNoteAiMenu(note.id, pos)}
                   draggable={isNoteDragEnabled}
                   dragging={dragNoteId === note.id}
                   dragOver={dragOverNoteId === note.id && dragNoteId !== note.id}
@@ -1257,75 +1318,8 @@ export function NotesPage() {
       </aside>
       )}
 
-      <main className="notes-detail-pane">
-        {selectedNote && draft && currentProject ? (
-          <>
-            <NoteEditor
-              key={selectedNote.id}
-              draft={draft}
-              projectName={currentProject.name}
-              projectColor={currentProject.color}
-              subcategoryName={currentSubcategoryName}
-              aiEnabled={hasApiConfig}
-              isAiRunning={isAiRunning}
-              overlay={editorOverlay}
-              onAcceptOverlay={() => void acceptProposal()}
-              onRejectOverlay={() => {
-                setAiProposal(null);
-                setCompareVersion(null);
-                setAiProgress("");
-              }}
-              onToggleChecklist={(lineIndex, checked) => void handleToggleChecklist(lineIndex, checked)}
-              onOpenAiMenu={handleOpenAiMenuButton}
-              onChangeTitle={(value) => setDraft((prev) => (prev ? { ...prev, title: value } : prev))}
-              onChangeContent={(value) =>
-                setDraft((prev) => {
-                  if (!prev) {
-                    return prev;
-                  }
-                  // 제목이 아직 자동 상태면 본문 첫 줄에서 제목을 따라 갱신한다.
-                  const following = isFollowingTitle(prev.title, prev.content);
-                  const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : prev.title;
-                  return { ...prev, content: value, title: nextTitle };
-                })
-              }
-              onSave={() => void handleSave("manual")}
-              onOpenMeta={() => setMetaModalOpen(true)}
-              onOpenHistory={() => setHistoryOpen(true)}
-              onDelete={() => void handleDelete()}
-              onContentContextMenu={handleContentContextMenu}
-              textareaRef={textareaRef}
-              isSaving={isSaving}
-              isDirty={isDirty}
-              savedMessage={savedMessage}
-              errorMessage={errorMessage}
-              historyCount={selectedVersions.length}
-            />
-
-            {isAiRunning ? (
-              <p className="note-ai-running" aria-live="polite">
-                <span className="note-ai-spinner" aria-hidden="true" />
-                {aiProgress || "AI가 처리 중입니다…"}
-              </p>
-            ) : aiProgress.startsWith("AI 참고") ? (
-              <p className="note-ai-trace">{aiProgress}</p>
-            ) : null}
-            {aiError ? <p className="error-text">{aiError}</p> : null}
-
-            <NoteConnections
-              linkedTasks={linkedTasks}
-              suggestions={suggestions}
-              relatedNotes={relatedNotes}
-              timeFormat={setting.timeFormat}
-              onOpenTask={handleOpenTask}
-              onOpenNote={(noteId) => setSelectedNoteId(noteId)}
-              onLink={(taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest")}
-              onUnlink={(taskId) => void unlinkNoteFromTask(selectedNote.id, taskId)}
-              isBusy={isSaving}
-            />
-          </>
-        ) : filterNode.kind !== "checklist" && filteredNotes.length > 0 ? (
-          /* 카테고리 선택 상태: 해당 노트들을 위아래로 이어서 보여준다 */
+      <main className="notes-detail-scroll">
+        {filterNode.kind !== "checklist" && filteredNotes.length > 0 ? (
           <div className="notes-stack-view" aria-label={`${listTitle} 이어보기`}>
             <header className="notes-stack-head">
               <div>
@@ -1334,30 +1328,107 @@ export function NotesPage() {
                   {listTitle} {filteredNotes.length}개
                 </h3>
               </div>
-              <span className="notes-stack-hint">왼쪽 카드를 위아래로 끌면 순서가 바뀝니다 · 노트를 클릭하면 편집</span>
+              <span className="notes-stack-hint">왼쪽 카드는 해당 위치로 이동 · 편집 버튼은 문맥을 유지한 채 바로 편집</span>
             </header>
             {filteredNotes.slice(0, stackLimit).map((note) => {
               const project = projectMap[note.projectId];
               const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : undefined;
+              const isEditing = note.id === selectedNoteId && selectedNote && draft && currentProject;
+              const commonStyle = {
+                "--note-project-color": project?.color ?? "var(--body-muted)",
+              } as CSSProperties;
+              const setStackRef = (node: HTMLElement | null) => {
+                if (node) stackItemRefs.current.set(note.id, node);
+                else stackItemRefs.current.delete(note.id);
+              };
+
+              if (isEditing) {
+                return (
+                  <article key={note.id} ref={setStackRef} className="notes-detail-pane" style={commonStyle}>
+                    <NoteEditor
+                      key={selectedNote.id}
+                      draft={draft}
+                      projectName={currentProject.name}
+                      projectColor={currentProject.color}
+                      subcategoryName={currentSubcategoryName}
+                      aiEnabled={hasApiConfig}
+                      isAiRunning={isAiRunning}
+                      overlay={editorOverlay}
+                      onAcceptOverlay={() => void acceptProposal()}
+                      onRejectOverlay={() => {
+                        setAiProposal(null);
+                        setCompareVersion(null);
+                        setAiProgress("");
+                      }}
+                      onToggleChecklist={(lineIndex, checked) => void handleToggleChecklist(lineIndex, checked)}
+                      onOpenAiMenu={handleOpenAiMenuButton}
+                      onChangeTitle={(value) => setDraft((prev) => (prev ? { ...prev, title: value } : prev))}
+                      onChangeContent={(value) =>
+                        setDraft((prev) => {
+                          if (!prev) return prev;
+                          const following = isFollowingTitle(prev.title, prev.content);
+                          const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : prev.title;
+                          return { ...prev, content: value, title: nextTitle };
+                        })
+                      }
+                      onSave={() => void handleSave("manual")}
+                      onOpenMeta={() => setMetaModalOpen(true)}
+                      onOpenHistory={() => setHistoryOpen(true)}
+                      onDelete={() => void handleDelete()}
+                      onContentContextMenu={handleContentContextMenu}
+                      textareaRef={textareaRef}
+                      isSaving={isSaving}
+                      isDirty={isDirty}
+                      savedMessage={savedMessage}
+                      errorMessage={errorMessage}
+                      historyCount={selectedVersions.length}
+                    />
+
+                    {isAiRunning ? (
+                      <p className="note-ai-running" aria-live="polite">
+                        <span className="note-ai-spinner" aria-hidden="true" />
+                        {aiProgress || "AI가 처리 중입니다…"}
+                      </p>
+                    ) : aiProgress.startsWith("AI 참고") ? (
+                      <p className="note-ai-trace">{aiProgress}</p>
+                    ) : null}
+                    {aiError ? <p className="error-text">{aiError}</p> : null}
+
+                    <NoteConnections
+                      linkedTasks={linkedTasks}
+                      suggestions={suggestions}
+                      relatedNotes={relatedNotes}
+                      timeFormat={setting.timeFormat}
+                      onOpenTask={handleOpenTask}
+                      onOpenNote={(noteId) => editNoteInStack(noteId)}
+                      onLink={(taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest")}
+                      onUnlink={(taskId) => void unlinkNoteFromTask(selectedNote.id, taskId)}
+                      isBusy={isSaving}
+                    />
+                  </article>
+                );
+              }
+
               return (
                 <article
                   key={note.id}
-                  className="notes-stack-item"
-                  style={{ "--note-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
+                  ref={setStackRef}
+                  className={`notes-stack-item ${note.id === focusedNoteId ? "focused" : ""}`}
+                  style={commonStyle}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
+                  }}
                 >
                   <header className="notes-stack-item-head">
-                    <button type="button" className="notes-stack-item-title" onClick={() => setSelectedNoteId(note.id)}>
+                    <button type="button" className="notes-stack-item-title" onClick={() => focusNoteInStack(note.id)}>
                       {note.isPinned ? "📌 " : ""}
                       {note.title}
                     </button>
                     <div className="notes-stack-item-meta">
                       {project ? <span className="notes-stack-chip project">{project.name}</span> : null}
                       {subName ? <span className="notes-stack-chip">{subName}</span> : null}
-                      <button
-                        type="button"
-                        className="btn btn-soft btn-compact"
-                        onClick={() => setSelectedNoteId(note.id)}
-                      >
+                      <button type="button" className="btn btn-soft btn-compact" onClick={() => editNoteInStack(note.id)}>
                         편집
                       </button>
                     </div>
@@ -1373,11 +1444,7 @@ export function NotesPage() {
               );
             })}
             {filteredNotes.length > stackLimit ? (
-              <button
-                type="button"
-                className="btn btn-soft notes-stack-more"
-                onClick={() => setStackLimit((limit) => limit + 20)}
-              >
+              <button type="button" className="btn btn-soft notes-stack-more" onClick={() => setStackLimit((limit) => limit + 20)}>
                 노트 {filteredNotes.length - stackLimit}개 더 보기
               </button>
             ) : null}

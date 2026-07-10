@@ -5450,13 +5450,13 @@ textarea:focus-visible,
   border: 1px solid var(--hairline);
   border-left: 4px solid var(--note-project-color, var(--body-muted));
   border-radius: var(--radius-lg);
-  padding: var(--space-sm);
+  padding: 10px 12px;
   background: var(--canvas);
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   display: flex;
   flex-direction: column;
-  gap: var(--space-xxs);
+  gap: 0;
 }
 
 .note-card:hover {
@@ -5539,12 +5539,35 @@ textarea:focus-visible,
   background: var(--status-done-bg);
 }
 
-/* --- Detail pane --- */
+/* --- 오른쪽 이어보기 영역 --- */
+.notes-detail-scroll {
+  min-width: 0;
+}
+
+/* 스택 안에서 선택된 한 항목만 확장되는 상세 편집 카드 */
 .notes-detail-pane {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   min-width: 0;
+  background: var(--canvas);
+  border: 1px solid color-mix(in srgb, var(--note-project-color, var(--primary)) 44%, var(--hairline));
+  border-left: 4px solid var(--note-project-color, var(--primary));
+  border-radius: var(--radius-xl);
+  padding: var(--space-md) var(--space-lg);
+  box-shadow: var(--card-shadow);
+}
+
+.notes-detail-pane .note-editor-surface {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.notes-detail-pane .note-connections {
+  border: 1px solid var(--hairline);
+  background: var(--surface-pearl);
 }
 
 .notes-empty-detail {
@@ -7235,6 +7258,14 @@ textarea:focus-visible,
   border-left: 4px solid var(--note-project-color, var(--body-muted));
   border-radius: var(--radius-xl);
   padding: var(--space-md) var(--space-lg);
+  scroll-margin-block: 18vh;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.notes-stack-item.focused {
+  border-color: color-mix(in srgb, var(--note-project-color, var(--primary)) 50%, var(--hairline));
+  background: color-mix(in srgb, var(--note-project-color, var(--primary)) 4%, var(--canvas));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--note-project-color, var(--primary)) 12%, transparent);
 }
 
 .notes-stack-item-head {

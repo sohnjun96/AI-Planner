@@ -1,4 +1,4 @@
-import type { Note, Project, Task, TaskType } from "../models";
+import type { Note, Project, ProjectSubcategory, Task, TaskType } from "../models";
 import { toIsoNow } from "../utils/date";
 import {
   ToolCallCache,
@@ -315,6 +315,89 @@ export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAge
   // 루프 초과 시 throw 대신 안내 메시지 반환
   return {
     assistantMessage: "노트 정보를 조회했지만 결과를 완성하지 못했습니다. 요청을 조금 더 구체적으로 다시 입력해 주세요.",
+  };
+}
+
+export interface NoteClassificationResult {
+  projectId: string;
+  subcategoryId?: string;
+  reason?: string;
+}
+
+/**
+ * 새 노트의 프로젝트와 세부 항목을 한 번 결정한다.
+ * 저장 여부와 "1회" 보장은 데이터 레이어의 aiClassifiedAt이 담당한다.
+ */
+export async function classifyNoteWithAi(input: {
+  note: Pick<Note, "id" | "title" | "content" | "projectId" | "subcategoryId">;
+  projects: Project[];
+  subcategories: ProjectSubcategory[];
+  endpoint?: string;
+  apiKey: string;
+  model?: string;
+  signal?: AbortSignal;
+}): Promise<NoteClassificationResult> {
+  const availableProjects = input.projects.filter((project) => project.isActive);
+  const projectIds = new Set(availableProjects.map((project) => project.id));
+  const fallbackProjectId = projectIds.has(input.note.projectId)
+    ? input.note.projectId
+    : availableProjects[0]?.id ?? input.note.projectId;
+
+  const system = `
+You classify one Korean note into the user's existing project taxonomy.
+Return exactly one JSON object with this schema:
+{"projectId":"existing project id","subcategoryId":"existing subcategory id or empty string","reason":"short Korean reason"}
+
+Rules:
+1. Use only ids supplied in the payload. Never invent a project or subcategory.
+2. Pick the single best project from availableProjects. Keep currentProjectId when evidence is weak.
+3. Pick a subcategory only when it clearly fits and belongs to the selected project; otherwise return an empty string.
+4. Judge the note's meaning, not only literal name matches.
+5. No markdown fences and no text outside the JSON object.
+  `.trim();
+
+  const { payload } = await requestJsonWithRetry({
+    messages: [
+      { role: "system", content: system },
+      {
+        role: "user",
+        content: JSON.stringify({
+          note: input.note,
+          currentProjectId: fallbackProjectId,
+          availableProjects: availableProjects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            description: project.description ?? "",
+          })),
+          availableSubcategories: input.subcategories.map((subcategory) => ({
+            id: subcategory.id,
+            projectId: subcategory.projectId,
+            name: subcategory.name,
+          })),
+        }),
+      },
+    ],
+    endpoint: input.endpoint,
+    apiKey: input.apiKey,
+    model: input.model,
+    signal: input.signal,
+  });
+
+  if (!payload || !isRecord(payload)) {
+    throw new Error("AI 자동분류 응답을 해석하지 못했습니다.");
+  }
+
+  const requestedProjectId = pickFirstString(payload, ["projectId", "project_id"]);
+  const projectId = projectIds.has(requestedProjectId) ? requestedProjectId : fallbackProjectId;
+  const requestedSubcategoryId = pickFirstString(payload, ["subcategoryId", "subcategory_id"]);
+  const validSubcategory = input.subcategories.find(
+    (subcategory) => subcategory.id === requestedSubcategoryId && subcategory.projectId === projectId,
+  );
+
+  return {
+    projectId,
+    subcategoryId: validSubcategory?.id,
+    reason: pickFirstString(payload, ["reason", "message"]) || undefined,
   };
 }
 

@@ -990,7 +990,7 @@ var require_react_development = __commonJS({
       exports.useTransition = function() {
         return resolveDispatcher().useTransition();
       };
-      exports.version = "19.2.4";
+      exports.version = "19.2.7";
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
   }
@@ -1517,7 +1517,7 @@ var require_react_dom_development = __commonJS({
       exports.useFormStatus = function() {
         return resolveDispatcher().useHostTransitionStatus();
       };
-      exports.version = "19.2.4";
+      exports.version = "19.2.7";
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
   }
@@ -21309,9 +21309,9 @@ var require_react_dom_client_development = __commonJS({
       };
       (function() {
         var isomorphicReactPackageVersion = React13.version;
-        if ("19.2.4" !== isomorphicReactPackageVersion)
+        if ("19.2.7" !== isomorphicReactPackageVersion)
           throw Error(
-            'Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:\n  - react:      ' + (isomorphicReactPackageVersion + "\n  - react-dom:  19.2.4\nLearn more: https://react.dev/warnings/version-mismatch")
+            'Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:\n  - react:      ' + (isomorphicReactPackageVersion + "\n  - react-dom:  19.2.7\nLearn more: https://react.dev/warnings/version-mismatch")
           );
       })();
       "function" === typeof Map && null != Map.prototype && "function" === typeof Map.prototype.forEach && "function" === typeof Set && null != Set.prototype && "function" === typeof Set.prototype.clear && "function" === typeof Set.prototype.forEach || console.error(
@@ -21335,10 +21335,10 @@ var require_react_dom_client_development = __commonJS({
       if (!(function() {
         var internals = {
           bundleType: 1,
-          version: "19.2.4",
+          version: "19.2.7",
           rendererPackageName: "react-dom",
           currentDispatcherRef: ReactSharedInternals,
-          reconcilerVersion: "19.2.4"
+          reconcilerVersion: "19.2.7"
         };
         internals.overrideHookState = overrideHookState;
         internals.overrideHookStateDeletePath = overrideHookStateDeletePath;
@@ -21429,7 +21429,7 @@ var require_react_dom_client_development = __commonJS({
         listenToAllSupportedEvents(container);
         return new ReactDOMHydrationRoot(initialChildren);
       };
-      exports.version = "19.2.4";
+      exports.version = "19.2.7";
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
   }
@@ -31512,6 +31512,20 @@ function AppDataProvider({ children }) {
     },
     [pruneNoteVersions]
   );
+  const applyNoteAiClassification = (0, import_react2.useCallback)(async (id, projectId, subcategoryId) => {
+    const existing = await db.notes.get(id);
+    if (!existing || existing.aiClassifiedAt) {
+      return;
+    }
+    const now = toIsoNow();
+    await db.notes.put({
+      ...existing,
+      projectId,
+      subcategoryId,
+      aiClassifiedAt: now,
+      updatedAt: now
+    });
+  }, []);
   const removeNote = (0, import_react2.useCallback)(async (id) => {
     await db.transaction("rw", [db.notes, db.tasks, db.noteTaskLinks, db.noteVersions], async () => {
       const note = await db.notes.get(id);
@@ -32030,6 +32044,7 @@ function AppDataProvider({ children }) {
       undoLastChange,
       createNote,
       updateNote,
+      applyNoteAiClassification,
       removeNote,
       restoreNoteVersion,
       linkNoteToTask,
@@ -32075,6 +32090,7 @@ function AppDataProvider({ children }) {
       undoLastChange,
       createNote,
       updateNote,
+      applyNoteAiClassification,
       removeNote,
       restoreNoteVersion,
       linkNoteToTask,
@@ -38107,19 +38123,15 @@ var import_react21 = __toESM(require_react(), 1);
 
 // src/components/NoteCard.tsx
 var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
-function toSnippet2(content) {
-  const plain = content.replace(/```[\s\S]*?```/g, " ").replace(/[#>*`_\-[\]()]/g, " ").replace(/\s+/g, " ").trim();
-  return plain.slice(0, 90);
-}
 function NoteCard({
   note,
   project,
   isSelected,
   isChecked,
-  linkedTaskCount,
   onSelect,
   onToggleCheck,
   onOpenMenu,
+  onOpenAiMenu,
   draggable,
   dragging,
   dragOver,
@@ -38129,7 +38141,6 @@ function NoteCard({
   onDrop,
   onDragEnd
 }) {
-  const snippet = toSnippet2(note.content);
   function handleCheckClick(event) {
     event.stopPropagation();
   }
@@ -38138,7 +38149,7 @@ function NoteCard({
     const rect = event.currentTarget.getBoundingClientRect();
     onOpenMenu({ x: rect.right, y: rect.bottom });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
     "article",
     {
       className: `note-card ${isSelected ? "selected" : ""} ${note.isPinned ? "pinned" : ""} ${dragging ? "dragging" : ""} ${dragOver ? "drag-over" : ""}`,
@@ -38152,7 +38163,7 @@ function NoteCard({
       onClick: onSelect,
       onContextMenu: (event) => {
         event.preventDefault();
-        onOpenMenu({ x: event.clientX, y: event.clientY });
+        onOpenAiMenu({ x: event.clientX, y: event.clientY });
       },
       role: "button",
       tabIndex: 0,
@@ -38162,49 +38173,34 @@ function NoteCard({
           onSelect();
         }
       },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "note-card-top", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-            "input",
-            {
-              type: "checkbox",
-              className: "note-card-check",
-              checked: isChecked,
-              onClick: handleCheckClick,
-              onChange: (event) => onToggleCheck(event.target.checked),
-              "aria-label": `${note.title} 선택`
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("h3", { className: "note-card-title", children: [
-            note.isPinned ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { "aria-label": "고정됨", children: "📌 " }) : null,
-            note.title
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: `note-status-badge status-${note.status}`, children: NOTE_STATUS_LABELS[note.status] }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-            "button",
-            {
-              type: "button",
-              className: "note-card-kebab",
-              "aria-label": `${note.title} 메뉴`,
-              title: "메뉴",
-              onClick: handleKebabClick,
-              children: "⋯"
-            }
-          )
+      children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "note-card-top", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            className: "note-card-check",
+            checked: isChecked,
+            onClick: handleCheckClick,
+            onChange: (event) => onToggleCheck(event.target.checked),
+            "aria-label": `${note.title} 선택`
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("h3", { className: "note-card-title", children: [
+          note.isPinned ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { "aria-label": "고정됨", children: "📌 " }) : null,
+          note.title
         ] }),
-        snippet ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { className: "note-card-snippet", children: snippet }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "note-card-footer", children: [
-          project ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "note-card-project", children: project.name }) : null,
-          note.tags.slice(0, 3).map((tag) => /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { className: "note-card-tag", children: [
-            "#",
-            tag
-          ] }, tag)),
-          linkedTaskCount > 0 ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { className: "note-card-links", children: [
-            "🔗 ",
-            linkedTaskCount
-          ] }) : null
-        ] })
-      ]
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "note-card-kebab",
+            "aria-label": `${note.title} 메뉴`,
+            title: "메뉴",
+            onClick: handleKebabClick,
+            children: "⋯"
+          }
+        )
+      ] })
     }
   );
 }
@@ -39296,6 +39292,63 @@ async function runNotesAgent(input) {
     assistantMessage: "노트 정보를 조회했지만 결과를 완성하지 못했습니다. 요청을 조금 더 구체적으로 다시 입력해 주세요."
   };
 }
+async function classifyNoteWithAi(input) {
+  const availableProjects = input.projects.filter((project) => project.isActive);
+  const projectIds = new Set(availableProjects.map((project) => project.id));
+  const fallbackProjectId = projectIds.has(input.note.projectId) ? input.note.projectId : availableProjects[0]?.id ?? input.note.projectId;
+  const system = `
+You classify one Korean note into the user's existing project taxonomy.
+Return exactly one JSON object with this schema:
+{"projectId":"existing project id","subcategoryId":"existing subcategory id or empty string","reason":"short Korean reason"}
+
+Rules:
+1. Use only ids supplied in the payload. Never invent a project or subcategory.
+2. Pick the single best project from availableProjects. Keep currentProjectId when evidence is weak.
+3. Pick a subcategory only when it clearly fits and belongs to the selected project; otherwise return an empty string.
+4. Judge the note's meaning, not only literal name matches.
+5. No markdown fences and no text outside the JSON object.
+  `.trim();
+  const { payload } = await requestJsonWithRetry({
+    messages: [
+      { role: "system", content: system },
+      {
+        role: "user",
+        content: JSON.stringify({
+          note: input.note,
+          currentProjectId: fallbackProjectId,
+          availableProjects: availableProjects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            description: project.description ?? ""
+          })),
+          availableSubcategories: input.subcategories.map((subcategory) => ({
+            id: subcategory.id,
+            projectId: subcategory.projectId,
+            name: subcategory.name
+          }))
+        })
+      }
+    ],
+    endpoint: input.endpoint,
+    apiKey: input.apiKey,
+    model: input.model,
+    signal: input.signal
+  });
+  if (!payload || !isRecord(payload)) {
+    throw new Error("AI 자동분류 응답을 해석하지 못했습니다.");
+  }
+  const requestedProjectId = pickFirstString(payload, ["projectId", "project_id"]);
+  const projectId = projectIds.has(requestedProjectId) ? requestedProjectId : fallbackProjectId;
+  const requestedSubcategoryId = pickFirstString(payload, ["subcategoryId", "subcategory_id"]);
+  const validSubcategory = input.subcategories.find(
+    (subcategory) => subcategory.id === requestedSubcategoryId && subcategory.projectId === projectId
+  );
+  return {
+    projectId,
+    subcategoryId: validSubcategory?.id,
+    reason: pickFirstString(payload, ["reason", "message"]) || void 0
+  };
+}
 function suggestTasksForNote(params) {
   const excluded = new Set(params.excludeTaskIds);
   const keywords = extractKeywords(`${params.noteTitle} ${params.noteContent}`);
@@ -39461,6 +39514,7 @@ function NotesPage() {
     createNote,
     createTask,
     updateNote,
+    applyNoteAiClassification,
     removeNote,
     restoreNoteVersion,
     linkNoteToTask,
@@ -39471,6 +39525,7 @@ function NotesPage() {
   const navigate = useNavigate();
   const [filterNode, setFilterNode] = (0, import_react21.useState)({ kind: "all" });
   const [selectedNoteId, setSelectedNoteId] = (0, import_react21.useState)(null);
+  const [focusedNoteId, setFocusedNoteId] = (0, import_react21.useState)(null);
   const [draft, setDraft] = (0, import_react21.useState)(null);
   const [checkedIds, setCheckedIds] = (0, import_react21.useState)(/* @__PURE__ */ new Set());
   const [search, setSearch] = (0, import_react21.useState)("");
@@ -39497,6 +39552,7 @@ function NotesPage() {
   const [aiProgress, setAiProgress] = (0, import_react21.useState)("");
   const [aiError, setAiError] = (0, import_react21.useState)("");
   const [aiProposal, setAiProposal] = (0, import_react21.useState)(null);
+  const [classificationRevision, setClassificationRevision] = (0, import_react21.useState)(0);
   const [compareVersion, setCompareVersion] = (0, import_react21.useState)(null);
   const [actionItems, setActionItems] = (0, import_react21.useState)(null);
   const [isCreatingActions, setIsCreatingActions] = (0, import_react21.useState)(false);
@@ -39510,6 +39566,9 @@ function NotesPage() {
   const abortRef = (0, import_react21.useRef)(null);
   const draftRef = (0, import_react21.useRef)(null);
   const notesRef = (0, import_react21.useRef)(notes);
+  const stackItemRefs = (0, import_react21.useRef)(/* @__PURE__ */ new Map());
+  const classificationInFlightRef = (0, import_react21.useRef)(false);
+  const classificationAttemptedRef = (0, import_react21.useRef)(/* @__PURE__ */ new Set());
   (0, import_react21.useEffect)(() => {
     draftRef.current = draft;
   }, [draft]);
@@ -39583,12 +39642,15 @@ function NotesPage() {
   (0, import_react21.useEffect)(() => {
     if (selectedNoteId && !notes.some((note) => note.id === selectedNoteId)) {
       setSelectedNoteId(null);
+      setFocusedNoteId((current) => current === selectedNoteId ? null : current);
     }
   }, [notes, selectedNoteId]);
   (0, import_react21.useEffect)(() => {
     const handleFocusNote = (event) => {
       const detail = event.detail;
       if (detail?.noteId) {
+        setFilterNode({ kind: "all" });
+        setFocusedNoteId(detail.noteId);
         setSelectedNoteId(detail.noteId);
       }
     };
@@ -39602,46 +39664,59 @@ function NotesPage() {
           if (note.id === selectedNoteId || note.status === "archived") {
             continue;
           }
-          const patch = {};
           if (isAutoTitle(note.title)) {
             const derived = deriveNoteTitle(note.content);
             if (derived && derived !== note.title) {
-              patch.title = derived;
+              await updateNote(note.id, { ...noteToInput(note), title: derived });
             }
-          }
-          const haystack = `${note.title} ${note.content}`.toLowerCase();
-          let effectiveProjectId = note.projectId;
-          if (note.projectId === DEFAULT_PROJECT_ID) {
-            const match = projects.find(
-              (project) => project.id !== DEFAULT_PROJECT_ID && project.isActive && project.name.trim().length >= 2 && haystack.includes(project.name.toLowerCase())
-            );
-            if (match) {
-              patch.projectId = match.id;
-              patch.subcategoryId = void 0;
-              effectiveProjectId = match.id;
-            }
-          }
-          if (!note.subcategoryId && !patch.projectId) {
-            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
-            const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
-            if (match) {
-              patch.subcategoryId = match.id;
-            }
-          } else if (patch.projectId) {
-            const subs = projectSubcategories.filter((sub) => sub.projectId === effectiveProjectId && sub.name.trim());
-            const match = subs.find((sub) => haystack.includes(sub.name.toLowerCase()));
-            if (match) {
-              patch.subcategoryId = match.id;
-            }
-          }
-          if (Object.keys(patch).length > 0) {
-            await updateNote(note.id, { ...noteToInput(note), ...patch });
           }
         }
       })();
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [notes, projects, projectSubcategories, selectedNoteId, updateNote]);
+  }, [notes, selectedNoteId, updateNote]);
+  (0, import_react21.useEffect)(() => {
+    if (!hasApiConfig || classificationInFlightRef.current) {
+      return;
+    }
+    const candidate = notes.find(
+      (note) => !note.aiClassifiedAt && note.id !== selectedNoteId && note.status !== "archived" && note.content.trim().length > 0 && !classificationAttemptedRef.current.has(note.id)
+    );
+    if (!candidate) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      classificationInFlightRef.current = true;
+      classificationAttemptedRef.current.add(candidate.id);
+      void classifyNoteWithAi({
+        note: candidate,
+        projects,
+        subcategories: projectSubcategories,
+        endpoint: setting.llmEndpoint,
+        apiKey: setting.llmApiKey ?? "",
+        model: setting.llmModel
+      }).then(
+        (classification) => applyNoteAiClassification(candidate.id, classification.projectId, classification.subcategoryId)
+      ).catch((error) => {
+        console.warn("AI note classification failed", error);
+      }).finally(() => {
+        classificationInFlightRef.current = false;
+        setClassificationRevision((value) => value + 1);
+      });
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [
+    notes,
+    selectedNoteId,
+    hasApiConfig,
+    projects,
+    projectSubcategories,
+    setting.llmEndpoint,
+    setting.llmApiKey,
+    setting.llmModel,
+    applyNoteAiClassification,
+    classificationRevision
+  ]);
   const openChecklistItems = (0, import_react21.useMemo)(() => {
     const items = [];
     for (const note of notes) {
@@ -39722,6 +39797,30 @@ function NotesPage() {
   (0, import_react21.useEffect)(() => {
     setStackLimit(20);
   }, [filterNode]);
+  (0, import_react21.useEffect)(() => {
+    if (!focusedNoteId) {
+      return;
+    }
+    const index = filteredNotes.findIndex((note) => note.id === focusedNoteId);
+    if (index < 0) {
+      return;
+    }
+    if (index >= stackLimit) {
+      setStackLimit(index + 1);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      stackItemRefs.current.get(focusedNoteId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedNoteId, filteredNotes, stackLimit]);
+  function focusNoteInStack(noteId) {
+    setFocusedNoteId(noteId);
+  }
+  function editNoteInStack(noteId) {
+    setFocusedNoteId(noteId);
+    setSelectedNoteId(noteId);
+  }
   const [dragNoteId, setDragNoteId] = (0, import_react21.useState)(null);
   const [dragOverNoteId, setDragOverNoteId] = (0, import_react21.useState)(null);
   const isNoteDragEnabled = !search.trim() && filterNode.kind !== "checklist";
@@ -39830,7 +39929,7 @@ function NotesPage() {
       base.projectId = filterNode.projectId;
     }
     const id = await createNote(base);
-    setSelectedNoteId(id);
+    editNoteInStack(id);
   }
   async function handleSave(editType = "manual") {
     if (!selectedNoteId || !draft) return;
@@ -39861,6 +39960,7 @@ function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
+    setFocusedNoteId(null);
     showToast("노트를 삭제했습니다.");
   }
   async function toggleChecklistLine(noteId, lineIndex, checked) {
@@ -39895,6 +39995,7 @@ function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(noteId);
     if (selectedNoteId === noteId) setSelectedNoteId(null);
+    if (focusedNoteId === noteId) setFocusedNoteId(null);
     showToast("노트를 삭제했습니다.");
   }
   async function handleSummarizeNote(noteId) {
@@ -39932,7 +40033,7 @@ function NotesPage() {
           "ai_full",
           "노트 요약"
         );
-        setSelectedNoteId(id);
+        editNoteInStack(id);
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -39949,7 +40050,7 @@ function NotesPage() {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return [];
     const items = [
-      { id: "open", label: "열기", onSelect: () => setSelectedNoteId(noteId) },
+      { id: "open", label: "열기", onSelect: () => editNoteInStack(noteId) },
       { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
       { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) }
     ];
@@ -40194,6 +40295,11 @@ function NotesPage() {
     const rect = event.currentTarget.getBoundingClientRect();
     setAiMenu({ x: rect.left, y: rect.bottom + 4 });
   }
+  function handleOpenNoteAiMenu(noteId, position) {
+    editNoteInStack(noteId);
+    selectionRef.current = { start: 0, end: 0 };
+    setAiMenu(position);
+  }
   async function handleRestoreVersion(versionId) {
     if (!selectedNoteId) return;
     await restoreNoteVersion(selectedNoteId, versionId);
@@ -40242,7 +40348,7 @@ function NotesPage() {
           "선택 노트 요약"
         );
         setCheckedIds(/* @__PURE__ */ new Set());
-        setSelectedNoteId(id);
+        editNoteInStack(id);
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -40293,7 +40399,7 @@ function NotesPage() {
           "선택 노트 통합"
         );
         setCheckedIds(/* @__PURE__ */ new Set());
-        setSelectedNoteId(id);
+        editNoteInStack(id);
       } else {
         setAiError(result.assistantMessage || "통합 결과를 만들지 못했습니다.");
       }
@@ -40400,6 +40506,7 @@ function NotesPage() {
             onSelect: (node) => {
               setFilterNode(node);
               setSelectedNoteId(null);
+              setFocusedNoteId(null);
             },
             onAddSubcategory: (projectId, name) => void createSubcategory(projectId, name)
           }
@@ -40434,7 +40541,10 @@ function NotesPage() {
             {
               type: "button",
               className: "global-check-body",
-              onClick: () => setSelectedNoteId(item.noteId),
+              onClick: () => {
+                setFilterNode({ kind: "all" });
+                editNoteInStack(item.noteId);
+              },
               style: { "--note-project-color": item.projectColor },
               children: [
                 /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "global-check-text", children: item.text }),
@@ -40448,12 +40558,12 @@ function NotesPage() {
             {
               note,
               project: projectMap[note.projectId],
-              isSelected: note.id === selectedNoteId,
+              isSelected: note.id === focusedNoteId || note.id === selectedNoteId,
               isChecked: checkedIds.has(note.id),
-              linkedTaskCount: note.linkedTaskIds.length,
-              onSelect: () => setSelectedNoteId(note.id),
+              onSelect: () => focusNoteInStack(note.id),
               onToggleCheck: (checked) => toggleCheck(note.id, checked),
               onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id }),
+              onOpenAiMenu: (pos) => handleOpenNoteAiMenu(note.id, pos),
               draggable: isNoteDragEnabled,
               dragging: dragNoteId === note.id,
               dragOver: dragOverNoteId === note.id && dragNoteId !== note.id,
@@ -40504,138 +40614,133 @@ function NotesPage() {
         ] }) })
       ] })
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("main", { className: "notes-detail-pane", children: selectedNote && draft && currentProject ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(import_jsx_runtime25.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-        NoteEditor,
-        {
-          draft,
-          projectName: currentProject.name,
-          projectColor: currentProject.color,
-          subcategoryName: currentSubcategoryName,
-          aiEnabled: hasApiConfig,
-          isAiRunning,
-          overlay: editorOverlay,
-          onAcceptOverlay: () => void acceptProposal(),
-          onRejectOverlay: () => {
-            setAiProposal(null);
-            setCompareVersion(null);
-            setAiProgress("");
-          },
-          onToggleChecklist: (lineIndex, checked) => void handleToggleChecklist(lineIndex, checked),
-          onOpenAiMenu: handleOpenAiMenuButton,
-          onChangeTitle: (value) => setDraft((prev) => prev ? { ...prev, title: value } : prev),
-          onChangeContent: (value) => setDraft((prev) => {
-            if (!prev) {
-              return prev;
-            }
-            const following = isFollowingTitle(prev.title, prev.content);
-            const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : prev.title;
-            return { ...prev, content: value, title: nextTitle };
-          }),
-          onSave: () => void handleSave("manual"),
-          onOpenMeta: () => setMetaModalOpen(true),
-          onOpenHistory: () => setHistoryOpen(true),
-          onDelete: () => void handleDelete(),
-          onContentContextMenu: handleContentContextMenu,
-          textareaRef,
-          isSaving,
-          isDirty,
-          savedMessage,
-          errorMessage,
-          historyCount: selectedVersions.length
-        },
-        selectedNote.id
-      ),
-      isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("p", { className: "note-ai-running", "aria-live": "polite", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "note-ai-spinner", "aria-hidden": "true" }),
-        aiProgress || "AI가 처리 중입니다…"
-      ] }) : aiProgress.startsWith("AI 참고") ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "note-ai-trace", children: aiProgress }) : null,
-      aiError ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "error-text", children: aiError }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-        NoteConnections,
-        {
-          linkedTasks,
-          suggestions,
-          relatedNotes,
-          timeFormat: setting.timeFormat,
-          onOpenTask: handleOpenTask,
-          onOpenNote: (noteId) => setSelectedNoteId(noteId),
-          onLink: (taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest"),
-          onUnlink: (taskId) => void unlinkNoteFromTask(selectedNote.id, taskId),
-          isBusy: isSaving
-        }
-      )
-    ] }) : filterNode.kind !== "checklist" && filteredNotes.length > 0 ? (
-      /* 카테고리 선택 상태: 해당 노트들을 위아래로 이어서 보여준다 */
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-view", "aria-label": `${listTitle} 이어보기`, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-head", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "eyebrow", children: "READ ALL" }),
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("h3", { children: [
-              listTitle,
-              " ",
-              filteredNotes.length,
-              "개"
-            ] })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-hint", children: "왼쪽 카드를 위아래로 끌면 순서가 바뀝니다 · 노트를 클릭하면 편집" })
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("main", { className: "notes-detail-scroll", children: filterNode.kind !== "checklist" && filteredNotes.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-view", "aria-label": `${listTitle} 이어보기`, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-head", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "eyebrow", children: "READ ALL" }),
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("h3", { children: [
+            listTitle,
+            " ",
+            filteredNotes.length,
+            "개"
+          ] })
         ] }),
-        filteredNotes.slice(0, stackLimit).map((note) => {
-          const project = projectMap[note.projectId];
-          const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : void 0;
-          return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
-            "article",
-            {
-              className: "notes-stack-item",
-              style: { "--note-project-color": project?.color ?? "var(--body-muted)" },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-item-head", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-stack-item-title", onClick: () => setSelectedNoteId(note.id), children: [
-                    note.isPinned ? "📌 " : "",
-                    note.title
-                  ] }),
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-item-meta", children: [
-                    project ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip project", children: project.name }) : null,
-                    subName ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip", children: subName }) : null,
-                    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-                      "button",
-                      {
-                        type: "button",
-                        className: "btn btn-soft btn-compact",
-                        onClick: () => setSelectedNoteId(note.id),
-                        children: "편집"
-                      }
-                    )
-                  ] })
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-stack-item-body", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-                  MarkdownRenderer,
-                  {
-                    content: note.content,
-                    emptyText: "내용이 없습니다.",
-                    onChecklistToggle: (lineIndex, checked) => void toggleChecklistLine(note.id, lineIndex, checked)
-                  }
-                ) })
-              ]
-            },
-            note.id
-          );
-        }),
-        filteredNotes.length > stackLimit ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
-          "button",
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-hint", children: "왼쪽 카드는 해당 위치로 이동 · 편집 버튼은 문맥을 유지한 채 바로 편집" })
+      ] }),
+      filteredNotes.slice(0, stackLimit).map((note) => {
+        const project = projectMap[note.projectId];
+        const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : void 0;
+        const isEditing = note.id === selectedNoteId && selectedNote && draft && currentProject;
+        const commonStyle = {
+          "--note-project-color": project?.color ?? "var(--body-muted)"
+        };
+        const setStackRef = (node) => {
+          if (node) stackItemRefs.current.set(note.id, node);
+          else stackItemRefs.current.delete(note.id);
+        };
+        if (isEditing) {
+          return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("article", { ref: setStackRef, className: "notes-detail-pane", style: commonStyle, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+              NoteEditor,
+              {
+                draft,
+                projectName: currentProject.name,
+                projectColor: currentProject.color,
+                subcategoryName: currentSubcategoryName,
+                aiEnabled: hasApiConfig,
+                isAiRunning,
+                overlay: editorOverlay,
+                onAcceptOverlay: () => void acceptProposal(),
+                onRejectOverlay: () => {
+                  setAiProposal(null);
+                  setCompareVersion(null);
+                  setAiProgress("");
+                },
+                onToggleChecklist: (lineIndex, checked) => void handleToggleChecklist(lineIndex, checked),
+                onOpenAiMenu: handleOpenAiMenuButton,
+                onChangeTitle: (value) => setDraft((prev) => prev ? { ...prev, title: value } : prev),
+                onChangeContent: (value) => setDraft((prev) => {
+                  if (!prev) return prev;
+                  const following = isFollowingTitle(prev.title, prev.content);
+                  const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : prev.title;
+                  return { ...prev, content: value, title: nextTitle };
+                }),
+                onSave: () => void handleSave("manual"),
+                onOpenMeta: () => setMetaModalOpen(true),
+                onOpenHistory: () => setHistoryOpen(true),
+                onDelete: () => void handleDelete(),
+                onContentContextMenu: handleContentContextMenu,
+                textareaRef,
+                isSaving,
+                isDirty,
+                savedMessage,
+                errorMessage,
+                historyCount: selectedVersions.length
+              },
+              selectedNote.id
+            ),
+            isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("p", { className: "note-ai-running", "aria-live": "polite", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "note-ai-spinner", "aria-hidden": "true" }),
+              aiProgress || "AI가 처리 중입니다…"
+            ] }) : aiProgress.startsWith("AI 참고") ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "note-ai-trace", children: aiProgress }) : null,
+            aiError ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "error-text", children: aiError }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+              NoteConnections,
+              {
+                linkedTasks,
+                suggestions,
+                relatedNotes,
+                timeFormat: setting.timeFormat,
+                onOpenTask: handleOpenTask,
+                onOpenNote: (noteId) => editNoteInStack(noteId),
+                onLink: (taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest"),
+                onUnlink: (taskId) => void unlinkNoteFromTask(selectedNote.id, taskId),
+                isBusy: isSaving
+              }
+            )
+          ] }, note.id);
+        }
+        return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+          "article",
           {
-            type: "button",
-            className: "btn btn-soft notes-stack-more",
-            onClick: () => setStackLimit((limit) => limit + 20),
+            ref: setStackRef,
+            className: `notes-stack-item ${note.id === focusedNoteId ? "focused" : ""}`,
+            style: commonStyle,
+            onContextMenu: (event) => {
+              event.preventDefault();
+              handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
+            },
             children: [
-              "노트 ",
-              filteredNotes.length - stackLimit,
-              "개 더 보기"
+              /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-item-head", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-stack-item-title", onClick: () => focusNoteInStack(note.id), children: [
+                  note.isPinned ? "📌 " : "",
+                  note.title
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-item-meta", children: [
+                  project ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip project", children: project.name }) : null,
+                  subName ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip", children: subName }) : null,
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-soft btn-compact", onClick: () => editNoteInStack(note.id), children: "편집" })
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-stack-item-body", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                MarkdownRenderer,
+                {
+                  content: note.content,
+                  emptyText: "내용이 없습니다.",
+                  onChecklistToggle: (lineIndex, checked) => void toggleChecklistLine(note.id, lineIndex, checked)
+                }
+              ) })
             ]
-          }
-        ) : null
-      ] })
-    ) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-empty-detail", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "노트를 선택하거나 새 노트를 만들어 시작하세요." }) }) }),
+          },
+          note.id
+        );
+      }),
+      filteredNotes.length > stackLimit ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "btn btn-soft notes-stack-more", onClick: () => setStackLimit((limit) => limit + 20), children: [
+        "노트 ",
+        filteredNotes.length - stackLimit,
+        "개 더 보기"
+      ] }) : null
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-empty-detail", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "노트를 선택하거나 새 노트를 만들어 시작하세요." }) }) }),
     metaModalOpen && draft ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
       NoteMetaModal,
       {

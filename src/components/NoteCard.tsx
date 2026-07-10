@@ -1,5 +1,4 @@
 import { type CSSProperties, type DragEvent, type MouseEvent } from "react";
-import { NOTE_STATUS_LABELS } from "../constants";
 import type { Note, Project } from "../models";
 
 interface NoteCardProps {
@@ -7,10 +6,10 @@ interface NoteCardProps {
   project?: Project;
   isSelected: boolean;
   isChecked: boolean;
-  linkedTaskCount: number;
   onSelect: () => void;
   onToggleCheck: (checked: boolean) => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
+  onOpenAiMenu: (position: { x: number; y: number }) => void;
   /** 탐색기 목록에서 위아래 순서 변경용 드래그 지원 (선택적) */
   draggable?: boolean;
   dragging?: boolean;
@@ -22,24 +21,15 @@ interface NoteCardProps {
   onDragEnd?: (event: DragEvent<HTMLElement>) => void;
 }
 
-function toSnippet(content: string): string {
-  const plain = content
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/[#>*`_\-[\]()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return plain.slice(0, 90);
-}
-
 export function NoteCard({
   note,
   project,
   isSelected,
   isChecked,
-  linkedTaskCount,
   onSelect,
   onToggleCheck,
   onOpenMenu,
+  onOpenAiMenu,
   draggable,
   dragging,
   dragOver,
@@ -49,8 +39,6 @@ export function NoteCard({
   onDrop,
   onDragEnd,
 }: NoteCardProps) {
-  const snippet = toSnippet(note.content);
-
   function handleCheckClick(event: MouseEvent<HTMLInputElement>) {
     event.stopPropagation();
   }
@@ -76,7 +64,7 @@ export function NoteCard({
       onClick={onSelect}
       onContextMenu={(event) => {
         event.preventDefault();
-        onOpenMenu({ x: event.clientX, y: event.clientY });
+        onOpenAiMenu({ x: event.clientX, y: event.clientY });
       }}
       role="button"
       tabIndex={0}
@@ -100,7 +88,6 @@ export function NoteCard({
           {note.isPinned ? <span aria-label="고정됨">📌 </span> : null}
           {note.title}
         </h3>
-        <span className={`note-status-badge status-${note.status}`}>{NOTE_STATUS_LABELS[note.status]}</span>
         <button
           type="button"
           className="note-card-kebab"
@@ -112,17 +99,6 @@ export function NoteCard({
         </button>
       </div>
 
-      {snippet ? <p className="note-card-snippet">{snippet}</p> : null}
-
-      <div className="note-card-footer">
-        {project ? <span className="note-card-project">{project.name}</span> : null}
-        {note.tags.slice(0, 3).map((tag) => (
-          <span key={tag} className="note-card-tag">
-            #{tag}
-          </span>
-        ))}
-        {linkedTaskCount > 0 ? <span className="note-card-links">🔗 {linkedTaskCount}</span> : null}
-      </div>
     </article>
   );
 }
