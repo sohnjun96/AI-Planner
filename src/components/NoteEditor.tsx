@@ -38,6 +38,7 @@ interface NoteEditorProps {
   savedMessage?: string;
   errorMessage?: string;
   historyCount: number;
+  initialMode?: "edit" | "read";
 }
 
 export function NoteEditor({
@@ -65,8 +66,9 @@ export function NoteEditor({
   savedMessage,
   errorMessage,
   historyCount,
+  initialMode = "read",
 }: NoteEditorProps) {
-  const [mode, setMode] = useState<"edit" | "read">("read");
+  const [mode, setMode] = useState<"edit" | "read">(initialMode);
   const containerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {

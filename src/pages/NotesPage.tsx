@@ -93,6 +93,8 @@ export function NotesPage() {
   const [filterNode, setFilterNode] = useState<NoteFilterNode>({ kind: "all" });
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [focusedNoteId, setFocusedNoteId] = useState<string | null>(null);
+  const [editorEntryMode, setEditorEntryMode] = useState<"edit" | "read">("read");
+  const [editorEntryRevision, setEditorEntryRevision] = useState(0);
   const [draft, setDraft] = useState<NoteFormInput | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -450,6 +452,8 @@ export function NotesPage() {
 
   function editNoteInStack(noteId: string) {
     setFocusedNoteId(noteId);
+    setEditorEntryMode("edit");
+    setEditorEntryRevision((revision) => revision + 1);
     setSelectedNoteId(noteId);
   }
 
@@ -1274,6 +1278,7 @@ export function NotesPage() {
                   isSelected={note.id === focusedNoteId || note.id === selectedNoteId}
                   isChecked={checkedIds.has(note.id)}
                   onSelect={() => focusNoteInStack(note.id)}
+                  onOpenForEdit={() => editNoteInStack(note.id)}
                   onToggleCheck={(checked) => toggleCheck(note.id, checked)}
                   onOpenMenu={(pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })}
                   onOpenAiMenu={(pos) => handleOpenNoteAiMenu(note.id, pos)}
@@ -1393,7 +1398,7 @@ export function NotesPage() {
                 return (
                   <article key={note.id} ref={setStackRef} className="notes-detail-pane" style={commonStyle}>
                     <NoteEditor
-                      key={selectedNote.id}
+                      key={`${selectedNote.id}-${editorEntryMode}-${editorEntryRevision}`}
                       draft={draft}
                       projectName={currentProject.name}
                       projectColor={currentProject.color}
@@ -1429,6 +1434,7 @@ export function NotesPage() {
                       savedMessage={savedMessage}
                       errorMessage={errorMessage}
                       historyCount={selectedVersions.length}
+                      initialMode={editorEntryMode}
                     />
 
                     {isAiRunning ? (
@@ -1462,20 +1468,28 @@ export function NotesPage() {
                   ref={setStackRef}
                   className={`notes-stack-item ${note.id === focusedNoteId ? "focused" : ""}`}
                   style={commonStyle}
+                  onClick={() => focusNoteInStack(note.id)}
+                  onDoubleClick={() => editNoteInStack(note.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
                   }}
                 >
                   <header className="notes-stack-item-head">
-                    <button type="button" className="notes-stack-item-title" onClick={() => focusNoteInStack(note.id)}>
+                    <button type="button" className="notes-stack-item-title" onClick={(event) => {
+                      event.stopPropagation();
+                      focusNoteInStack(note.id);
+                    }}>
                       {note.isPinned ? "📌 " : ""}
                       {note.title}
                     </button>
                     <div className="notes-stack-item-meta">
                       {project ? <span className="notes-stack-chip project">{project.name}</span> : null}
                       {subName ? <span className="notes-stack-chip">{subName}</span> : null}
-                      <button type="button" className="btn btn-soft btn-compact" onClick={() => editNoteInStack(note.id)}>
+                      <button type="button" className="btn btn-soft btn-compact" onClick={(event) => {
+                        event.stopPropagation();
+                        editNoteInStack(note.id);
+                      }}>
                         편집
                       </button>
                     </div>

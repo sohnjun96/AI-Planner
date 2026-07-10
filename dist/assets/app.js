@@ -38170,6 +38170,7 @@ function NoteCard({
   isSelected,
   isChecked,
   onSelect,
+  onOpenForEdit,
   onToggleCheck,
   onOpenMenu,
   onOpenAiMenu,
@@ -38185,10 +38186,16 @@ function NoteCard({
   function handleCheckClick(event) {
     event.stopPropagation();
   }
+  function handleCheckDoubleClick(event) {
+    event.stopPropagation();
+  }
   function handleKebabClick(event) {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     onOpenMenu({ x: rect.right, y: rect.bottom });
+  }
+  function handleKebabDoubleClick(event) {
+    event.stopPropagation();
   }
   return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
     "article",
@@ -38202,6 +38209,7 @@ function NoteCard({
       onDrop,
       onDragEnd,
       onClick: onSelect,
+      onDoubleClick: onOpenForEdit,
       onContextMenu: (event) => {
         event.preventDefault();
         onOpenAiMenu({ x: event.clientX, y: event.clientY });
@@ -38222,6 +38230,7 @@ function NoteCard({
             className: "note-card-check",
             checked: isChecked,
             onClick: handleCheckClick,
+            onDoubleClick: handleCheckDoubleClick,
             onChange: (event) => onToggleCheck(event.target.checked),
             "aria-label": `${note.title} 선택`
           }
@@ -38238,6 +38247,7 @@ function NoteCard({
             "aria-label": `${note.title} 메뉴`,
             title: "메뉴",
             onClick: handleKebabClick,
+            onDoubleClick: handleKebabDoubleClick,
             children: "⋯"
           }
         )
@@ -38521,9 +38531,10 @@ function NoteEditor({
   isDirty,
   savedMessage,
   errorMessage,
-  historyCount
+  historyCount,
+  initialMode = "read"
 }) {
-  const [mode, setMode] = (0, import_react17.useState)("read");
+  const [mode, setMode] = (0, import_react17.useState)(initialMode);
   const containerRef = (0, import_react17.useRef)(null);
   (0, import_react17.useEffect)(() => {
     const handleKeyDown = (event) => {
@@ -39577,6 +39588,8 @@ function NotesPage() {
   const [filterNode, setFilterNode] = (0, import_react21.useState)({ kind: "all" });
   const [selectedNoteId, setSelectedNoteId] = (0, import_react21.useState)(null);
   const [focusedNoteId, setFocusedNoteId] = (0, import_react21.useState)(null);
+  const [editorEntryMode, setEditorEntryMode] = (0, import_react21.useState)("read");
+  const [editorEntryRevision, setEditorEntryRevision] = (0, import_react21.useState)(0);
   const [draft, setDraft] = (0, import_react21.useState)(null);
   const [checkedIds, setCheckedIds] = (0, import_react21.useState)(/* @__PURE__ */ new Set());
   const [search, setSearch] = (0, import_react21.useState)("");
@@ -39870,6 +39883,8 @@ function NotesPage() {
   }
   function editNoteInStack(noteId) {
     setFocusedNoteId(noteId);
+    setEditorEntryMode("edit");
+    setEditorEntryRevision((revision) => revision + 1);
     setSelectedNoteId(noteId);
   }
   const [dragNoteId, setDragNoteId] = (0, import_react21.useState)(null);
@@ -40619,6 +40634,7 @@ function NotesPage() {
               isSelected: note.id === focusedNoteId || note.id === selectedNoteId,
               isChecked: checkedIds.has(note.id),
               onSelect: () => focusNoteInStack(note.id),
+              onOpenForEdit: () => editNoteInStack(note.id),
               onToggleCheck: (checked) => toggleCheck(note.id, checked),
               onOpenMenu: (pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id }),
               onOpenAiMenu: (pos) => handleOpenNoteAiMenu(note.id, pos),
@@ -40774,9 +40790,10 @@ function NotesPage() {
                   isDirty,
                   savedMessage,
                   errorMessage,
-                  historyCount: selectedVersions.length
+                  historyCount: selectedVersions.length,
+                  initialMode: editorEntryMode
                 },
-                selectedNote.id
+                `${selectedNote.id}-${editorEntryMode}-${editorEntryRevision}`
               ),
               isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("p", { className: "note-ai-running", "aria-live": "polite", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "note-ai-spinner", "aria-hidden": "true" }),
@@ -40805,20 +40822,28 @@ function NotesPage() {
               ref: setStackRef,
               className: `notes-stack-item ${note.id === focusedNoteId ? "focused" : ""}`,
               style: commonStyle,
+              onClick: () => focusNoteInStack(note.id),
+              onDoubleClick: () => editNoteInStack(note.id),
               onContextMenu: (event) => {
                 event.preventDefault();
                 handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
               },
               children: [
                 /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-item-head", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-stack-item-title", onClick: () => focusNoteInStack(note.id), children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-stack-item-title", onClick: (event) => {
+                    event.stopPropagation();
+                    focusNoteInStack(note.id);
+                  }, children: [
                     note.isPinned ? "📌 " : "",
                     note.title
                   ] }),
                   /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-item-meta", children: [
                     project ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip project", children: project.name }) : null,
                     subName ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip", children: subName }) : null,
-                    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-soft btn-compact", onClick: () => editNoteInStack(note.id), children: "편집" })
+                    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-soft btn-compact", onClick: (event) => {
+                      event.stopPropagation();
+                      editNoteInStack(note.id);
+                    }, children: "편집" })
                   ] })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-stack-item-body", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(

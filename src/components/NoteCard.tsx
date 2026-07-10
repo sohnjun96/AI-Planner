@@ -7,6 +7,7 @@ interface NoteCardProps {
   isSelected: boolean;
   isChecked: boolean;
   onSelect: () => void;
+  onOpenForEdit: () => void;
   onToggleCheck: (checked: boolean) => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
   onOpenAiMenu: (position: { x: number; y: number }) => void;
@@ -27,6 +28,7 @@ export function NoteCard({
   isSelected,
   isChecked,
   onSelect,
+  onOpenForEdit,
   onToggleCheck,
   onOpenMenu,
   onOpenAiMenu,
@@ -43,10 +45,18 @@ export function NoteCard({
     event.stopPropagation();
   }
 
+  function handleCheckDoubleClick(event: MouseEvent<HTMLInputElement>) {
+    event.stopPropagation();
+  }
+
   function handleKebabClick(event: MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     onOpenMenu({ x: rect.right, y: rect.bottom });
+  }
+
+  function handleKebabDoubleClick(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
   }
 
   return (
@@ -62,6 +72,7 @@ export function NoteCard({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       onClick={onSelect}
+      onDoubleClick={onOpenForEdit}
       onContextMenu={(event) => {
         event.preventDefault();
         onOpenAiMenu({ x: event.clientX, y: event.clientY });
@@ -81,6 +92,7 @@ export function NoteCard({
           className="note-card-check"
           checked={isChecked}
           onClick={handleCheckClick}
+          onDoubleClick={handleCheckDoubleClick}
           onChange={(event) => onToggleCheck(event.target.checked)}
           aria-label={`${note.title} 선택`}
         />
@@ -94,6 +106,7 @@ export function NoteCard({
           aria-label={`${note.title} 메뉴`}
           title="메뉴"
           onClick={handleKebabClick}
+          onDoubleClick={handleKebabDoubleClick}
         >
           ⋯
         </button>
