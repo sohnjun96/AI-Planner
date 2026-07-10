@@ -6547,6 +6547,57 @@ textarea:focus-visible,
   overflow-y: auto;
 }
 
+/* The explorer keeps the count and filter, while the actual checklist is
+   intentionally rendered in the reading pane. */
+.notes-explorer-list .notes-checklist-view {
+  display: none;
+}
+
+.notes-checklist-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.notes-checklist-main-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-xs);
+}
+
+.global-check-item-main {
+  min-height: 82px;
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--note-project-color, var(--primary));
+  box-shadow: var(--card-shadow);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.global-check-item-main:hover {
+  border-color: var(--primary);
+  box-shadow: 0 8px 18px rgba(36, 40, 48, 0.1);
+  transform: translateY(-1px);
+}
+
+.global-check-item-main .global-check-text {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.global-check-item-main .global-check-note {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.notes-checklist-empty {
+  padding: var(--space-xl);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  color: var(--body-muted);
+  text-align: center;
+}
+
 .global-check-item {
   display: flex;
   align-items: flex-start;

@@ -40672,133 +40672,175 @@ function NotesPage() {
         ] }) })
       ] })
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("main", { className: "notes-detail-scroll", children: filterNode.kind !== "checklist" && filteredNotes.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-view", "aria-label": `${listTitle} 이어보기`, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-head", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "eyebrow", children: "READ ALL" }),
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("h3", { children: [
-            listTitle,
-            " ",
-            filteredNotes.length,
-            "개"
-          ] })
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("main", { className: "notes-detail-scroll", children: [
+      filterNode.kind === "checklist" ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("section", { className: "notes-checklist-main", "aria-label": "전체 체크리스트", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "eyebrow", children: "CHECKLIST" }),
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("h3", { children: [
+              "전체 체크리스트 ",
+              openChecklistItems.length,
+              "개"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-hint", children: "체크하면 원본 노트에서도 완료 처리됩니다 · 항목을 누르면 원본 노트로 이동합니다" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-hint", children: "왼쪽 카드는 해당 위치로 이동 · 편집 버튼은 문맥을 유지한 채 바로 편집" })
-      ] }),
-      filteredNotes.slice(0, stackLimit).map((note) => {
-        const project = projectMap[note.projectId];
-        const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : void 0;
-        const isEditing = note.id === selectedNoteId && selectedNote && draft && currentProject;
-        const commonStyle = {
-          "--note-project-color": project?.color ?? "var(--body-muted)"
-        };
-        const setStackRef = (node) => {
-          if (node) stackItemRefs.current.set(note.id, node);
-          else stackItemRefs.current.delete(note.id);
-        };
-        if (isEditing) {
-          return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("article", { ref: setStackRef, className: "notes-detail-pane", style: commonStyle, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-              NoteEditor,
-              {
-                draft,
-                projectName: currentProject.name,
-                projectColor: currentProject.color,
-                subcategoryName: currentSubcategoryName,
-                aiEnabled: hasApiConfig,
-                isAiRunning,
-                overlay: editorOverlay,
-                onAcceptOverlay: () => void acceptProposal(),
-                onRejectOverlay: () => {
-                  setAiProposal(null);
-                  setCompareVersion(null);
-                  setAiProgress("");
-                },
-                onToggleChecklist: (lineIndex, checked) => void handleToggleChecklist(lineIndex, checked),
-                onOpenAiMenu: handleOpenAiMenuButton,
-                onChangeTitle: (value) => setDraft((prev) => prev ? { ...prev, title: value } : prev),
-                onChangeContent: (value) => setDraft((prev) => {
-                  if (!prev) return prev;
-                  const following = isFollowingTitle(prev.title, prev.content);
-                  const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : prev.title;
-                  return { ...prev, content: value, title: nextTitle };
-                }),
-                onSave: () => void handleSave("manual"),
-                onOpenMeta: () => setMetaModalOpen(true),
-                onOpenHistory: () => setHistoryOpen(true),
-                onDelete: () => void handleDelete(),
-                onContentContextMenu: handleContentContextMenu,
-                textareaRef,
-                isSaving,
-                isDirty,
-                savedMessage,
-                errorMessage,
-                historyCount: selectedVersions.length
+        openChecklistItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-checklist-empty", children: "미완료 체크리스트 항목이 없습니다." }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-checklist-main-list", children: openChecklistItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("article", { className: "global-check-item global-check-item-main", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: false,
+              "aria-label": `${item.text} 완료`,
+              onChange: () => void toggleChecklistLine(item.noteId, item.lineIndex, true)
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+            "button",
+            {
+              type: "button",
+              className: "global-check-body",
+              onClick: () => {
+                setFilterNode({ kind: "all" });
+                editNoteInStack(item.noteId);
               },
-              selectedNote.id
-            ),
-            isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("p", { className: "note-ai-running", "aria-live": "polite", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "note-ai-spinner", "aria-hidden": "true" }),
-              aiProgress || "AI가 처리 중입니다…"
-            ] }) : aiProgress.startsWith("AI 참고") ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "note-ai-trace", children: aiProgress }) : null,
-            aiError ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "error-text", children: aiError }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-              NoteConnections,
-              {
-                linkedTasks,
-                suggestions,
-                relatedNotes,
-                timeFormat: setting.timeFormat,
-                onOpenTask: handleOpenTask,
-                onOpenNote: (noteId) => editNoteInStack(noteId),
-                onLink: (taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest"),
-                onUnlink: (taskId) => void unlinkNoteFromTask(selectedNote.id, taskId),
-                isBusy: isSaving
-              }
-            )
-          ] }, note.id);
-        }
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
-          "article",
-          {
-            ref: setStackRef,
-            className: `notes-stack-item ${note.id === focusedNoteId ? "focused" : ""}`,
-            style: commonStyle,
-            onContextMenu: (event) => {
-              event.preventDefault();
-              handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
-            },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-item-head", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-stack-item-title", onClick: () => focusNoteInStack(note.id), children: [
-                  note.isPinned ? "📌 " : "",
-                  note.title
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-item-meta", children: [
-                  project ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip project", children: project.name }) : null,
-                  subName ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip", children: subName }) : null,
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-soft btn-compact", onClick: () => editNoteInStack(note.id), children: "편집" })
-                ] })
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-stack-item-body", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
-                MarkdownRenderer,
+              style: { "--note-project-color": item.projectColor },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "global-check-text", children: item.text }),
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("small", { className: "global-check-note", children: item.noteTitle })
+              ]
+            }
+          )
+        ] }, `${item.noteId}-${item.lineIndex}`)) })
+      ] }) : null,
+      filterNode.kind !== "checklist" && filteredNotes.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-view", "aria-label": `${listTitle} 이어보기`, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "eyebrow", children: "READ ALL" }),
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("h3", { children: [
+              listTitle,
+              " ",
+              filteredNotes.length,
+              "개"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-hint", children: "왼쪽 카드는 해당 위치로 이동 · 편집 버튼은 문맥을 유지한 채 바로 편집" })
+        ] }),
+        filteredNotes.slice(0, stackLimit).map((note) => {
+          const project = projectMap[note.projectId];
+          const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : void 0;
+          const isEditing = note.id === selectedNoteId && selectedNote && draft && currentProject;
+          const commonStyle = {
+            "--note-project-color": project?.color ?? "var(--body-muted)"
+          };
+          const setStackRef = (node) => {
+            if (node) stackItemRefs.current.set(note.id, node);
+            else stackItemRefs.current.delete(note.id);
+          };
+          if (isEditing) {
+            return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("article", { ref: setStackRef, className: "notes-detail-pane", style: commonStyle, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                NoteEditor,
                 {
-                  content: note.content,
-                  emptyText: "내용이 없습니다.",
-                  onChecklistToggle: (lineIndex, checked) => void toggleChecklistLine(note.id, lineIndex, checked)
+                  draft,
+                  projectName: currentProject.name,
+                  projectColor: currentProject.color,
+                  subcategoryName: currentSubcategoryName,
+                  aiEnabled: hasApiConfig,
+                  isAiRunning,
+                  overlay: editorOverlay,
+                  onAcceptOverlay: () => void acceptProposal(),
+                  onRejectOverlay: () => {
+                    setAiProposal(null);
+                    setCompareVersion(null);
+                    setAiProgress("");
+                  },
+                  onToggleChecklist: (lineIndex, checked) => void handleToggleChecklist(lineIndex, checked),
+                  onOpenAiMenu: handleOpenAiMenuButton,
+                  onChangeTitle: (value) => setDraft((prev) => prev ? { ...prev, title: value } : prev),
+                  onChangeContent: (value) => setDraft((prev) => {
+                    if (!prev) return prev;
+                    const following = isFollowingTitle(prev.title, prev.content);
+                    const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : prev.title;
+                    return { ...prev, content: value, title: nextTitle };
+                  }),
+                  onSave: () => void handleSave("manual"),
+                  onOpenMeta: () => setMetaModalOpen(true),
+                  onOpenHistory: () => setHistoryOpen(true),
+                  onDelete: () => void handleDelete(),
+                  onContentContextMenu: handleContentContextMenu,
+                  textareaRef,
+                  isSaving,
+                  isDirty,
+                  savedMessage,
+                  errorMessage,
+                  historyCount: selectedVersions.length
+                },
+                selectedNote.id
+              ),
+              isAiRunning ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("p", { className: "note-ai-running", "aria-live": "polite", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "note-ai-spinner", "aria-hidden": "true" }),
+                aiProgress || "AI가 처리 중입니다…"
+              ] }) : aiProgress.startsWith("AI 참고") ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "note-ai-trace", children: aiProgress }) : null,
+              aiError ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "error-text", children: aiError }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                NoteConnections,
+                {
+                  linkedTasks,
+                  suggestions,
+                  relatedNotes,
+                  timeFormat: setting.timeFormat,
+                  onOpenTask: handleOpenTask,
+                  onOpenNote: (noteId) => editNoteInStack(noteId),
+                  onLink: (taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest"),
+                  onUnlink: (taskId) => void unlinkNoteFromTask(selectedNote.id, taskId),
+                  isBusy: isSaving
                 }
-              ) })
-            ]
-          },
-          note.id
-        );
-      }),
-      filteredNotes.length > stackLimit ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "btn btn-soft notes-stack-more", onClick: () => setStackLimit((limit) => limit + 20), children: [
-        "노트 ",
-        filteredNotes.length - stackLimit,
-        "개 더 보기"
-      ] }) : null
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-empty-detail", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "노트를 선택하거나 새 노트를 만들어 시작하세요." }) }) }),
+              )
+            ] }, note.id);
+          }
+          return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+            "article",
+            {
+              ref: setStackRef,
+              className: `notes-stack-item ${note.id === focusedNoteId ? "focused" : ""}`,
+              style: commonStyle,
+              onContextMenu: (event) => {
+                event.preventDefault();
+                handleOpenNoteAiMenu(note.id, { x: event.clientX, y: event.clientY });
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("header", { className: "notes-stack-item-head", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "notes-stack-item-title", onClick: () => focusNoteInStack(note.id), children: [
+                    note.isPinned ? "📌 " : "",
+                    note.title
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "notes-stack-item-meta", children: [
+                    project ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip project", children: project.name }) : null,
+                    subName ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "notes-stack-chip", children: subName }) : null,
+                    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "btn btn-soft btn-compact", onClick: () => editNoteInStack(note.id), children: "편집" })
+                  ] })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-stack-item-body", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                  MarkdownRenderer,
+                  {
+                    content: note.content,
+                    emptyText: "내용이 없습니다.",
+                    onChecklistToggle: (lineIndex, checked) => void toggleChecklistLine(note.id, lineIndex, checked)
+                  }
+                ) })
+              ]
+            },
+            note.id
+          );
+        }),
+        filteredNotes.length > stackLimit ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("button", { type: "button", className: "btn btn-soft notes-stack-more", onClick: () => setStackLimit((limit) => limit + 20), children: [
+          "노트 ",
+          filteredNotes.length - stackLimit,
+          "개 더 보기"
+        ] }) : null
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "notes-empty-detail", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "empty-text", children: "노트를 선택하거나 새 노트를 만들어 시작하세요." }) })
+    ] }),
     metaModalOpen && draft ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
       NoteMetaModal,
       {

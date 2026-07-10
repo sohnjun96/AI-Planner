@@ -1327,6 +1327,45 @@ export function NotesPage() {
       )}
 
       <main className="notes-detail-scroll">
+        {filterNode.kind === "checklist" ? (
+          <section className="notes-checklist-main" aria-label="전체 체크리스트">
+            <header className="notes-stack-head">
+              <div>
+                <p className="eyebrow">CHECKLIST</p>
+                <h3>전체 체크리스트 {openChecklistItems.length}개</h3>
+              </div>
+              <span className="notes-stack-hint">체크하면 원본 노트에서도 완료 처리됩니다 · 항목을 누르면 원본 노트로 이동합니다</span>
+            </header>
+            {openChecklistItems.length === 0 ? (
+              <div className="notes-checklist-empty">미완료 체크리스트 항목이 없습니다.</div>
+            ) : (
+              <div className="notes-checklist-main-list">
+                {openChecklistItems.map((item) => (
+                  <article key={`${item.noteId}-${item.lineIndex}`} className="global-check-item global-check-item-main">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      aria-label={`${item.text} 완료`}
+                      onChange={() => void toggleChecklistLine(item.noteId, item.lineIndex, true)}
+                    />
+                    <button
+                      type="button"
+                      className="global-check-body"
+                      onClick={() => {
+                        setFilterNode({ kind: "all" });
+                        editNoteInStack(item.noteId);
+                      }}
+                      style={{ "--note-project-color": item.projectColor } as CSSProperties}
+                    >
+                      <span className="global-check-text">{item.text}</span>
+                      <small className="global-check-note">{item.noteTitle}</small>
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
         {filterNode.kind !== "checklist" && filteredNotes.length > 0 ? (
           <div className="notes-stack-view" aria-label={`${listTitle} 이어보기`}>
             <header className="notes-stack-head">
