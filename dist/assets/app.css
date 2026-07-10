@@ -3529,6 +3529,21 @@ textarea:focus-visible,
 .week-day-body .compact-status-row {
   display: none;
 }
+.week-day-body .compact-task-main {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "time status" "title title";
+  gap: 5px 8px;
+  align-items: start;
+}
+.week-day-body .compact-task-time {
+  grid-area: time;
+}
+.week-day-body .compact-task-title {
+  grid-area: title;
+}
+.week-day-body .status-badge {
+  grid-area: status;
+}
 .week-day-body .compact-task-title {
   white-space: normal;
   overflow: hidden;

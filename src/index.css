@@ -3971,6 +3971,29 @@ textarea:focus-visible,
   display: none;
 }
 
+/* In the weekly agenda, reserve the first row for time and status so the
+   title can use the full card width on the second row. */
+.week-day-body .compact-task-main {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "time status"
+    "title title";
+  gap: 5px 8px;
+  align-items: start;
+}
+
+.week-day-body .compact-task-time {
+  grid-area: time;
+}
+
+.week-day-body .compact-task-title {
+  grid-area: title;
+}
+
+.week-day-body .status-badge {
+  grid-area: status;
+}
+
 /* 제목이 잘리지 않도록 최대 2줄까지 표시 */
 .week-day-body .compact-task-title {
   white-space: normal;
