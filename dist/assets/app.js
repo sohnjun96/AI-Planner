@@ -33723,12 +33723,19 @@ function describeChangeValue(key, value, timeFormat) {
   }
   return String(value);
 }
-function formatOperationTimeRange(startAt, endAt, timeFormat) {
-  const startText = formatDateTime(startAt, timeFormat);
-  if (!endAt) {
-    return startText;
+function formatProposalDateTime(startAt, endAt) {
+  const start = new Date(startAt);
+  if (Number.isNaN(start.getTime())) {
+    return startAt;
   }
-  return `${startText} - ${formatDateTime(endAt, timeFormat)}`;
+  const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(start);
+  const formatTime = (value) => `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+  const startText = `${start.getMonth() + 1}/${start.getDate()}(${weekday}) ${formatTime(start)}`;
+  if (!endAt) return startText;
+  const end = new Date(endAt);
+  if (Number.isNaN(end.getTime())) return startText;
+  const isSameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
+  return isSameDay ? `${startText}–${formatTime(end)}` : `${startText} – ${end.getMonth() + 1}/${end.getDate()}(${new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(end)}) ${formatTime(end)}`;
 }
 function focusTextareaAtEnd(textarea, value) {
   if (!textarea) {
@@ -34143,8 +34150,13 @@ function AiAssistantWorkspace({
             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: `status-badge ${operation.status.toLowerCase()}`, children: STATUS_LABELS[operation.status] }),
             operation.isMajor ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "major-tag", children: "중요" }) : null
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: operation.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "proposal-time-chip", children: formatOperationTimeRange(operation.startAt, operation.endAt, setting.timeFormat) }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-title-line", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: operation.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-date-time", children: [
+              "— ",
+              formatProposalDateTime(operation.startAt, operation.endAt)
+            ] })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-meta-grid", children: [
             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: projectName }),
             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: taskTypeName })
@@ -35350,10 +35362,6 @@ function AppShell() {
                   title: "AI 일정 추가",
                   inputLabel: "",
                   placeholder: "예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가",
-                  quickPrompts: [
-                    "내일 오전 10시에 팀 회의 1시간 추가해줘",
-                    "다음 주 화요일까지 보고서 초안 작성 일정 잡아줘"
-                  ],
                   className: "embedded ai-add-workspace",
                   initialDraft: aiInitialDraft,
                   onApplied: () => setIsAiAddOpen(false),

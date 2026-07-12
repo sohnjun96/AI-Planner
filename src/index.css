@@ -2331,17 +2331,6 @@ textarea:focus-visible,
   }
 }
 
-@keyframes ai-orb-float {
-  0%, 100% {
-    transform: translateY(-2px) scale(0.96);
-    box-shadow: 0 3px 12px rgba(105, 82, 224, 0.34);
-  }
-  50% {
-    transform: translateY(2px) scale(1.08);
-    box-shadow: 0 7px 20px rgba(105, 82, 224, 0.56);
-  }
-}
-
 @keyframes ai-orb-ring {
   0%, 100% { transform: scale(1.22); opacity: 0.44; }
   50% { transform: scale(1.52); opacity: 0.12; }
@@ -2443,7 +2432,7 @@ textarea:focus-visible,
   height: 20px;
   border-radius: 50%;
   background: radial-gradient(circle at 34% 28%, #c3b7ff 0%, #6952e0 76%);
-  animation: ai-orb-float 2.4s ease-in-out infinite;
+  box-shadow: 0 3px 12px rgba(105, 82, 224, 0.42);
 }
 
 .ai-add-modal-close {
@@ -2501,43 +2490,6 @@ textarea:focus-visible,
   outline: none;
   border-color: #9c8cff;
   box-shadow: 0 0 0 4px rgba(156, 140, 255, 0.14);
-}
-
-.ai-add-workspace .ai-prompt-chip-row {
-  display: grid;
-  grid-auto-columns: max-content;
-  grid-auto-flow: column;
-  align-items: center;
-  justify-content: start;
-  overflow-x: auto;
-  padding: 0 2px 2px;
-  gap: 7px;
-  scrollbar-width: none;
-}
-
-.ai-add-workspace .ai-prompt-chip-row::-webkit-scrollbar {
-  display: none;
-}
-
-.ai-add-workspace .ai-prompt-chip-hint {
-  color: #8b7cf6;
-}
-
-.ai-add-workspace .ai-prompt-chip-row button {
-  border-color: #e4defb;
-  background: #f7f5ff;
-  color: #5b5471;
-  padding: 6px 11px;
-  overflow: hidden;
-  max-width: 240px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-add-workspace .ai-prompt-chip-row button:hover {
-  border-color: #b6a9f6;
-  background: #fff;
-  color: #6952e0;
 }
 
 .ai-add-workspace .ai-composer-footer {
@@ -2649,6 +2601,23 @@ textarea:focus-visible,
   line-height: 1.35;
 }
 
+.ai-add-workspace .proposal-title-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  min-width: 0;
+}
+
+.ai-add-workspace .proposal-date-time {
+  color: #6952e0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
 .ai-add-workspace .proposal-card-topline,
 .ai-add-workspace .proposal-meta-grid {
   gap: 5px;
@@ -2726,7 +2695,6 @@ textarea:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   .ai-add-modal-card,
-  .ai-add-modal-orb i,
   .ai-add-modal-orb > span,
   .ai-add-modal-card:has(.ai-command-center.is-loading) .ai-add-modal-header::after {
     animation: none;

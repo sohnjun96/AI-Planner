@@ -153,12 +153,22 @@ function describeChangeValue(key: string, value: unknown, timeFormat: "24h" | "1
   return String(value);
 }
 
-function formatOperationTimeRange(startAt: string, endAt: string | undefined, timeFormat: "24h" | "12h"): string {
-  const startText = formatDateTime(startAt, timeFormat);
-  if (!endAt) {
-    return startText;
+function formatProposalDateTime(startAt: string, endAt?: string): string {
+  const start = new Date(startAt);
+  if (Number.isNaN(start.getTime())) {
+    return startAt;
   }
-  return `${startText} - ${formatDateTime(endAt, timeFormat)}`;
+  const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(start);
+  const formatTime = (value: Date) => `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+  const startText = `${start.getMonth() + 1}/${start.getDate()}(${weekday}) ${formatTime(start)}`;
+  if (!endAt) return startText;
+
+  const end = new Date(endAt);
+  if (Number.isNaN(end.getTime())) return startText;
+  const isSameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
+  return isSameDay
+    ? `${startText}–${formatTime(end)}`
+    : `${startText} – ${end.getMonth() + 1}/${end.getDate()}(${new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(end)}) ${formatTime(end)}`;
 }
 
 function focusTextareaAtEnd(textarea: HTMLTextAreaElement | null, value?: string) {
@@ -639,8 +649,10 @@ export function AiAssistantWorkspace({
                 <span className={`status-badge ${operation.status.toLowerCase()}`}>{STATUS_LABELS[operation.status]}</span>
                 {operation.isMajor ? <span className="major-tag">중요</span> : null}
               </span>
-              <strong>{operation.title}</strong>
-              <span className="proposal-time-chip">{formatOperationTimeRange(operation.startAt, operation.endAt, setting.timeFormat)}</span>
+              <span className="proposal-title-line">
+                <strong>{operation.title}</strong>
+                <span className="proposal-date-time">— {formatProposalDateTime(operation.startAt, operation.endAt)}</span>
+              </span>
               <span className="proposal-meta-grid">
                 <span>{projectName}</span>
                 <span>{taskTypeName}</span>
