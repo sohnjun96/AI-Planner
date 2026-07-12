@@ -644,18 +644,20 @@ export function AiAssistantWorkspace({
             <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
             <span className="proposal-checkmark" aria-hidden="true" />
             <span className="proposal-card-body">
-              <span className="proposal-title-line">
-                <strong>{operation.title}</strong>
-                <span className="proposal-date-time">- {formatProposalDateTime(operation.startAt, operation.endAt)}</span>
-              </span>
-              <span className="proposal-card-topline">
+              <span className="proposal-create-primary">
                 <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
-                <span className={`status-badge ${operation.status.toLowerCase()}`}>{STATUS_LABELS[operation.status]}</span>
+                <span className="proposal-title-line">
+                  <strong>{operation.title}</strong>
+                  <span className="proposal-date-time">- {formatProposalDateTime(operation.startAt, operation.endAt)}</span>
+                </span>
                 {operation.isMajor ? <span className="major-tag">중요</span> : null}
               </span>
-              <span className="proposal-meta-grid">
-                <span>{projectName}</span>
-                <span>{taskTypeName}</span>
+              <span className="proposal-create-secondary">
+                <span className={`status-badge ${operation.status.toLowerCase()}`}>{STATUS_LABELS[operation.status]}</span>
+                <span className="proposal-meta-grid">
+                  <span>{projectName}</span>
+                  <span>{taskTypeName}</span>
+                </span>
               </span>
               {operation.content ? <small>{operation.content}</small> : null}
             </span>
