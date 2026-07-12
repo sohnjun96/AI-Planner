@@ -643,23 +643,25 @@ export function AiAssistantWorkspace({
           <label className="proposal-item-toggle">
             <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
             <span className="proposal-checkmark" aria-hidden="true" />
-            <span className="proposal-card-body">
-              <span className="proposal-create-primary">
-                <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
-                <span className="proposal-title-line">
-                  <strong>{operation.title}</strong>
-                  <span className="proposal-date-time">- {formatProposalDateTime(operation.startAt, operation.endAt)}</span>
+            <span className="proposal-card-body proposal-create-body">
+              <span className="proposal-create-details">
+                <span className="proposal-create-primary">
+                  <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+                  <span className="proposal-title-line">
+                    <strong>{operation.title}</strong>
+                  </span>
+                  {operation.isMajor ? <span className="major-tag">중요</span> : null}
                 </span>
-                {operation.isMajor ? <span className="major-tag">중요</span> : null}
-              </span>
-              <span className="proposal-create-secondary">
-                <span className={`status-badge ${operation.status.toLowerCase()}`}>{STATUS_LABELS[operation.status]}</span>
-                <span className="proposal-meta-grid">
-                  <span>{projectName}</span>
-                  <span>{taskTypeName}</span>
+                <span className="proposal-create-secondary">
+                  <span className={`status-badge ${operation.status.toLowerCase()}`}>{STATUS_LABELS[operation.status]}</span>
+                  <span className="proposal-meta-grid">
+                    <span>{projectName}</span>
+                    <span>{taskTypeName}</span>
+                  </span>
                 </span>
+                {operation.content ? <small>{operation.content}</small> : null}
               </span>
-              {operation.content ? <small>{operation.content}</small> : null}
+              <span className="proposal-date-time">{formatProposalDateTime(operation.startAt, operation.endAt)}</span>
             </span>
           </label>
         </li>
@@ -724,9 +726,11 @@ export function AiAssistantWorkspace({
         /* 초안보다 먼저 배치 — 규칙을 검토·저장한 뒤 초안을 반영하는 흐름 */
         <div className="context-suggestion-block">
           <div className="context-suggestion-head">
-            <div>
-              <span className="badge-pill">user.md</span>
-              <strong>💡 AI가 학습한 규칙 {pendingContextSuggestions.length}개</strong>
+            <div className="context-suggestion-head-copy">
+              <div className="context-suggestion-title-row">
+                <span className="badge-pill">user.md</span>
+                <strong>💡 AI가 학습한 규칙 {pendingContextSuggestions.length}개</strong>
+              </div>
               <p className="description-text">
                 {pendingProposal
                   ? "규칙을 먼저 검토하세요. 저장하면 다음 요청부터 자동 적용됩니다. 일정 초안은 아래에 있어요."

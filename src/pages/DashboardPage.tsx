@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { DailyBriefing } from "../components/DailyBriefing";
+import { DayCompleteCelebration } from "../components/DayCompleteCelebration";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
 import { TaskForm } from "../components/TaskForm";
@@ -19,7 +20,13 @@ import {
   shiftIsoToDateKey,
 } from "../utils/date";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
-import { isTaskActive, isTaskCanceled, isTaskDone, isTaskVisibleOnBoard } from "../utils/taskStatus";
+import { shouldCelebrateAllTodayTasksCompleted } from "../utils/dayCompletion";
+import {
+  isTaskActive,
+  isTaskCanceled,
+  isTaskDone,
+  isTaskVisibleOnBoard,
+} from "../utils/taskStatus";
 
 const GLOBAL_MEMO_KEY = "global";
 
@@ -449,9 +456,48 @@ export function DashboardPage() {
   const [isTopbarExpanded, setIsTopbarExpanded] = useState(false);
   const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("priority");
   const [contextMenu, setContextMenu] = useState<DashboardContextMenu | null>(null);
+  const [celebrationRevision, setCelebrationRevision] = useState(0);
+  const previousTasksRef = useRef<Task[] | null>(null);
+  const celebrationStartTimerRef = useRef<number | null>(null);
+  const celebrationTimerRef = useRef<number | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const todayKey = getDateKey(today);
+
+  useEffect(() => {
+    const previousTasks = previousTasksRef.current;
+    previousTasksRef.current = tasks;
+    if (!previousTasks || !shouldCelebrateAllTodayTasksCompleted(previousTasks, tasks, todayKey)) {
+      return;
+    }
+
+    if (celebrationStartTimerRef.current !== null) {
+      window.clearTimeout(celebrationStartTimerRef.current);
+    }
+    if (celebrationTimerRef.current !== null) {
+      window.clearTimeout(celebrationTimerRef.current);
+    }
+    celebrationStartTimerRef.current = window.setTimeout(() => {
+      celebrationStartTimerRef.current = null;
+      setCelebrationRevision((revision) => revision + 1);
+      celebrationTimerRef.current = window.setTimeout(() => {
+        setCelebrationRevision(0);
+        celebrationTimerRef.current = null;
+      }, 2800);
+    }, 0);
+  }, [tasks, todayKey]);
+
+  useEffect(
+    () => () => {
+      if (celebrationStartTimerRef.current !== null) {
+        window.clearTimeout(celebrationStartTimerRef.current);
+      }
+      if (celebrationTimerRef.current !== null) {
+        window.clearTimeout(celebrationTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const visibleTasks = useMemo(
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
@@ -1086,6 +1132,7 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-workspace">
+      {celebrationRevision > 0 ? <DayCompleteCelebration key={celebrationRevision} /> : null}
       <section className={`dashboard-topbar compact-dashboard-topbar ${isTopbarExpanded ? "expanded" : "collapsed"}`}>
         <button
           type="button"

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { generateNoteTitleWithAi } from "../agent/noteTitleAgent";
 import { DEFAULT_PROJECT_ID } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { deriveNoteTitle } from "../utils/noteTitle";
@@ -22,7 +23,7 @@ type AiScheduleOpenDetail = {
 };
 
 export function AppShell() {
-  const { undoLastChange, projects, createNote } = useAppData();
+  const { undoLastChange, projects, setting, createNote } = useAppData();
   const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
   const [aiInitialDraft, setAiInitialDraft] = useState("");
@@ -35,9 +36,23 @@ export function AppShell() {
     [projects],
   );
 
-  async function handleQuickCreateNote(title: string, content: string) {
+  async function handleQuickCreateNote(content: string) {
+    const fallbackTitle = deriveNoteTitle(content) || "새 노트";
+    let title = fallbackTitle;
+    if ((setting.llmEndpoint ?? "").trim()) {
+      try {
+        title = await generateNoteTitleWithAi({
+          content,
+          endpoint: setting.llmEndpoint,
+          apiKey: setting.llmApiKey ?? "",
+          model: setting.llmModel,
+        });
+      } catch (error) {
+        console.warn("AI note title generation failed", error);
+      }
+    }
     const id = await createNote({
-      title: title.trim() || deriveNoteTitle(content) || "새 노트",
+      title,
       content,
       projectId: activeProjectId,
       subcategoryId: undefined,

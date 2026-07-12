@@ -1,16 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface NoteQuickAddModalProps {
-  onCreate: (title: string, content: string) => Promise<void>;
+  onCreate: (content: string) => Promise<void>;
   onClose: () => void;
 }
 
 export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps) {
-  const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
-  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -26,14 +24,14 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
     if (isSaving) {
       return;
     }
-    if (!title.trim() && !content.trim()) {
-      setError("제목이나 내용을 입력해 주세요.");
+    if (!content.trim()) {
+      setError("내용을 입력해 주세요.");
       return;
     }
     setIsSaving(true);
     setError("");
     try {
-      await onCreate(title, content);
+      await onCreate(content);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "노트 생성에 실패했습니다.");
       setIsSaving(false);
@@ -59,28 +57,13 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
           </button>
         </header>
 
-        <input
-          className="note-quick-title"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="제목 (비우면 내용에서 자동 생성)"
-          aria-label="노트 제목"
-          autoFocus
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              contentRef.current?.focus();
-            }
-          }}
-        />
-
         <textarea
-          ref={contentRef}
           className="note-quick-content"
           value={content}
           onChange={(event) => setContent(event.target.value)}
           placeholder="내용을 입력하세요. 마크다운을 지원합니다. (Ctrl+Enter로 저장)"
           rows={8}
+          autoFocus
           onKeyDown={(event) => {
             if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
               event.preventDefault();
