@@ -837,7 +837,8 @@ export function AiAssistantWorkspace({
     <section
       className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${
         hasVisibleResult ? "has-result" : ""
-      } ${className}`}
+      } ${isLoading ? "is-loading" : ""} ${className}`}
+      aria-busy={isLoading}
     >
       {showHeader ? (
         <header className="panel-header ai-command-header">

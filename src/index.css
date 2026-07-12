@@ -2318,6 +2318,259 @@ textarea:focus-visible,
   font-size: 15px;
 }
 
+/* AI 일정 추가: 참고 시안의 부드러운 보랏빛 톤과 명확한 입력 흐름만
+   가져오고, 기존 초안 검토와 적용 동작은 그대로 유지한다. */
+@keyframes ai-add-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ai-orb-breathe {
+  0%, 100% { box-shadow: 0 3px 12px rgba(105, 82, 224, 0.34); }
+  50% { box-shadow: 0 4px 18px rgba(105, 82, 224, 0.56); }
+}
+
+@keyframes ai-header-shimmer {
+  from { transform: translateX(-115%); }
+  to { transform: translateX(130%); }
+}
+
+.modal-backdrop:has(.ai-add-modal-card) {
+  padding: clamp(16px, 4vh, 48px);
+  background:
+    radial-gradient(circle at 50% 32%, rgba(236, 234, 252, 0.35), transparent 40%),
+    rgba(38, 26, 68, 0.34);
+  backdrop-filter: blur(7px) saturate(125%);
+}
+
+.ai-add-modal-card {
+  width: min(640px, 100%);
+  max-height: min(760px, calc(100dvh - 32px));
+  border: 1px solid rgba(92, 73, 180, 0.13);
+  box-shadow: 0 34px 90px -22px rgba(35, 18, 80, 0.42), 0 10px 30px rgba(35, 18, 80, 0.12);
+  animation: ai-add-modal-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ai-add-modal-card > .ai-add-modal-header {
+  position: relative;
+  align-items: center;
+  min-height: 112px;
+  padding: 24px 28px 22px;
+  overflow: hidden;
+  border-bottom-color: rgba(105, 82, 224, 0.1);
+  background: linear-gradient(180deg, #fff 0%, #f1eefc 100%);
+}
+
+.ai-add-modal-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  position: relative;
+  z-index: 1;
+}
+
+.ai-add-modal-heading .eyebrow {
+  margin-bottom: 4px;
+  color: #6952e0;
+}
+
+.ai-add-modal-heading h2 {
+  margin: 0 0 5px;
+  color: #16161a;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+}
+
+.ai-add-modal-heading small {
+  display: block;
+  max-width: 430px;
+  color: #6b6877;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ai-add-modal-orb {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+}
+
+.ai-add-modal-orb > span {
+  position: absolute;
+  inset: 1px;
+  border: 1px solid rgba(105, 82, 224, 0.42);
+  border-radius: 50%;
+  transform: scale(1.25);
+  opacity: 0.55;
+}
+
+.ai-add-modal-orb > span:first-child {
+  transform: scale(1.65);
+  opacity: 0.25;
+}
+
+.ai-add-modal-orb i {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #c3b7ff 0%, #6952e0 76%);
+  animation: ai-orb-breathe 2.8s ease-in-out infinite;
+}
+
+.ai-add-modal-close {
+  position: relative;
+  z-index: 1;
+  min-width: 0 !important;
+  border: 1px solid rgba(75, 75, 85, 0.08);
+  border-radius: 999px !important;
+  padding: 9px 15px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #4b4b55;
+}
+
+.ai-add-modal-close:hover {
+  background: #fff;
+  border-color: rgba(105, 82, 224, 0.2);
+  color: #5847c7;
+}
+
+.ai-add-modal-card:has(.ai-command-center.is-loading) .ai-add-modal-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 46%;
+  background: linear-gradient(100deg, transparent, rgba(124, 106, 239, 0.16), transparent);
+  animation: ai-header-shimmer 1.5s linear infinite;
+  pointer-events: none;
+}
+
+.ai-add-modal-card > .ai-command-center {
+  padding: 20px 28px 24px;
+  overscroll-behavior: contain;
+}
+
+.ai-add-workspace .ai-request-grid {
+  gap: 12px;
+}
+
+.ai-add-workspace .ai-input-label {
+  gap: 0;
+}
+
+.ai-add-workspace .ai-input-label textarea {
+  min-height: 142px;
+  padding: 17px 18px;
+  border: 1px solid #e5e5ea;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: inset 0 1px 1px rgba(20, 20, 30, 0.02);
+  color: #16161a;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.ai-add-workspace .ai-input-label textarea:focus {
+  outline: none;
+  border-color: #9c8cff;
+  box-shadow: 0 0 0 4px rgba(156, 140, 255, 0.14);
+}
+
+.ai-add-workspace .ai-prompt-chip-row {
+  padding: 0 2px;
+  gap: 7px;
+}
+
+.ai-add-workspace .ai-prompt-chip-hint {
+  color: #8b7cf6;
+}
+
+.ai-add-workspace .ai-prompt-chip-row button {
+  border-color: #e4defb;
+  background: #f7f5ff;
+  color: #5b5471;
+  padding: 6px 11px;
+}
+
+.ai-add-workspace .ai-prompt-chip-row button:hover {
+  border-color: #b6a9f6;
+  background: #fff;
+  color: #6952e0;
+}
+
+.ai-add-workspace .ai-composer-footer {
+  min-height: 42px;
+  padding-top: 2px;
+}
+
+.ai-add-workspace .ai-composer-footer .btn-primary {
+  min-width: 132px;
+  border-radius: 999px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #9c8cff, #6952e0);
+  box-shadow: 0 8px 18px -10px rgba(105, 82, 224, 0.78);
+}
+
+.ai-add-workspace .ai-result-card {
+  margin-top: 4px;
+  border-color: #ece7fc;
+  border-radius: 18px;
+  padding: 18px;
+  background: #f8f7ff;
+  box-shadow: none;
+}
+
+.ai-add-workspace.ai-command-center.has-result .ai-input-label {
+  padding: 0;
+}
+
+.ai-add-workspace.ai-command-center.has-result .ai-input-label textarea {
+  min-height: 92px;
+  height: 92px;
+}
+
+@media (max-width: 640px) {
+  .modal-backdrop:has(.ai-add-modal-card) {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .ai-add-modal-card {
+    max-height: calc(100dvh - 24px);
+    border-radius: 22px;
+  }
+
+  .ai-add-modal-card > .ai-add-modal-header,
+  .ai-add-modal-card > .ai-command-center {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .ai-add-modal-heading h2 {
+    font-size: 22px;
+  }
+
+  .ai-add-modal-heading small {
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-add-modal-card,
+  .ai-add-modal-orb i,
+  .ai-add-modal-card:has(.ai-command-center.is-loading) .ai-add-modal-header::after {
+    animation: none;
+  }
+}
+
 .ai-result-modal-card {
   width: min(980px, 94vw);
   gap: 0;

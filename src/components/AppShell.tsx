@@ -209,15 +209,23 @@ export function AppShell() {
               event.stopPropagation();
             }}
           >
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">AI SCHEDULE</p>
-                <h2>AI 일정 추가</h2>
-                <small>일정 추가·수정·삭제를 자연어로 말해보세요.</small>
+            <header className="panel-header ai-add-modal-header">
+              <div className="ai-add-modal-heading">
+                <span className="ai-add-modal-orb" aria-hidden="true">
+                  <span />
+                  <span />
+                  <i />
+                </span>
+                <div>
+                  <p className="eyebrow">AI SCHEDULE</p>
+                  <h2>AI 일정 추가</h2>
+                  <small>원하는 시간을 자연스럽게 말하면, 확인할 수 있는 일정 초안으로 정리해요.</small>
+                </div>
               </div>
               <button
                 type="button"
-                className="btn btn-soft"
+                className="btn ai-add-modal-close"
+                aria-label="AI 일정 추가 닫기"
                 onClick={() => {
                   setIsAiAddOpen(false);
                 }}
@@ -235,6 +243,10 @@ export function AppShell() {
               title="AI 일정 추가"
               inputLabel=""
               placeholder="예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가"
+              quickPrompts={[
+                "내일 오전 10시에 팀 회의 1시간 추가해줘",
+                "다음 주 화요일까지 보고서 초안 작성 일정 잡아줘",
+              ]}
               className="embedded ai-add-workspace"
               initialDraft={aiInitialDraft}
               onApplied={() => setIsAiAddOpen(false)}

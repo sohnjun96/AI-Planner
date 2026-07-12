@@ -34297,7 +34297,8 @@ function AiAssistantWorkspace({
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
     "section",
     {
-      className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${hasVisibleResult ? "has-result" : ""} ${className}`,
+      className: `panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${hasVisibleResult ? "has-result" : ""} ${isLoading ? "is-loading" : ""} ${className}`,
+      "aria-busy": isLoading,
       children: [
         showHeader ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "panel-header ai-command-header", children: [
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
@@ -35315,17 +35316,25 @@ function AppShell() {
               event.stopPropagation();
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "eyebrow", children: "AI SCHEDULE" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "AI 일정 추가" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { children: "일정 추가·수정·삭제를 자연어로 말해보세요." })
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "panel-header ai-add-modal-header", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "ai-add-modal-heading", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "ai-add-modal-orb", "aria-hidden": "true", children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", {}),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", {}),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", {})
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "eyebrow", children: "AI SCHEDULE" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "AI 일정 추가" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { children: "원하는 시간을 자연스럽게 말하면, 확인할 수 있는 일정 초안으로 정리해요." })
+                  ] })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                   "button",
                   {
                     type: "button",
-                    className: "btn btn-soft",
+                    className: "btn ai-add-modal-close",
+                    "aria-label": "AI 일정 추가 닫기",
                     onClick: () => {
                       setIsAiAddOpen(false);
                     },
@@ -35344,6 +35353,10 @@ function AppShell() {
                   title: "AI 일정 추가",
                   inputLabel: "",
                   placeholder: "예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가",
+                  quickPrompts: [
+                    "내일 오전 10시에 팀 회의 1시간 추가해줘",
+                    "다음 주 화요일까지 보고서 초안 작성 일정 잡아줘"
+                  ],
                   className: "embedded ai-add-workspace",
                   initialDraft: aiInitialDraft,
                   onApplied: () => setIsAiAddOpen(false),
