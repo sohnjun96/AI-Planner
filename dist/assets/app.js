@@ -34145,17 +34145,17 @@ function AiAssistantWorkspace({
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("input", { type: "checkbox", checked: isSelected, onChange: (event) => toggleSelection(event.target.checked) }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "proposal-checkmark", "aria-hidden": "true" }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-card-body", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-title-line", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: operation.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-date-time", children: [
+              "- ",
+              formatProposalDateTime(operation.startAt, operation.endAt)
+            ] })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-card-topline", children: [
             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: `proposal-action-pill ${actionMeta.tone}`, children: actionMeta.label }),
             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: `status-badge ${operation.status.toLowerCase()}`, children: STATUS_LABELS[operation.status] }),
             operation.isMajor ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "major-tag", children: "중요" }) : null
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-title-line", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: operation.title }),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-date-time", children: [
-              "— ",
-              formatProposalDateTime(operation.startAt, operation.endAt)
-            ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-meta-grid", children: [
             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: projectName }),
