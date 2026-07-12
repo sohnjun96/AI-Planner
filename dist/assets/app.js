@@ -34240,10 +34240,7 @@ function AiAssistantWorkspace({
     ) : null,
     pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-block compact-review", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-summary-row", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "badge-pill", children: "일정 초안" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: pendingProposal.summary })
-        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "description-text", children: pendingProposal.summary }) }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "proposal-count-card", "aria-label": "선택한 초안 수", children: [
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: selectedOperationIndexes.length }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { children: [
@@ -34359,7 +34356,7 @@ function AiAssistantWorkspace({
               }
             )
           ] }),
-          quickPrompts.length > 0 && !pendingProposal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: [
+          quickPrompts.length > 0 && !pendingProposal && !isLoading ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "ai-prompt-chip-row", "aria-label": "요청 예시", children: [
             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "ai-prompt-chip-hint", children: "예시" }),
             quickPrompts.map((prompt) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
               "button",

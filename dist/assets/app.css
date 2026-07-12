@@ -2084,20 +2084,42 @@ textarea:focus-visible,
     transform: translateY(0) scale(1);
   }
 }
-@keyframes ai-orb-breathe {
+@keyframes ai-orb-float {
   0%, 100% {
+    transform: translateY(-2px) scale(0.96);
     box-shadow: 0 3px 12px rgba(105, 82, 224, 0.34);
   }
   50% {
-    box-shadow: 0 4px 18px rgba(105, 82, 224, 0.56);
+    transform: translateY(2px) scale(1.08);
+    box-shadow: 0 7px 20px rgba(105, 82, 224, 0.56);
+  }
+}
+@keyframes ai-orb-ring {
+  0%, 100% {
+    transform: scale(1.22);
+    opacity: 0.44;
+  }
+  50% {
+    transform: scale(1.52);
+    opacity: 0.12;
+  }
+}
+@keyframes ai-orb-ring-outer {
+  0%, 100% {
+    transform: scale(1.55);
+    opacity: 0.24;
+  }
+  50% {
+    transform: scale(1.9);
+    opacity: 0.06;
   }
 }
 @keyframes ai-header-shimmer {
-  from {
-    transform: translateX(-115%);
+  0%, 100% {
+    transform: translateX(-250%);
   }
-  to {
-    transform: translateX(130%);
+  50% {
+    transform: translateX(350%);
   }
 }
 .modal-backdrop:has(.ai-add-modal-card) {
@@ -2167,12 +2189,15 @@ textarea:focus-visible,
   inset: 1px;
   border: 1px solid rgba(105, 82, 224, 0.42);
   border-radius: 50%;
-  transform: scale(1.25);
-  opacity: 0.55;
+  transform: scale(1.22);
+  opacity: 0.44;
+  animation: ai-orb-ring 3.2s ease-in-out infinite;
 }
 .ai-add-modal-orb > span:first-child {
-  transform: scale(1.65);
+  transform: scale(1.55);
   opacity: 0.25;
+  animation-name: ai-orb-ring-outer;
+  animation-delay: -1.6s;
 }
 .ai-add-modal-orb i {
   position: relative;
@@ -2184,7 +2209,7 @@ textarea:focus-visible,
       circle at 34% 28%,
       #c3b7ff 0%,
       #6952e0 76%);
-  animation: ai-orb-breathe 2.8s ease-in-out infinite;
+  animation: ai-orb-float 2.4s ease-in-out infinite;
 }
 .ai-add-modal-close {
   position: relative;
@@ -2212,7 +2237,7 @@ textarea:focus-visible,
       transparent,
       rgba(124, 106, 239, 0.16),
       transparent);
-  animation: ai-header-shimmer 1.5s linear infinite;
+  animation: ai-header-shimmer 1.9s ease-in-out infinite;
   pointer-events: none;
 }
 .ai-add-modal-card > .ai-command-center {
@@ -2241,8 +2266,18 @@ textarea:focus-visible,
   box-shadow: 0 0 0 4px rgba(156, 140, 255, 0.14);
 }
 .ai-add-workspace .ai-prompt-chip-row {
-  padding: 0 2px;
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  align-items: center;
+  justify-content: start;
+  overflow-x: auto;
+  padding: 0 2px 2px;
   gap: 7px;
+  scrollbar-width: none;
+}
+.ai-add-workspace .ai-prompt-chip-row::-webkit-scrollbar {
+  display: none;
 }
 .ai-add-workspace .ai-prompt-chip-hint {
   color: #8b7cf6;
@@ -2252,6 +2287,10 @@ textarea:focus-visible,
   background: #f7f5ff;
   color: #5b5471;
   padding: 6px 11px;
+  overflow: hidden;
+  max-width: 240px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ai-add-workspace .ai-prompt-chip-row button:hover {
   border-color: #b6a9f6;
@@ -2281,6 +2320,105 @@ textarea:focus-visible,
   background: #f8f7ff;
   box-shadow: none;
 }
+.ai-add-workspace .ai-result-card:has(.proposal-block) {
+  margin-top: 0;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.ai-add-workspace .proposal-block.compact-review {
+  display: grid;
+  gap: 10px;
+}
+.ai-add-workspace .proposal-summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.ai-add-workspace .proposal-summary-row .description-text {
+  margin: 0;
+  color: #4c4858;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.ai-add-workspace .proposal-count-card {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: #f4f1ff;
+  box-shadow: none;
+}
+.ai-add-workspace .proposal-count-card strong {
+  font-size: 16px;
+}
+.ai-add-workspace .proposal-count-card span {
+  font-size: 11px;
+}
+.ai-add-workspace .proposal-summary-row .button-row {
+  gap: 4px;
+}
+.ai-add-workspace .proposal-summary-row .button-row .btn {
+  min-height: 32px;
+  border-radius: 9px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+.ai-add-workspace .proposal-list.compact-list {
+  gap: 8px;
+  padding: 0;
+}
+.ai-add-workspace .proposal-card {
+  gap: 6px;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: none;
+}
+.ai-add-workspace .proposal-item-toggle {
+  gap: 10px;
+}
+.ai-add-workspace .proposal-checkmark {
+  width: 21px;
+  height: 21px;
+  border-radius: 7px;
+}
+.ai-add-workspace .proposal-card-body {
+  gap: 6px;
+}
+.ai-add-workspace .proposal-card-body strong {
+  font-size: 15px;
+  line-height: 1.35;
+}
+.ai-add-workspace .proposal-card-topline,
+.ai-add-workspace .proposal-meta-grid {
+  gap: 5px;
+}
+.ai-add-workspace .proposal-action-pill,
+.ai-add-workspace .proposal-time-chip,
+.ai-add-workspace .proposal-meta-grid span {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.ai-add-workspace .proposal-item-toggle small {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.ai-add-workspace .proposal-actions {
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(105, 82, 224, 0.12);
+}
+.ai-add-workspace .proposal-actions .btn-primary {
+  min-height: 40px;
+  border-radius: 12px;
+  padding-inline: 16px;
+}
 .ai-add-workspace.ai-command-center.has-result .ai-input-label {
   padding: 0;
 }
@@ -2308,10 +2446,17 @@ textarea:focus-visible,
   .ai-add-modal-heading small {
     font-size: 12px;
   }
+  .ai-add-workspace .proposal-summary-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .ai-add-workspace .proposal-summary-row .button-row {
+    grid-column: 1 / -1;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .ai-add-modal-card,
   .ai-add-modal-orb i,
+  .ai-add-modal-orb > span,
   .ai-add-modal-card:has(.ai-command-center.is-loading) .ai-add-modal-header::after {
     animation: none;
   }

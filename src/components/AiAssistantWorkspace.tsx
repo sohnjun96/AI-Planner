@@ -766,7 +766,6 @@ export function AiAssistantWorkspace({
         <div className="proposal-block compact-review">
           <div className="proposal-summary-row">
             <div>
-              <span className="badge-pill">일정 초안</span>
               <p className="description-text">{pendingProposal.summary}</p>
             </div>
             <div className="proposal-count-card" aria-label="선택한 초안 수">
@@ -912,7 +911,7 @@ export function AiAssistantWorkspace({
           />
         </label>
 
-        {quickPrompts.length > 0 && !pendingProposal ? (
+        {quickPrompts.length > 0 && !pendingProposal && !isLoading ? (
           <div className="ai-prompt-chip-row" aria-label="요청 예시">
             <span className="ai-prompt-chip-hint">예시</span>
             {quickPrompts.map((prompt) => (
