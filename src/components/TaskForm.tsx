@@ -8,6 +8,7 @@ import {
   toLocalDateInputValue,
   toLocalTimeInputValue,
 } from "../utils/date";
+import { compareProjects } from "../utils/projectOrder";
 import { findTaskConflictsForRange } from "../utils/taskConflicts";
 
 interface TaskFormProps {
@@ -18,6 +19,8 @@ interface TaskFormProps {
   defaultStartDate?: string;
   fixedProjectId?: string;
   timeFormat: "24h" | "12h";
+  linkedNotes?: Array<{ id: string; title: string }>;
+  onOpenNote?: (noteId: string) => void;
   onSubmit: (input: TaskFormInput) => Promise<void>;
   onDelete?: () => Promise<void>;
   onCancel?: () => void;
@@ -37,8 +40,6 @@ interface FormState {
   recurrencePattern: RecurrencePattern;
   recurrenceCount: string;
 }
-
-const AUTOSAVE_DELAY_MS = 700;
 
 function buildDefaultState(projects: Project[], taskTypes: TaskType[], defaultStartDate?: string): FormState {
   const now = new Date();
@@ -120,10 +121,8 @@ function buildInputFromForm(form: FormState, fixedProjectId?: string): { input?:
   };
 }
 
-function serializeTaskInput(input: TaskFormInput): string {
+function serializeTaskMetadataInput(input: TaskFormInput): string {
   return JSON.stringify({
-    title: input.title.trim(),
-    content: input.content.trim(),
     taskTypeId: input.taskTypeId,
     projectId: input.projectId,
     status: input.status,
@@ -131,6 +130,29 @@ function serializeTaskInput(input: TaskFormInput): string {
     endAt: input.endAt ?? "",
     isMajor: input.isMajor,
   });
+}
+
+function buildMetadataInputFromForm(
+  form: FormState,
+  initialTask: Task | undefined,
+  fixedProjectId?: string,
+): { input?: TaskFormInput; error?: string } {
+  if (!initialTask) {
+    return { error: "수정할 일정이 없습니다." };
+  }
+
+  const built = buildInputFromForm(form, fixedProjectId);
+  if (!built.input) {
+    return built;
+  }
+
+  return {
+    input: {
+      ...built.input,
+      title: initialTask.title,
+      content: initialTask.content,
+    },
+  };
 }
 
 export function TaskForm({
@@ -141,12 +163,16 @@ export function TaskForm({
   defaultStartDate,
   fixedProjectId,
   timeFormat,
+  linkedNotes = [],
+  onOpenNote,
   onSubmit,
   onDelete,
   onCancel,
 }: TaskFormProps) {
+  // 프로젝트 탭에서 정한 표시 순서를 선택리스트에도 그대로 적용한다
+  const orderedProjects = useMemo(() => [...projects].sort(compareProjects), [projects]);
   const [form, setForm] = useState<FormState>(() => {
-    return initialTask ? buildStateFromTask(initialTask) : buildDefaultState(projects, taskTypes, defaultStartDate);
+    return initialTask ? buildStateFromTask(initialTask) : buildDefaultState(orderedProjects, taskTypes, defaultStartDate);
   });
   const [error, setError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -188,9 +214,9 @@ export function TaskForm({
       return;
     }
 
-    const built = buildInputFromForm(form, fixedProjectId);
+    const built = buildMetadataInputFromForm(form, initialTask, fixedProjectId);
     if (built.input) {
-      autoSaveSnapshotRef.current = serializeTaskInput(built.input);
+      autoSaveSnapshotRef.current = serializeTaskMetadataInput(built.input);
     }
   }, [isEdit, initialTask?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -199,32 +225,26 @@ export function TaskForm({
       return;
     }
 
-    const built = buildInputFromForm(form, fixedProjectId);
+    const built = buildMetadataInputFromForm(form, initialTask, fixedProjectId);
     if (!built.input) {
       return;
     }
 
-    const snapshot = serializeTaskInput(built.input);
+    const snapshot = serializeTaskMetadataInput(built.input);
     if (snapshot === autoSaveSnapshotRef.current) {
       return;
     }
 
-    const timerId = window.setTimeout(() => {
-      void onSubmit(built.input as TaskFormInput)
-        .then(() => {
-          autoSaveSnapshotRef.current = snapshot;
-          setAutoSaveMessage("자동 저장됨");
-          setError("");
-        })
-        .catch((submitError) => {
-          setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
-        });
-    }, AUTOSAVE_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [isEdit, form, fixedProjectId, onSubmit]);
+    autoSaveSnapshotRef.current = snapshot;
+    void onSubmit(built.input)
+      .then(() => {
+        setAutoSaveMessage("자동 저장됨");
+        setError("");
+      })
+      .catch((submitError) => {
+        setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
+      });
+  }, [isEdit, form, fixedProjectId, initialTask, onSubmit]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -239,11 +259,11 @@ export function TaskForm({
     setIsSubmitting(true);
     try {
       await onSubmit(built.input);
-      autoSaveSnapshotRef.current = serializeTaskInput(built.input);
+      autoSaveSnapshotRef.current = serializeTaskMetadataInput(built.input);
       setAutoSaveMessage("저장됨");
 
       if (!isEdit) {
-        setForm(buildDefaultState(projects, taskTypes, defaultStartDate));
+        setForm(buildDefaultState(orderedProjects, taskTypes, defaultStartDate));
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "일정 저장에 실패했습니다.");
@@ -311,7 +331,7 @@ export function TaskForm({
               value={form.projectId}
               onChange={(event) => setForm((prev) => ({ ...prev, projectId: event.target.value }))}
             >
-              {projects
+              {orderedProjects
                 .filter((item) => item.isActive || item.id === form.projectId)
                 .map((project) => (
                   <option key={project.id} value={project.id}>
@@ -419,6 +439,25 @@ export function TaskForm({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {isEdit && linkedNotes.length > 0 ? (
+        <div className="task-linked-notes">
+          <span className="task-linked-notes-label">연결된 노트</span>
+          <div className="task-linked-notes-chips">
+            {linkedNotes.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                className="task-linked-note-chip"
+                onClick={() => onOpenNote?.(note.id)}
+                title="노트로 이동"
+              >
+                📄 {note.title}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 

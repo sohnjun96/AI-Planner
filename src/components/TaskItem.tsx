@@ -1,3 +1,4 @@
+import { type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { STATUS_LABELS } from "../constants";
 import type { Project, Task, TaskStatus, TaskType } from "../models";
@@ -17,6 +18,7 @@ interface TaskItemProps {
   selectable?: boolean;
   selectedForBulk?: boolean;
   onToggleSelect?: (checked: boolean) => void;
+  onContextMenu?: (event: MouseEvent<HTMLElement>, task: Task) => void;
 }
 
 export function TaskItem({
@@ -33,16 +35,22 @@ export function TaskItem({
   selectable = false,
   selectedForBulk = false,
   onToggleSelect,
+  onContextMenu,
 }: TaskItemProps) {
   const navigate = useNavigate();
 
   return (
     <article
-      className={`task-item ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${hasConflict ? "conflict" : ""} ${
+      className={`task-item ${task.status.toLowerCase()} ${selected ? "selected" : ""} ${onClick ? "clickable" : ""} ${
+        hasConflict ? "conflict" : ""
+      } ${
         draggableTask ? "draggable" : ""
       }`}
-      style={{ borderLeftColor: project?.color ?? "#94a3b8" }}
+      style={{ "--task-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
       onClick={onClick}
+      onContextMenu={(event) => {
+        onContextMenu?.(event, task);
+      }}
       draggable={draggableTask}
       onDragStart={(event) => {
         if (!draggableTask) {
@@ -160,6 +168,18 @@ export function TaskItem({
             aria-label="상태를 완료로 변경"
           >
             {STATUS_LABELS.DONE}
+          </button>
+          <button
+            type="button"
+            className={`btn btn-soft ${task.status === "CANCELED" ? "is-active" : ""}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onStatusChange("CANCELED");
+            }}
+            aria-pressed={task.status === "CANCELED"}
+            aria-label="상태를 취소로 변경"
+          >
+            {STATUS_LABELS.CANCELED}
           </button>
         </div>
       ) : null}

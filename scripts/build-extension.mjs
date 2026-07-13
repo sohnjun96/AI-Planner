@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +51,7 @@ async function writeBuiltHtml({ fileName, title, lang, jsHref, cssHrefs, bodyCla
 }
 
 async function runBuild() {
+  await rm(distDir, { recursive: true, force: true });
   await mkdir(distDir, { recursive: true });
   await cp(publicDir, distDir, { recursive: true, force: true });
 
@@ -58,7 +59,6 @@ async function runBuild() {
     absWorkingDir: rootDir,
     entryPoints: {
       app: "src/main.tsx",
-      popup: "src/popup/main.tsx",
     },
     outdir: "dist/assets",
     bundle: true,
@@ -78,33 +78,21 @@ async function runBuild() {
 
   const outputs = buildResult.metafile.outputs;
   const appJsOutput = Object.keys(outputs).find((filePath) => outputs[filePath].entryPoint === "src/main.tsx");
-  const popupJsOutput = Object.keys(outputs).find((filePath) => outputs[filePath].entryPoint === "src/popup/main.tsx");
   const cssOutputs = Object.keys(outputs)
     .filter((filePath) => filePath.endsWith(".css"))
     .sort();
 
-  if (!appJsOutput || !popupJsOutput) {
+  if (!appJsOutput) {
     throw new Error("Failed to locate bundled JavaScript outputs.");
   }
 
   const appMeta = await readHtmlMetadata(path.join(rootDir, "index.html"), "업무 일정관리");
-  const popupMeta = await readHtmlMetadata(path.join(rootDir, "popup.html"), "AI Planner Popup");
-
   await writeBuiltHtml({
     fileName: "index.html",
     title: appMeta.title,
     lang: appMeta.lang,
     jsHref: toDistHref(appJsOutput),
     cssHrefs: cssHrefsForEntry("app", cssOutputs),
-  });
-
-  await writeBuiltHtml({
-    fileName: "popup.html",
-    title: popupMeta.title,
-    lang: popupMeta.lang,
-    jsHref: toDistHref(popupJsOutput),
-    cssHrefs: cssHrefsForEntry("popup", cssOutputs),
-    bodyClass: "popup-body",
   });
 }
 

@@ -1,8 +1,81 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorSelector } from "../components/ColorSelector";
-import { LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL, pickRandomPresetColor } from "../constants";
+import {
+  DEFAULT_AI_CONTEXT_MAX_LENGTH,
+  DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  DEFAULT_NOTE_AI_ACTIONS,
+  LLM_DEFAULT_MODEL,
+  MAX_AI_CONTEXT_MAX_LENGTH,
+  MIN_AI_CONTEXT_MAX_LENGTH,
+  pickRandomPresetColor,
+} from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { requestLlmResponse } from "../agent/llmClient";
+import type { NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
+import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
+
+function makeActionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `action-${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `action-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+interface NoteAiActionManagerProps {
+  actions: NoteAiAction[];
+  onChange: (actions: NoteAiAction[]) => void;
+}
+
+function NoteAiActionManager({ actions, onChange }: NoteAiActionManagerProps) {
+  function update(id: string, patch: Partial<NoteAiAction>) {
+    onChange(actions.map((action) => (action.id === id ? { ...action, ...patch } : action)));
+  }
+  function remove(id: string) {
+    onChange(actions.filter((action) => action.id !== id));
+  }
+  function add() {
+    onChange([...actions, { id: makeActionId(), label: "새 기능", prompt: "" }]);
+  }
+
+  return (
+    <div className="ai-action-manager">
+      {actions.length === 0 ? <p className="empty-text">등록된 AI 편집 기능이 없습니다.</p> : null}
+      {actions.map((action) => (
+        <div key={action.id} className="ai-action-row">
+          <div className="ai-action-fields">
+            <input
+              className="ai-action-label"
+              value={action.label}
+              onChange={(event) => update(action.id, { label: event.target.value })}
+              placeholder="버튼 이름"
+              aria-label="기능 이름"
+            />
+            <textarea
+              className="ai-action-prompt"
+              value={action.prompt}
+              onChange={(event) => update(action.id, { prompt: event.target.value })}
+              placeholder="AI에게 보낼 프롬프트"
+              rows={2}
+              aria-label="프롬프트"
+            />
+          </div>
+          <button type="button" className="btn btn-outline btn-compact" onClick={() => remove(action.id)}>
+            삭제
+          </button>
+        </div>
+      ))}
+      <div className="button-row">
+        <button type="button" className="btn btn-soft" onClick={add}>
+          + 기능 추가
+        </button>
+        <button type="button" className="btn btn-soft" onClick={() => onChange(DEFAULT_NOTE_AI_ACTIONS)}>
+          기본값 복원
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface TypeFormState {
   id?: string;
@@ -23,6 +96,7 @@ function createEmptyTypeForm(): TypeFormState {
 }
 
 const TYPE_FORM_AUTOSAVE_DELAY_MS = 700;
+type AiConnectionStatus = "idle" | "checking" | "ok" | "error";
 
 interface TaskTypeInputPayload {
   id?: string;
@@ -56,12 +130,51 @@ function serializeTaskTypeInput(input: TaskTypeInputPayload): string {
   });
 }
 
+type SettingsSection = "overview" | "stats" | "general" | "ai" | "noteAi" | "context" | "notify" | "types";
+
+const SETTINGS_TABS: Array<{ id: SettingsSection; label: string }> = [
+  { id: "overview", label: "개요" },
+  { id: "stats", label: "통계" },
+  { id: "general", label: "기본" },
+  { id: "ai", label: "AI 연결" },
+  { id: "noteAi", label: "노트 AI" },
+  { id: "context", label: "user.md" },
+  { id: "notify", label: "알림·백업" },
+  { id: "types", label: "일정 종류" },
+];
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes}B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)}KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`;
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens < 1000) {
+    return String(tokens);
+  }
+  if (tokens < 1_000_000) {
+    return `${(tokens / 1000).toFixed(1)}k`;
+  }
+  return `${(tokens / 1_000_000).toFixed(2)}M`;
+}
+
 export function SettingsPage() {
   const {
     setting,
     updateSetting,
     exportData,
     importData,
+    userContext,
+    updateUserContextMarkdown,
+    resetUserContext,
     taskTypes,
     upsertTaskType,
     deleteTaskType,
@@ -70,12 +183,28 @@ export function SettingsPage() {
     restoreAutoBackup,
     deleteAutoBackup,
     refreshAutoBackups,
+    tasks,
+    projects,
+    notes,
+    noteVersions,
+    noteTaskLinks,
   } = useAppData();
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const [backupError, setBackupError] = useState("");
+  const [isBackupListOpen, setIsBackupListOpen] = useState(false);
+  const [userContextDraft, setUserContextDraft] = useState("");
+  const [userContextMessage, setUserContextMessage] = useState("");
+  const [userContextError, setUserContextError] = useState("");
+  const [aiConnectionStatus, setAiConnectionStatus] = useState<AiConnectionStatus>("idle");
+  const [aiConnectionMessage, setAiConnectionMessage] = useState("");
+  const [noteAiActionsDraft, setNoteAiActionsDraft] = useState<NoteAiAction[]>(
+    () => setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS,
+  );
+  const [aiActionMessage, setAiActionMessage] = useState("");
+  const [activeSection, setActiveSection] = useState<SettingsSection>("overview");
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -84,10 +213,123 @@ export function SettingsPage() {
   const lastTypeIdRef = useRef<string | undefined>(undefined);
 
   const sortedTypes = useMemo(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
+  const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
+  const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
+
+  // ===== 통계 탭 데이터 =====
+  const taskStats = useMemo(() => {
+    let notDone = 0;
+    let onHold = 0;
+    let done = 0;
+    let canceled = 0;
+    let major = 0;
+    let thisWeek = 0;
+    const weekStart = new Date();
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // 월요일 기준
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    for (const task of tasks) {
+      if (task.status === "NOT_DONE") notDone += 1;
+      else if (task.status === "ON_HOLD") onHold += 1;
+      else if (task.status === "DONE") done += 1;
+      else canceled += 1;
+      if (task.isMajor) major += 1;
+      const start = new Date(task.startAt);
+      if (start >= weekStart && start < weekEnd) thisWeek += 1;
+    }
+    return { total: tasks.length, notDone, onHold, done, canceled, major, thisWeek };
+  }, [tasks]);
+
+  const noteStats = useMemo(() => {
+    let archived = 0;
+    let pinned = 0;
+    let openChecks = 0;
+    let contentChars = 0;
+    for (const note of notes) {
+      if (note.status === "archived") archived += 1;
+      if (note.isPinned) pinned += 1;
+      openChecks += note.content.match(/^\s*[-*+]\s+\[ \]/gm)?.length ?? 0;
+      contentChars += note.content.length;
+    }
+    return {
+      total: notes.length,
+      active: notes.length - archived,
+      archived,
+      pinned,
+      openChecks,
+      versions: noteVersions.length,
+      links: noteTaskLinks.length,
+      contentChars,
+    };
+  }, [notes, noteVersions, noteTaskLinks]);
+
+  const [storageEstimate, setStorageEstimate] = useState<{ usage?: number; quota?: number } | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsageStats>(() => getAiUsageStats());
+
+  useEffect(() => {
+    if (activeSection !== "stats") {
+      return;
+    }
+    setAiUsage(getAiUsageStats());
+    if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
+      navigator.storage
+        .estimate()
+        .then((estimate) => setStorageEstimate({ usage: estimate.usage, quota: estimate.quota }))
+        .catch(() => setStorageEstimate(null));
+    }
+  }, [activeSection]);
+
+  const todayUsage = getTodayUsage(aiUsage);
+  const backupBytes = useMemo(() => autoBackups.reduce((sum, backup) => sum + (backup.size ?? 0), 0), [autoBackups]);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setUserContextDraft(userContext.markdown);
+      setUserContextMessage("");
+      setUserContextError("");
+    }, 0);
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [userContext.markdown, userContext.updatedAt]);
 
   useEffect(() => {
     void refreshAutoBackups();
   }, [refreshAutoBackups]);
+
+  useEffect(() => {
+    setNoteAiActionsDraft(setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS);
+  }, [setting.noteAiActions]);
+
+  async function handleSaveAiActions() {
+    setAiActionMessage("");
+    const cleaned = noteAiActionsDraft
+      .map((action) => ({ ...action, label: action.label.trim() || "기능", prompt: action.prompt.trim() }))
+      .filter((action) => action.prompt);
+    try {
+      await updateSetting({ noteAiActions: cleaned.length > 0 ? cleaned : DEFAULT_NOTE_AI_ACTIONS });
+      setAiActionMessage("AI 편집 기능을 저장했습니다.");
+    } catch (saveError) {
+      setAiActionMessage(saveError instanceof Error ? saveError.message : "저장에 실패했습니다.");
+    }
+  }
+
+  useEffect(() => {
+    if (!isBackupListOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsBackupListOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isBackupListOpen]);
 
   useEffect(() => {
     if (!typeForm.id) {
@@ -208,6 +450,66 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSaveUserContext() {
+    setUserContextError("");
+    setUserContextMessage("");
+
+    try {
+      await updateUserContextMarkdown(userContextDraft.slice(0, aiContextMaxLength));
+      setUserContextMessage("user.md를 저장했습니다.");
+    } catch (contextSaveError) {
+      setUserContextError(contextSaveError instanceof Error ? contextSaveError.message : "user.md 저장에 실패했습니다.");
+    }
+  }
+
+  async function handleResetUserContext() {
+    const shouldReset = window.confirm("user.md를 기본값으로 되돌릴까요?");
+    if (!shouldReset) {
+      return;
+    }
+
+    setUserContextError("");
+    setUserContextMessage("");
+
+    try {
+      await resetUserContext();
+      setUserContextMessage("user.md 기본값을 복원했습니다.");
+    } catch (contextResetError) {
+      setUserContextError(contextResetError instanceof Error ? contextResetError.message : "user.md 초기화에 실패했습니다.");
+    }
+  }
+
+  async function handleCheckAiConnection() {
+    const startedAt = performance.now();
+    setAiConnectionStatus("checking");
+    setAiConnectionMessage("AI 연결을 확인하는 중입니다.");
+
+    try {
+      const response = await requestLlmResponse({
+        endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+        model: setting.llmModel ?? LLM_DEFAULT_MODEL,
+        apiKey: setting.llmApiKey ?? "",
+        messages: [
+          {
+            role: "system",
+            content: "You are a connection test endpoint. Reply with OK only.",
+          },
+          {
+            role: "user",
+            content: "연결 확인",
+          },
+        ],
+      });
+      const elapsedMs = Math.max(1, Math.round(performance.now() - startedAt));
+      const modelName = (setting.llmModel ?? LLM_DEFAULT_MODEL).trim() || LLM_DEFAULT_MODEL;
+      setAiConnectionStatus("ok");
+      setAiConnectionMessage(`연결 성공 (${modelName}, ${elapsedMs}ms): ${response.slice(0, 80)}`);
+    } catch (connectionError) {
+      setAiConnectionStatus("error");
+      setAiConnectionMessage(connectionError instanceof Error ? connectionError.message : "AI 연결 확인에 실패했습니다.");
+    }
+  }
+
   async function handleTypeSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTypeError("");
@@ -251,6 +553,11 @@ export function SettingsPage() {
     } catch (deleteError) {
       setTypeError(deleteError instanceof Error ? deleteError.message : "종류 삭제에 실패했습니다.");
     }
+  }
+
+  function openBackupList() {
+    setIsBackupListOpen(true);
+    void refreshAutoBackups();
   }
 
   function startCreateType() {
@@ -298,26 +605,236 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="settings-overview-grid" aria-label="설정 요약">
-        <article className="settings-summary-card">
-          <span>주 시작</span>
-          <strong>{setting.weekStartsOn === "mon" ? "월요일" : "일요일"}</strong>
-        </article>
-        <article className="settings-summary-card">
-          <span>시간 표시</span>
-          <strong>{setting.timeFormat === "24h" ? "24시간제" : "12시간제"}</strong>
-        </article>
-        <article className="settings-summary-card">
-          <span>알림</span>
-          <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐"}</strong>
-        </article>
-        <article className="settings-summary-card">
-          <span>백업</span>
-          <strong>{setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동"}</strong>
-        </article>
-      </section>
+      <nav className="settings-tabs" aria-label="설정 분류">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`settings-tab ${activeSection === tab.id ? "active" : ""}`}
+            aria-pressed={activeSection === tab.id}
+            onClick={() => setActiveSection(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="settings-main-grid">
+      {activeSection === "overview" ? (
+        <section className="settings-overview-grid" aria-label="설정 요약">
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("general")}>
+            <span>기본 환경</span>
+            <strong>
+              {setting.weekStartsOn === "mon" ? "월" : "일"} 시작 · {setting.timeFormat === "24h" ? "24시간제" : "12시간제"}
+            </strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("ai")}>
+            <span>AI 연결</span>
+            <strong>{(setting.llmEndpoint ?? "").trim() ? "설정됨" : "미설정"}</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("noteAi")}>
+            <span>노트 AI 기능</span>
+            <strong>{noteAiActionsDraft.length}개</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("context")}>
+            <span>AI 컨텍스트</span>
+            <strong>
+              {userContextUsedLength} / {aiContextMaxLength}자
+            </strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("notify")}>
+            <span>알림</span>
+            <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐"}</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("notify")}>
+            <span>백업</span>
+            <strong>{setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동"}</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("types")}>
+            <span>일정 종류</span>
+            <strong>{sortedTypes.length}개</strong>
+          </button>
+          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("stats")}>
+            <span>통계</span>
+            <strong>
+              일정 {taskStats.total} · 노트 {noteStats.total}
+            </strong>
+          </button>
+        </section>
+      ) : null}
+
+      <div className="settings-section-host">
+        {activeSection === "stats" ? (
+        <section className="settings-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">STATS</p>
+              <h3>사용 통계</h3>
+            </div>
+          </header>
+
+          <div className="stats-groups">
+            <div className="stats-group">
+              <h4 className="stats-group-title">📅 일정</h4>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-label">전체</span>
+                  <strong className="stat-value">{taskStats.total}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">미완료</span>
+                  <strong className="stat-value">{taskStats.notDone}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">완료</span>
+                  <strong className="stat-value">{taskStats.done}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">보류 · 취소</span>
+                  <strong className="stat-value">
+                    {taskStats.onHold} · {taskStats.canceled}
+                  </strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">이번 주</span>
+                  <strong className="stat-value">{taskStats.thisWeek}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">중요 일정</span>
+                  <strong className="stat-value">{taskStats.major}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">프로젝트</span>
+                  <strong className="stat-value">{projects.length}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-group">
+              <h4 className="stats-group-title">📝 노트</h4>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-label">활성</span>
+                  <strong className="stat-value">{noteStats.active}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">보관됨</span>
+                  <strong className="stat-value">{noteStats.archived}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">고정</span>
+                  <strong className="stat-value">{noteStats.pinned}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">미완료 체크</span>
+                  <strong className="stat-value">{noteStats.openChecks}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">일정 연결</span>
+                  <strong className="stat-value">{noteStats.links}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">저장된 버전</span>
+                  <strong className="stat-value">{noteStats.versions}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">본문 분량</span>
+                  <strong className="stat-value">{formatBytes(noteStats.contentChars * 2)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-group">
+              <h4 className="stats-group-title">💾 저장공간</h4>
+              {storageEstimate?.quota ? (
+                <>
+                  <div className="stats-grid">
+                    <div className="stat-item">
+                      <span className="stat-label">사용 중</span>
+                      <strong className="stat-value">{formatBytes(storageEstimate.usage ?? 0)}</strong>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">할당량</span>
+                      <strong className="stat-value">{formatBytes(storageEstimate.quota)}</strong>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">자동 백업</span>
+                      <strong className="stat-value">
+                        {autoBackups.length}개 · {formatBytes(backupBytes)}
+                      </strong>
+                    </div>
+                  </div>
+                  <div
+                    className="stats-storage-bar"
+                    role="progressbar"
+                    aria-valuenow={Math.round(((storageEstimate.usage ?? 0) / storageEstimate.quota) * 100)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div
+                      className="stats-storage-fill"
+                      style={{ width: `${Math.max(0.5, ((storageEstimate.usage ?? 0) / storageEstimate.quota) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="description-text">
+                    브라우저가 이 앱(IndexedDB 포함)에 배정한 공간 기준입니다. 사용률{" "}
+                    {(((storageEstimate.usage ?? 0) / storageEstimate.quota) * 100).toFixed(2)}%
+                  </p>
+                </>
+              ) : (
+                <p className="description-text">이 브라우저에서는 저장공간 정보를 제공하지 않습니다.</p>
+              )}
+            </div>
+
+            <div className="stats-group">
+              <div className="stats-group-head">
+                <h4 className="stats-group-title">✨ AI 사용 (토큰)</h4>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-compact"
+                  onClick={() => {
+                    resetAiUsage();
+                    setAiUsage(getAiUsageStats());
+                  }}
+                  disabled={aiUsage.totalRequests === 0}
+                >
+                  초기화
+                </button>
+              </div>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-label">오늘 요청</span>
+                  <strong className="stat-value">{todayUsage.requests}회</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">오늘 토큰</span>
+                  <strong className="stat-value">{formatTokens(todayUsage.promptTokens + todayUsage.completionTokens)}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">누적 요청</span>
+                  <strong className="stat-value">{aiUsage.totalRequests}회</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">누적 입력 토큰</span>
+                  <strong className="stat-value">{formatTokens(aiUsage.promptTokens)}</strong>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">누적 출력 토큰</span>
+                  <strong className="stat-value">{formatTokens(aiUsage.completionTokens)}</strong>
+                </div>
+              </div>
+              {aiUsage.totalRequests === 0 ? (
+                <p className="description-text">아직 기록된 AI 사용량이 없습니다. AI 기능을 사용하면 여기에 집계됩니다.</p>
+              ) : aiUsage.estimatedRequests > 0 ? (
+                <p className="description-text">
+                  {aiUsage.estimatedRequests}건은 서버가 토큰 수를 제공하지 않아 문자 수 기반 추정치입니다.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+        ) : null}
+
+        {activeSection === "general" ? (
         <section className="settings-card">
           <header className="settings-card-header">
             <div>
@@ -365,16 +882,42 @@ export function SettingsPage() {
             지난 완료 업무를 기본으로 표시
           </label>
         </section>
+        ) : null}
 
+        {activeSection === "ai" ? (
         <section className="settings-card">
           <header className="settings-card-header">
             <div>
               <p className="eyebrow">AI</p>
               <h3>AI 연결</h3>
             </div>
+            <button
+              type="button"
+              className="btn btn-soft"
+              onClick={() => {
+                void handleCheckAiConnection();
+              }}
+              disabled={aiConnectionStatus === "checking"}
+            >
+              {aiConnectionStatus === "checking" ? "확인 중" : "연결 확인"}
+            </button>
           </header>
 
           <div className="form-grid two-col">
+            <label>
+              Endpoint 주소
+              <input
+                type="url"
+                value={setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL}
+                onChange={(event) => {
+                  void updateSetting({ llmEndpoint: event.target.value });
+                }}
+                placeholder={DEFAULT_LLM_CHAT_COMPLETIONS_URL}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+
             <label>
               LLM 모델명
               <input
@@ -401,13 +944,101 @@ export function SettingsPage() {
             </label>
           </div>
 
-          <div className="settings-inline-note">
-            <span>Endpoint</span>
-            <code>{LLM_CHAT_COMPLETIONS_URL}</code>
-          </div>
-          <p className="description-text">모델명과 API Key는 입력 즉시 저장됩니다.</p>
+          <p className="description-text">Endpoint, 모델명, API Key는 입력 즉시 저장됩니다.</p>
+          {aiConnectionMessage ? (
+            <p className={`endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`} role="status" aria-live="polite">
+              {aiConnectionMessage}
+            </p>
+          ) : null}
         </section>
+        ) : null}
 
+        {activeSection === "noteAi" ? (
+        <section className="settings-card settings-ai-actions-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">NOTE AI</p>
+              <h3>노트 AI 편집 기능</h3>
+            </div>
+            <button type="button" className="btn btn-primary" onClick={() => void handleSaveAiActions()}>
+              저장
+            </button>
+          </header>
+
+          <p className="description-text">
+            노트 편집 화면의 AI 버튼과 우클릭 메뉴에 나타납니다. 각 기능의 이름과 프롬프트를 자유롭게 수정하거나 추가하세요.
+          </p>
+
+          <NoteAiActionManager actions={noteAiActionsDraft} onChange={setNoteAiActionsDraft} />
+
+          {aiActionMessage ? <p className="success-text">{aiActionMessage}</p> : null}
+        </section>
+        ) : null}
+
+        {activeSection === "context" ? (
+        <section className="settings-card settings-context-card">
+          <header className="settings-card-header">
+            <div>
+              <p className="eyebrow">USER CONTEXT</p>
+              <h3>user.md</h3>
+            </div>
+            <small>{userContextUsedLength} / {aiContextMaxLength}자</small>
+          </header>
+
+          <div className="form-grid two-col">
+            <label>
+              AI 컨텍스트 최대 길이
+              <input
+                type="text"
+                inputMode="numeric"
+                value={String(aiContextMaxLength)}
+                onChange={(event) => {
+                  const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                  void updateSetting({ aiContextMaxLength: Number.isFinite(next) ? next : DEFAULT_AI_CONTEXT_MAX_LENGTH });
+                }}
+              />
+            </label>
+
+            <label>
+              권장 범위
+              <input
+                type="text"
+                value={`${MIN_AI_CONTEXT_MAX_LENGTH} - ${MAX_AI_CONTEXT_MAX_LENGTH}자`}
+                readOnly
+              />
+            </label>
+          </div>
+
+          <label className="user-context-editor">
+            사용자 컨텍스트
+            <textarea
+              value={userContextDraft}
+              maxLength={aiContextMaxLength}
+              onChange={(event) => setUserContextDraft(event.target.value)}
+              rows={12}
+              spellCheck={false}
+            />
+          </label>
+
+          <div className="settings-inline-note">
+            <span>AI 일정 추가 시 이 내용이 개인 규칙으로 전달됩니다. 현재 입력이 더 구체적이면 현재 입력을 우선합니다.</span>
+          </div>
+
+          <div className="button-row">
+            <button className="btn btn-primary" type="button" onClick={() => void handleSaveUserContext()}>
+              user.md 저장
+            </button>
+            <button className="btn btn-soft" type="button" onClick={() => void handleResetUserContext()}>
+              기본값 복원
+            </button>
+          </div>
+
+          {userContextMessage ? <p className="success-text">{userContextMessage}</p> : null}
+          {userContextError ? <p className="error-text">{userContextError}</p> : null}
+        </section>
+        ) : null}
+
+        {activeSection === "notify" ? (
         <section className="settings-card settings-backup-card">
           <header className="settings-card-header">
             <div>
@@ -470,8 +1101,8 @@ export function SettingsPage() {
             <button className="btn btn-primary" type="button" onClick={() => void handleCreateManualBackup()}>
               지금 백업 생성
             </button>
-            <button className="btn btn-soft" type="button" onClick={() => void refreshAutoBackups()}>
-              목록 새로고침
+            <button className="btn btn-soft" type="button" onClick={openBackupList}>
+              자동 백업 목록 보기
             </button>
           </div>
 
@@ -480,43 +1111,23 @@ export function SettingsPage() {
           {message ? <p className="success-text">{message}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
 
-          <div className="backup-list-block settings-backup-list">
-            <h3>자동 백업 목록</h3>
-            {autoBackups.length === 0 ? <p className="empty-text">저장된 자동 백업이 없습니다.</p> : null}
-
-            <ul className="backup-list">
-              {autoBackups.map((backup) => (
-                <li key={backup.id} className="backup-item">
-                  <div>
-                    <strong>{formatDateTime(backup.createdAt, setting.timeFormat)}</strong>
-                    <p className="description-text">사유: {backup.reason} / 크기: {(backup.size / 1024).toFixed(1)} KB</p>
-                  </div>
-                  <div className="button-row compact">
-                    <button
-                      className="btn btn-soft"
-                      type="button"
-                      onClick={() => {
-                        void handleRestoreBackup(backup.id);
-                      }}
-                    >
-                      복원
-                    </button>
-                    <button
-                      className="btn btn-danger"
-                      type="button"
-                      onClick={() => {
-                        void handleDeleteBackup(backup.id);
-                      }}
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          <div className="settings-backup-list-summary">
+            <div>
+              <strong>자동 백업 목록</strong>
+              <p className="description-text">
+                {autoBackups.length > 0
+                  ? `저장된 백업 ${autoBackups.length}개. 목록 보기에서 복원하거나 삭제할 수 있습니다.`
+                  : "저장된 자동 백업이 없습니다."}
+              </p>
+            </div>
+            <button className="btn btn-outline" type="button" onClick={openBackupList}>
+              목록 보기
+            </button>
           </div>
         </section>
+        ) : null}
 
+        {activeSection === "types" ? (
         <section className="settings-card settings-type-card">
           <header className="settings-card-header">
             <div>
@@ -620,7 +1231,75 @@ export function SettingsPage() {
             </form>
           </div>
         </section>
+        ) : null}
       </div>
+
+      {isBackupListOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsBackupListOpen(false)}>
+          <section
+            className="modal-card panel settings-backup-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="자동 백업 목록"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <header className="panel-header">
+              <div>
+                <p className="eyebrow">BACKUPS</p>
+                <h2>자동 백업 목록</h2>
+                <small>필요한 백업을 선택해 복원하거나 오래된 백업을 삭제하세요.</small>
+              </div>
+              <div className="button-row compact">
+                <button className="btn btn-soft" type="button" onClick={() => void refreshAutoBackups()}>
+                  새로고침
+                </button>
+                <button className="btn btn-soft" type="button" onClick={() => setIsBackupListOpen(false)}>
+                  닫기
+                </button>
+              </div>
+            </header>
+
+            {autoBackups.length === 0 ? (
+              <div className="empty-state compact">
+                <p>저장된 자동 백업이 없습니다.</p>
+              </div>
+            ) : (
+              <ul className="backup-list settings-backup-modal-list">
+                {autoBackups.map((backup) => (
+                  <li key={backup.id} className="backup-item">
+                    <div>
+                      <strong>{formatDateTime(backup.createdAt, setting.timeFormat)}</strong>
+                      <p className="description-text">사유: {backup.reason} / 크기: {(backup.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <div className="button-row compact">
+                      <button
+                        className="btn btn-soft"
+                        type="button"
+                        onClick={() => {
+                          void handleRestoreBackup(backup.id);
+                        }}
+                      >
+                        복원
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        type="button"
+                        onClick={() => {
+                          void handleDeleteBackup(backup.id);
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

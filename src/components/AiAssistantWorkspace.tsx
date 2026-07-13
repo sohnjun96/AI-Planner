@@ -1,20 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { runScheduleAgent } from "../agent/scheduleAgent";
 import type {
   AgentConversationMessage,
+  AgentContextSuggestion,
   AgentCreateTaskOperation,
   AgentDeleteTaskOperation,
   AgentOperation,
   AgentProposal,
   AgentUpdateTaskOperation,
+  ScheduleAgentProgress,
 } from "../agent/scheduleAgent";
-import { LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
+import { isAbortError } from "../agent/agentUtils";
+import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput, TaskStatus } from "../models";
 import { formatDateTime } from "../utils/date";
 
 interface AiAssistantWorkspaceProps {
   compact?: boolean;
+  showHeader?: boolean;
   showEndpointInfo?: boolean;
   directApply?: boolean;
   hideInitialResult?: boolean;
@@ -26,7 +30,9 @@ interface AiAssistantWorkspaceProps {
   placeholder?: string;
   quickPrompts?: string[];
   className?: string;
+  initialDraft?: string;
   onApplied?: () => void;
+  onRequestClose?: () => void;
 }
 
 type EndpointStatus = "checking" | "ok" | "error";
@@ -43,7 +49,7 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 function isTaskStatus(value: unknown): value is TaskStatus {
-  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE";
+  return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
 }
 
 function toTaskInput(task: Task): TaskFormInput {
@@ -73,6 +79,16 @@ function formatOperationLabel(operation: AgentOperation, taskTitle?: string): st
   return `일정 삭제: ${taskTitle ?? operation.taskId}`;
 }
 
+function getOperationActionMeta(operation: AgentOperation): { label: string; tone: string } {
+  if (operation.action === "create_task") {
+    return { label: "추가", tone: "create" };
+  }
+  if (operation.action === "update_task") {
+    return { label: "수정", tone: "update" };
+  }
+  return { label: "삭제", tone: "delete" };
+}
+
 function toFriendlyError(error: unknown): string {
   const raw = error instanceof Error ? error.message : "AI 처리 중 오류가 발생했습니다.";
   const lower = raw.toLowerCase();
@@ -84,7 +100,7 @@ function toFriendlyError(error: unknown): string {
   return raw;
 }
 
-async function probeEndpoint(apiKey: string, model: string): Promise<void> {
+async function probeEndpoint(endpoint: string, apiKey: string, model: string): Promise<void> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -99,7 +115,7 @@ async function probeEndpoint(apiKey: string, model: string): Promise<void> {
   }, 5000);
 
   try {
-    const response = await fetch(LLM_CHAT_COMPLETIONS_URL, {
+    const response = await fetch(endpoint.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers,
       signal: controller.signal,
@@ -137,8 +153,37 @@ function describeChangeValue(key: string, value: unknown, timeFormat: "24h" | "1
   return String(value);
 }
 
+function formatProposalDateTime(startAt: string, endAt?: string): string {
+  const start = new Date(startAt);
+  if (Number.isNaN(start.getTime())) {
+    return startAt;
+  }
+  const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(start);
+  const formatTime = (value: Date) => `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+  const startText = `${start.getMonth() + 1}/${start.getDate()}(${weekday}) ${formatTime(start)}`;
+  if (!endAt) return startText;
+
+  const end = new Date(endAt);
+  if (Number.isNaN(end.getTime())) return startText;
+  const isSameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
+  return isSameDay
+    ? `${startText}–${formatTime(end)}`
+    : `${startText} – ${end.getMonth() + 1}/${end.getDate()}(${new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(end)}) ${formatTime(end)}`;
+}
+
+function focusTextareaAtEnd(textarea: HTMLTextAreaElement | null, value?: string) {
+  if (!textarea) {
+    return;
+  }
+
+  const cursor = value?.length ?? textarea.value.length;
+  textarea.focus();
+  textarea.setSelectionRange(cursor, cursor);
+}
+
 export function AiAssistantWorkspace({
   compact = false,
+  showHeader = true,
   showEndpointInfo = true,
   directApply = false,
   hideInitialResult = false,
@@ -150,20 +195,26 @@ export function AiAssistantWorkspace({
   placeholder = "예: 내일 오전 10시에 보고서 제출 일정을 추가해줘. 프로젝트는 일반, 종류는 제출.",
   quickPrompts = [],
   className = "",
+  initialDraft = "",
   onApplied,
+  onRequestClose,
 }: AiAssistantWorkspaceProps) {
-  const { tasks, projects, taskTypes, setting, createTask, updateTask, removeTask } = useAppData();
-  const [draft, setDraft] = useState("");
+  const { tasks, projects, taskTypes, setting, userContext, createTask, updateTask, removeTask, acceptUserContextSuggestion } = useAppData();
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [draft, setDraft] = useState(initialDraft);
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastAssistantMessage, setLastAssistantMessage] = useState(
     "일정 요청을 입력하면 AI가 필요한 질문과 초안, 변경안을 정리해서 보여줍니다.",
   );
   const [lastQuestion, setLastQuestion] = useState("");
   const [pendingProposal, setPendingProposal] = useState<AgentProposal | undefined>(undefined);
+  const [pendingContextSuggestions, setPendingContextSuggestions] = useState<AgentContextSuggestion[]>([]);
   const [selectedOperationIndexes, setSelectedOperationIndexes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [aiProgress, setAiProgress] = useState("");
+  const [lastTrace, setLastTrace] = useState("");
   const [isApplying, setIsApplying] = useState(false);
-  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [applyResult, setApplyResult] = useState("");
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>("checking");
@@ -174,7 +225,10 @@ export function AiAssistantWorkspace({
   const taskTypeMap = useMemo(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = useMemo(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
-  const hasVisibleResult = Boolean(lastUserMessage || pendingProposal || lastQuestion || error || applyResult || isLoading);
+  const hasVisibleResult = Boolean(pendingProposal || pendingContextSuggestions.length > 0 || lastQuestion || error || applyResult || isLoading);
+  const canApplyProposalWithEnter = Boolean(
+    pendingProposal && hasOperations && selectedOperationIndexes.length > 0 && !isApplying,
+  );
 
   const conversationContext = useMemo<AgentConversationMessage[]>(() => {
     if (!lastUserMessage || !lastAssistantMessage) {
@@ -192,7 +246,12 @@ export function AiAssistantWorkspace({
       return;
     }
 
-    setSelectedOperationIndexes(pendingProposal.operations.map((_, index) => index));
+    // Destructive operations require an explicit opt-in in the review UI.
+    setSelectedOperationIndexes(
+      pendingProposal.operations
+        .map((operation, index) => (operation.action === "delete_task" ? -1 : index))
+        .filter((index) => index >= 0),
+    );
   }, [pendingProposal]);
 
   useEffect(() => {
@@ -200,7 +259,7 @@ export function AiAssistantWorkspace({
     setEndpointStatus("checking");
     setEndpointStatusMessage("연결 확인 중");
 
-    void probeEndpoint(setting.llmApiKey ?? "", setting.llmModel ?? "")
+    void probeEndpoint(setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL, setting.llmApiKey ?? "", setting.llmModel ?? "")
       .then(() => {
         if (!isMounted) {
           return;
@@ -219,7 +278,49 @@ export function AiAssistantWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [setting.llmApiKey, setting.llmModel]);
+  }, [setting.llmApiKey, setting.llmEndpoint, setting.llmModel]);
+
+  // 모달을 닫는 등 컴포넌트가 사라지면 진행 중인 AI 요청을 중단한다.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      focusTextareaAtEnd(textareaRef.current);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    setDraft(initialDraft);
+    const frame = window.requestAnimationFrame(() => {
+      focusTextareaAtEnd(textareaRef.current, initialDraft);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [initialDraft]);
+
+  useEffect(() => {
+    if (!pendingProposal) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      focusTextareaAtEnd(textareaRef.current);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [pendingProposal]);
 
   async function handleSend(messageOverride?: string) {
     const userMessage = (messageOverride ?? draft).trim();
@@ -231,40 +332,62 @@ export function AiAssistantWorkspace({
     setApplyResult("");
     setLastQuestion("");
     setPendingProposal(undefined);
-    if (resultPresentation === "modal") {
-      setIsResultModalOpen(true);
-    }
+    setPendingContextSuggestions([]);
     if (!messageOverride) {
       setDraft("");
     }
+    // 새 요청은 진행 중이던 이전 요청을 중단하고 시작한다.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsLoading(true);
+    setAiProgress("AI 준비 중…");
+    setLastTrace("");
 
     try {
+      const handleProgress = (info: ScheduleAgentProgress) => {
+        setAiProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`);
+      };
       const result = await runScheduleAgent({
         userMessage,
         conversation: conversationContext,
         tasks,
         projects,
         taskTypes,
+        userContext,
+        userContextMaxLength: setting.aiContextMaxLength,
+        endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        onProgress: handleProgress,
+        signal: controller.signal,
       });
 
       setLastUserMessage(userMessage);
       setLastAssistantMessage(result.assistantMessage);
       setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
+      setPendingContextSuggestions(result.contextSuggestions);
+      setLastTrace(result.trace ?? "");
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
+      // 사용자가 취소한 요청은 오류로 표시하지 않는다.
+      if (isAbortError(runError)) {
+        return;
+      }
       const message = toFriendlyError(runError);
       setError(message);
       setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
       setLastQuestion("");
+      setPendingContextSuggestions([]);
       setEndpointStatus("error");
       setEndpointStatusMessage(message);
     } finally {
-      setIsLoading(false);
+      // 이 요청이 여전히 최신일 때만 로딩 상태를 해제한다 (새 요청과의 경합 방지).
+      if (abortRef.current === controller) {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -301,6 +424,9 @@ export function AiAssistantWorkspace({
     const target = taskMap[operation.taskId];
     if (!target) {
       throw new Error(`수정할 일정을 찾을 수 없습니다: ${operation.taskId}`);
+    }
+    if (operation.expectedUpdatedAt && target.updatedAt !== operation.expectedUpdatedAt) {
+      throw new Error("AI가 조회한 뒤 일정이 변경되었습니다. 최신 상태로 다시 요청해 주세요.");
     }
 
     const nextInput = toTaskInput(target);
@@ -356,6 +482,9 @@ export function AiAssistantWorkspace({
   async function applyDeleteOperation(operation: AgentDeleteTaskOperation): Promise<void> {
     if (!taskMap[operation.taskId]) {
       throw new Error(`삭제할 일정을 찾을 수 없습니다: ${operation.taskId}`);
+    }
+    if (operation.expectedUpdatedAt && taskMap[operation.taskId].updatedAt !== operation.expectedUpdatedAt) {
+      throw new Error("AI가 조회한 뒤 일정이 변경되었습니다. 최신 상태로 다시 요청해 주세요.");
     }
     await removeTask(operation.taskId);
   }
@@ -453,8 +582,50 @@ export function AiAssistantWorkspace({
     onApplied?.();
   }
 
+  async function handleAcceptContextSuggestion(suggestion: AgentContextSuggestion, index: number) {
+    try {
+      await acceptUserContextSuggestion(suggestion);
+      setPendingContextSuggestions((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+      setApplyResult("user.md에 새 규칙을 저장했습니다.");
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
+    }
+  }
+
+  async function handleAcceptAllContextSuggestions() {
+    try {
+      for (const suggestion of pendingContextSuggestions) {
+        await acceptUserContextSuggestion(suggestion);
+      }
+      setPendingContextSuggestions([]);
+      setApplyResult("user.md에 규칙을 모두 저장했습니다.");
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
+    }
+  }
+
+  /** 규칙 내용을 구조화된 칩으로 렌더링한다 (슬래시로 이어붙인 문자열보다 훑기 쉽다) */
+  function renderContextSuggestionChips(suggestion: AgentContextSuggestion) {
+    const projectName = suggestion.projectId ? projectMap[suggestion.projectId]?.name ?? suggestion.projectId : "";
+    const taskTypeName = suggestion.taskTypeId ? taskTypeMap[suggestion.taskTypeId]?.name ?? suggestion.taskTypeId : "";
+    return (
+      <div className="ctx-chip-row">
+        {suggestion.trigger.map((keyword) => (
+          <span key={keyword} className="ctx-chip keyword">
+            {keyword}
+          </span>
+        ))}
+        {suggestion.defaultTime ? <span className="ctx-chip time">🕐 {suggestion.defaultTime}</span> : null}
+        {projectName ? <span className="ctx-chip">📁 {projectName}</span> : null}
+        {taskTypeName ? <span className="ctx-chip">{taskTypeName}</span> : null}
+        {suggestion.isMajor ? <span className="ctx-chip major">중요 표시</span> : null}
+      </div>
+    );
+  }
+
   function renderOperation(operation: AgentOperation, index: number) {
     const isSelected = selectedOperationSet.has(index);
+    const actionMeta = getOperationActionMeta(operation);
     const toggleSelection = (checked: boolean) => {
       setSelectedOperationIndexes((prev) => {
         if (checked) {
@@ -468,16 +639,29 @@ export function AiAssistantWorkspace({
       const projectName = projectMap[operation.projectId]?.name ?? operation.projectId;
       const taskTypeName = taskTypeMap[operation.taskTypeId]?.name ?? operation.taskTypeId;
       return (
-        <li key={`proposal-${index}`} className="proposal-card">
+        <li key={`proposal-${index}`} className={`proposal-card ${actionMeta.tone} ${isSelected ? "selected" : ""}`}>
           <label className="proposal-item-toggle">
             <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
-            <span>
-              <strong>[추가] {operation.title}</strong>
-              <small>
-                {formatDateTime(operation.startAt, setting.timeFormat)}
-                {operation.endAt ? ` ~ ${formatDateTime(operation.endAt, setting.timeFormat)}` : ""}
-                {` / ${projectName} / ${taskTypeName}`}
-              </small>
+            <span className="proposal-checkmark" aria-hidden="true" />
+            <span className="proposal-card-body proposal-create-body">
+              <span className="proposal-create-details">
+                <span className="proposal-create-primary">
+                  <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+                  <span className="proposal-title-line">
+                    <strong>{operation.title}</strong>
+                  </span>
+                  {operation.isMajor ? <span className="major-tag">중요</span> : null}
+                </span>
+                <span className="proposal-create-secondary">
+                  <span className={`status-badge ${operation.status.toLowerCase()}`}>{STATUS_LABELS[operation.status]}</span>
+                  <span className="proposal-meta-grid">
+                    <span>{projectName}</span>
+                    <span>{taskTypeName}</span>
+                  </span>
+                </span>
+                {operation.content ? <small>{operation.content}</small> : null}
+              </span>
+              <span className="proposal-date-time">{formatProposalDateTime(operation.startAt, operation.endAt)}</span>
             </span>
           </label>
         </li>
@@ -490,11 +674,15 @@ export function AiAssistantWorkspace({
         .map(([key, value]) => `${FIELD_LABELS[key] ?? key}: ${describeChangeValue(key, value, setting.timeFormat)}`)
         .join(" · ");
       return (
-        <li key={`proposal-${index}`} className="proposal-card">
+        <li key={`proposal-${index}`} className={`proposal-card ${actionMeta.tone} ${isSelected ? "selected" : ""}`}>
           <label className="proposal-item-toggle">
             <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
-            <span>
-              <strong>[수정] {taskTitle}</strong>
+            <span className="proposal-checkmark" aria-hidden="true" />
+            <span className="proposal-card-body">
+              <span className="proposal-card-topline">
+                <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+              </span>
+              <strong>{taskTitle}</strong>
               <small>{changeText || "변경 필드 없음"}</small>
             </span>
           </label>
@@ -504,11 +692,15 @@ export function AiAssistantWorkspace({
 
     const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
     return (
-      <li key={`proposal-${index}`} className="proposal-card">
+      <li key={`proposal-${index}`} className={`proposal-card ${actionMeta.tone} ${isSelected ? "selected" : ""}`}>
         <label className="proposal-item-toggle">
           <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
-          <span>
-            <strong>[삭제] {taskTitle}</strong>
+          <span className="proposal-checkmark" aria-hidden="true" />
+          <span className="proposal-card-body">
+            <span className="proposal-card-topline">
+              <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+            </span>
+            <strong>{taskTitle}</strong>
             {operation.reason ? <small>{operation.reason}</small> : null}
           </span>
         </label>
@@ -517,14 +709,10 @@ export function AiAssistantWorkspace({
   }
 
   const shouldShowResultCard = !hideInitialResult || hasVisibleResult;
-  const responseText = isLoading ? "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
+  const responseText = isLoading ? aiProgress || "요청을 읽고 일정 초안을 만드는 중입니다." : lastAssistantMessage;
+  const operationCount = pendingProposal?.operations.length ?? 0;
   const resultCard = shouldShowResultCard ? (
     <div className={`ai-result-card ${hasVisibleResult ? "has-output" : ""}`} aria-live="polite">
-      <div className="ai-response-block">
-        <span className="badge-pill">AI 답변</span>
-        <p>{responseText}</p>
-      </div>
-
       {lastQuestion ? (
         <div className="ai-question-block">
           <span className="badge-pill danger">질문</span>
@@ -532,12 +720,75 @@ export function AiAssistantWorkspace({
         </div>
       ) : null}
 
+      {!isLoading && lastTrace ? <p className="ai-trace-line">🔎 AI 참고: {lastTrace}</p> : null}
+
+      {pendingContextSuggestions.length > 0 ? (
+        /* 초안보다 먼저 배치 — 규칙을 검토·저장한 뒤 초안을 반영하는 흐름 */
+        <div className="context-suggestion-block">
+          <div className="context-suggestion-head">
+            <div className="context-suggestion-head-copy">
+              <div className="context-suggestion-title-row">
+                <span className="badge-pill">user.md</span>
+                <strong>💡 AI가 학습한 규칙 {pendingContextSuggestions.length}개</strong>
+              </div>
+              <p className="description-text">
+                {pendingProposal
+                  ? "규칙을 먼저 검토하세요. 저장하면 다음 요청부터 자동 적용됩니다. 일정 초안은 아래에 있어요."
+                  : "반복해서 쓸 수 있는 일정 해석 규칙만 저장하세요."}
+              </p>
+            </div>
+            <div className="button-row compact">
+              {pendingContextSuggestions.length > 1 ? (
+                <button className="btn btn-primary btn-compact" type="button" onClick={() => void handleAcceptAllContextSuggestions()}>
+                  모두 저장
+                </button>
+              ) : null}
+              <button className="btn btn-outline btn-compact" type="button" onClick={() => setPendingContextSuggestions([])}>
+                모두 무시
+              </button>
+            </div>
+          </div>
+          <ul className="context-suggestion-list">
+            {pendingContextSuggestions.map((suggestion, index) => (
+              <li key={`${suggestion.category}-${suggestion.trigger.join("-")}-${index}`}>
+                <div className="context-suggestion-body">
+                  <strong>{suggestion.label ?? suggestion.trigger.join(", ")}</strong>
+                  {renderContextSuggestionChips(suggestion)}
+                  {suggestion.reason || suggestion.note ? <small>{suggestion.reason ?? suggestion.note}</small> : null}
+                </div>
+                <div className="context-suggestion-actions">
+                  <button
+                    className="btn btn-primary btn-compact"
+                    type="button"
+                    onClick={() => {
+                      void handleAcceptContextSuggestion(suggestion, index);
+                    }}
+                  >
+                    규칙 저장
+                  </button>
+                  <button
+                    className="btn btn-outline btn-compact"
+                    type="button"
+                    onClick={() => setPendingContextSuggestions((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    무시
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {pendingProposal ? (
         <div className="proposal-block compact-review">
           <div className="proposal-summary-row">
             <div>
-              <span className="badge-pill">변경안</span>
               <p className="description-text">{pendingProposal.summary}</p>
+            </div>
+            <div className="proposal-count-card" aria-label="선택한 초안 수">
+              <strong>{selectedOperationIndexes.length}</strong>
+              <span>/ {operationCount} 선택</span>
             </div>
             {hasOperations ? (
               <div className="button-row compact">
@@ -588,6 +839,8 @@ export function AiAssistantWorkspace({
             </div>
           ) : null}
         </div>
+      ) : isLoading ? (
+        <p className="description-text">{responseText}</p>
       ) : hideInitialResult ? null : (
         <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
       )}
@@ -598,21 +851,34 @@ export function AiAssistantWorkspace({
   ) : null;
 
   return (
-    <section className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${className}`}>
-      <header className="panel-header ai-command-header">
-        <div>
-          <p className="eyebrow">AI COMMAND</p>
-          <h2>{title}</h2>
-          <small>{subtitle}</small>
-        </div>
-        <p className={`endpoint-status ${endpointStatus}`} title={endpointStatusMessage}>
-          {endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류"}
+    <section
+      className={`panel ai-command-center ${compact ? "compact" : ""} ${directApply ? "direct" : ""} ${
+        hasVisibleResult ? "has-result" : ""
+      } ${isLoading ? "is-loading" : ""} ${className}`}
+      aria-busy={isLoading}
+    >
+      {showHeader ? (
+        <header className="panel-header ai-command-header">
+          <div>
+            <p className="eyebrow">AI COMMAND</p>
+            <h2>{title}</h2>
+            <small>{subtitle}</small>
+          </div>
+          <p className={`endpoint-status ${endpointStatus}`} title={endpointStatusMessage}>
+            {endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류"}
+          </p>
+        </header>
+      ) : null}
+
+      {!showHeader && endpointStatus === "error" && !isLoading ? (
+        <p className="ai-connection-warn" role="status">
+          ⚠ AI 서버에 연결할 수 없어요. 설정에서 엔드포인트를 확인해 주세요.
         </p>
-      </header>
+      ) : null}
 
       {showEndpointInfo ? (
         <div className="ai-endpoint-block">
-          <p className="description-text">Endpoint: {LLM_CHAT_COMPLETIONS_URL}</p>
+          <p className="description-text">Endpoint: {setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL}</p>
           <p className="description-text">
             모델: {setting.llmModel ?? "(미설정)"} / API Key: {setting.llmApiKey ? "설정됨" : "미설정"}
           </p>
@@ -625,20 +891,54 @@ export function AiAssistantWorkspace({
         </p>
       ) : null}
 
+      {resultPresentation === "modal" ? resultCard : null}
+
       <div className="ai-request-grid">
         <label className="ai-input-label">
           {inputLabel ? <span>{inputLabel}</span> : <span className="sr-only">AI 요청</span>}
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={compact ? 4 : 5} placeholder={placeholder} />
+          <textarea
+            ref={textareaRef}
+            autoFocus
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onRequestClose?.();
+                return;
+              }
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                return;
+              }
+              event.preventDefault();
+              // 입력 내용이 있으면 항상 '전송'이 우선 — 초안이 떠 있어도 수정 요청을 보낸다.
+              // 입력창이 빈 상태에서의 Enter만 선택 항목 반영으로 동작한다.
+              if (draft.trim()) {
+                if (!isLoading) {
+                  void handleSend();
+                }
+                return;
+              }
+              if (canApplyProposalWithEnter) {
+                void handleApplyProposal();
+              }
+            }}
+            rows={compact ? 4 : 5}
+            placeholder={placeholder}
+          />
         </label>
 
-        {quickPrompts.length > 0 ? (
+        {quickPrompts.length > 0 && !pendingProposal && !isLoading ? (
           <div className="ai-prompt-chip-row" aria-label="요청 예시">
+            <span className="ai-prompt-chip-hint">예시</span>
             {quickPrompts.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
                 onClick={() => {
                   setDraft(prompt);
+                  focusTextareaAtEnd(textareaRef.current, prompt);
                 }}
               >
                 {prompt}
@@ -647,53 +947,33 @@ export function AiAssistantWorkspace({
           </div>
         ) : null}
 
-        <div className="ai-action-stack">
-          <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>
-            {isLoading ? "분석 중" : "초안 만들기"}
-          </button>
-          {showRetryButton ? (
-            <button
-              className="btn btn-outline"
-              type="button"
-              disabled={isLoading || !lastUserMessage}
-              onClick={() => {
-                void handleSend(lastUserMessage);
-              }}
-            >
-              마지막 요청 다시 실행
+        <div className="ai-composer-footer">
+          <span className="ai-composer-kbd">
+            {pendingProposal
+              ? "수정 요청 입력 후 Enter 전송 · 빈 칸에서 Enter는 선택 항목 반영"
+              : "Enter 초안 만들기 · Shift+Enter 줄바꿈"}
+          </span>
+          <div className="ai-action-stack">
+            {showRetryButton ? (
+              <button
+                className="btn btn-outline"
+                type="button"
+                disabled={isLoading || !lastUserMessage}
+                onClick={() => {
+                  void handleSend(lastUserMessage);
+                }}
+              >
+                다시 실행
+              </button>
+            ) : null}
+            <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>
+              {isLoading ? "분석 중…" : "초안 만들기"}
             </button>
-          ) : null}
+          </div>
         </div>
       </div>
 
-      {resultPresentation === "modal" ? (
-        isResultModalOpen && resultCard ? (
-          <div className="modal-backdrop ai-result-modal-backdrop" onClick={() => setIsResultModalOpen(false)}>
-            <section
-              className="modal-card panel ai-result-modal-card"
-              role="dialog"
-              aria-modal="true"
-              aria-label="AI 일정 초안"
-              onClick={(event) => {
-                event.stopPropagation();
-              }}
-            >
-              <header className="panel-header">
-                <div>
-                  <p className="eyebrow">AI DRAFT</p>
-                  <h2>AI 일정 초안</h2>
-                </div>
-                <button type="button" className="btn btn-soft" onClick={() => setIsResultModalOpen(false)}>
-                  닫기
-                </button>
-              </header>
-              {resultCard}
-            </section>
-          </div>
-        ) : null
-      ) : (
-        resultCard
-      )}
+      {resultPresentation !== "modal" ? resultCard : null}
     </section>
   );
 }

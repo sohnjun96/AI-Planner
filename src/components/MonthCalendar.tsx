@@ -1,13 +1,28 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { addDays, addMonths, getDateKey, getMonthGridStart, startOfMonth } from "../utils/date";
+
+export type CalendarMarkerTone = "default" | "lunch" | "leave" | "trip";
+
+export interface CalendarDayMarker {
+  id: string;
+  label: string;
+  count: number;
+  tone: CalendarMarkerTone;
+  detailLabel?: string;
+  cellClass?: string;
+  priority?: number;
+}
 
 export interface CalendarDaySummary {
   total: number;
   done: number;
+  canceled: number;
   pending: number;
   onHold: number;
   conflicts: number;
   major: number;
+  lunch: number;
+  markers: CalendarDayMarker[];
   titles: string[];
 }
 
@@ -18,15 +33,20 @@ interface MonthCalendarProps {
   onSelectDate: (date: string) => void;
   onDropTaskToDate?: (taskId: string, dateKey: string) => Promise<void> | void;
   onCreateTaskAtDate?: (dateKey: string) => void;
+  onDayContextMenu?: (event: MouseEvent<HTMLElement>, dateKey: string) => void;
+  renderSelectedDateDetails?: (dateKey: string) => ReactNode;
 }
 
 const EMPTY_SUMMARY: CalendarDaySummary = {
   total: 0,
   done: 0,
+  canceled: 0,
   pending: 0,
   onHold: 0,
   conflicts: 0,
   major: 0,
+  lunch: 0,
+  markers: [],
   titles: [],
 };
 
@@ -65,6 +85,21 @@ function getDensityLevel(total: number): number {
   return 4;
 }
 
+function sortCalendarMarkers(markers: CalendarDayMarker[]): CalendarDayMarker[] {
+  return [...markers].sort((a, b) => {
+    const priorityDiff = (a.priority ?? 100) - (b.priority ?? 100);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+    return a.label.localeCompare(b.label, "ko");
+  });
+}
+
+function formatMarkerCount(marker: CalendarDayMarker, useDetail = false): string {
+  const label = useDetail ? marker.detailLabel ?? marker.label : marker.label;
+  return `${label}${marker.count > 1 ? ` ${marker.count}` : ""}`;
+}
+
 export function MonthCalendar({
   selectedDate,
   weekStartsOn,
@@ -72,6 +107,8 @@ export function MonthCalendar({
   onSelectDate,
   onDropTaskToDate,
   onCreateTaskAtDate,
+  onDayContextMenu,
+  renderSelectedDateDetails,
 }: MonthCalendarProps) {
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date(selectedDate)));
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
@@ -99,6 +136,7 @@ export function MonthCalendar({
     let pending = 0;
     let onHold = 0;
     let done = 0;
+    let canceled = 0;
     let conflicts = 0;
 
     const lastDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
@@ -109,10 +147,11 @@ export function MonthCalendar({
       pending += summary.pending;
       onHold += summary.onHold;
       done += summary.done;
+      canceled += summary.canceled;
       conflicts += summary.conflicts;
     }
 
-    return { total, pending, onHold, done, conflicts };
+    return { total, pending, onHold, done, canceled, conflicts };
   }, [daySummaryByDate, visibleMonth]);
 
   function moveSelectionByDays(daysToMove: number) {
@@ -205,6 +244,7 @@ export function MonthCalendar({
         <span className="not_done">미완료 {monthStats.pending}건</span>
         <span className="on_hold">보류 {monthStats.onHold}건</span>
         <span className="done">완료 {monthStats.done}건</span>
+        <span className="canceled">취소 {monthStats.canceled}건</span>
         <span className="conflict">충돌 {monthStats.conflicts}건</span>
       </div>
 
@@ -219,15 +259,25 @@ export function MonthCalendar({
           const key = getDateKey(date);
           const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
           const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
+          const markers = sortCalendarMarkers(summary.markers ?? []);
+          const topMarkers = markers.filter((marker) => marker.tone !== "lunch");
+          const lunchMarkers = markers.filter((marker) => marker.tone === "lunch");
+          const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
           const density = getDensityLevel(summary.total);
-          const completionRatio = summary.total > 0 ? Math.round((summary.done / summary.total) * 100) : 0;
+          const completionBase = Math.max(0, summary.total - summary.canceled);
+          const completionRatio = completionBase > 0 ? Math.round((summary.done / completionBase) * 100) : 0;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+          const visibleTitleCount = summary.titles.length;
+          const hiddenTitleCount = Math.max(0, visibleTitleCount - 3);
 
           const ariaLabel = [
             `${key}`,
             summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
             summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
             summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
+            summary.canceled > 0 ? `취소 ${summary.canceled}건` : "",
+            summary.lunch > 0 ? `점심 ${summary.lunch}건` : "",
+            ...markers.map((marker) => `${marker.detailLabel ?? marker.label} ${marker.count}건`),
             summary.conflicts > 0 ? `충돌 ${summary.conflicts}건` : "",
             "Enter로 선택, 더블클릭으로 일정 추가",
           ]
@@ -235,102 +285,128 @@ export function MonthCalendar({
             .join(", ");
 
           return (
-            <button
-              key={key}
-              type="button"
-              className={`calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${
-                todayKey === key ? "today" : ""
-              } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
-                dragOverDateKey === key ? "drag-target" : ""
-              }`}
-              onClick={() => selectDate(date)}
-              onDoubleClick={() => {
-                onCreateTaskAtDate?.(key);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowLeft") {
+            <div key={key} className={`calendar-day-slot ${selectedKey === key ? "selected" : ""}`}>
+              <button
+                type="button"
+                className={`calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${
+                  todayKey === key ? "today" : ""
+                } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
+                  dragOverDateKey === key ? "drag-target" : ""
+                } ${markerClassName}`}
+                onClick={() => selectDate(date)}
+                onContextMenu={(event) => {
+                  if (!onDayContextMenu) {
+                    return;
+                  }
                   event.preventDefault();
-                  moveSelectionByDays(-1);
-                } else if (event.key === "ArrowRight") {
+                  event.stopPropagation();
+                  selectDate(date);
+                  onDayContextMenu(event, key);
+                }}
+                onDoubleClick={() => {
+                  onCreateTaskAtDate?.(key);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    moveSelectionByDays(-1);
+                  } else if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    moveSelectionByDays(1);
+                  } else if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    moveSelectionByDays(-7);
+                  } else if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    moveSelectionByDays(7);
+                  } else if (event.key === "Home") {
+                    event.preventDefault();
+                    handleSelectToday();
+                  }
+                }}
+                onDragOver={(event) => {
+                  if (!onDropTaskToDate) {
+                    return;
+                  }
+                  const taskId =
+                    event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+                  if (!taskId) {
+                    return;
+                  }
                   event.preventDefault();
-                  moveSelectionByDays(1);
-                } else if (event.key === "ArrowUp") {
+                  event.dataTransfer.dropEffect = "move";
+                  if (dragOverDateKey !== key) {
+                    setDragOverDateKey(key);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverDateKey === key) {
+                    setDragOverDateKey(null);
+                  }
+                }}
+                onDrop={(event) => {
+                  if (!onDropTaskToDate) {
+                    return;
+                  }
+                  const taskId =
+                    event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
+                  if (!taskId) {
+                    return;
+                  }
                   event.preventDefault();
-                  moveSelectionByDays(-7);
-                } else if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  moveSelectionByDays(7);
-                } else if (event.key === "Home") {
-                  event.preventDefault();
-                  handleSelectToday();
-                }
-              }}
-              onDragOver={(event) => {
-                if (!onDropTaskToDate) {
-                  return;
-                }
-                const taskId =
-                  event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
-                if (!taskId) {
-                  return;
-                }
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                if (dragOverDateKey !== key) {
-                  setDragOverDateKey(key);
-                }
-              }}
-              onDragLeave={() => {
-                if (dragOverDateKey === key) {
                   setDragOverDateKey(null);
-                }
-              }}
-              onDrop={(event) => {
-                if (!onDropTaskToDate) {
-                  return;
-                }
-                const taskId =
-                  event.dataTransfer?.getData("application/x-task-id") ?? event.dataTransfer?.getData("text/plain");
-                if (!taskId) {
-                  return;
-                }
-                event.preventDefault();
-                setDragOverDateKey(null);
-                setVisibleMonth(startOfMonth(date));
-                void onDropTaskToDate(taskId, key);
-              }}
-              aria-label={ariaLabel}
-            >
-              <div className="calendar-day-top">
-                <span className="calendar-day-number">{date.getDate()}</span>
-                {summary.total > 0 ? <span className="calendar-day-count">{summary.total}건</span> : null}
-              </div>
+                  setVisibleMonth(startOfMonth(date));
+                  void onDropTaskToDate(taskId, key);
+                }}
+                aria-label={ariaLabel}
+              >
+                <div className="calendar-day-top">
+                  <span className="calendar-day-number">{date.getDate()}</span>
+                  <div className="calendar-day-top-meta">
+                    {topMarkers.map((marker) => (
+                      <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
+                        {formatMarkerCount(marker)}
+                      </span>
+                    ))}
+                    {summary.total > 0 ? <span className="calendar-day-count">{summary.total}건</span> : null}
+                  </div>
+                </div>
 
-              <div className="calendar-progress" aria-hidden="true">
-                <span style={{ width: `${completionRatio}%` }} />
-              </div>
+                <div className="calendar-progress" aria-hidden="true">
+                  <span style={{ width: `${completionRatio}%` }} />
+                </div>
 
-              <div className="calendar-event-stack">
-                {summary.titles.slice(0, 3).map((title, index) => (
-                  <span key={`${key}-title-${index}`} className="calendar-event-line" title={title}>
-                    {title}
-                  </span>
-                ))}
-                {summary.total > 3 ? <span className="calendar-event-more">+{summary.total - 3}</span> : null}
-              </div>
+                <div className="calendar-event-stack">
+                  {summary.titles.slice(0, 3).map((title, index) => (
+                    <span key={`${key}-title-${index}`} className="calendar-event-line" title={title}>
+                      {title}
+                    </span>
+                  ))}
+                  {hiddenTitleCount > 0 ? <span className="calendar-event-more">+{hiddenTitleCount}</span> : null}
+                </div>
 
-              <div className="calendar-indicators">
-                {summary.pending > 0 ? <span className="calendar-indicator pending">미완료 {summary.pending}</span> : null}
-                {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
-                {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
-                {summary.conflicts > 0 ? <span className="calendar-indicator conflict">충돌 {summary.conflicts}</span> : null}
-              </div>
-            </button>
+                <div className="calendar-indicators">
+                  {lunchMarkers.map((marker) => (
+                    <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
+                      {formatMarkerCount(marker)}
+                    </span>
+                  ))}
+                  {summary.onHold > 0 ? <span className="calendar-indicator hold">보류 {summary.onHold}</span> : null}
+                  {summary.major > 0 ? <span className="calendar-indicator major">중요 {summary.major}</span> : null}
+                  {summary.conflicts > 0 ? <span className="calendar-indicator conflict">충돌 {summary.conflicts}</span> : null}
+                </div>
+              </button>
+              {selectedKey === key && renderSelectedDateDetails ? (
+                <div className="calendar-day-popover" onClick={(event) => event.stopPropagation()}>
+                  {renderSelectedDateDetails(key)}
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </div>
 
-      <p className="description-text">날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 할 일 카드를 드래그하면 날짜를 이동할 수 있습니다.</p>
+      <p className="description-text">날짜를 더블클릭하면 해당 날짜에 일정을 추가하고, 일정 카드를 드래그하면 날짜를 이동할 수 있습니다.</p>
     </section>
   );
 }

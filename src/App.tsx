@@ -3,9 +3,9 @@ import { AppShell } from "./components/AppShell";
 import { AppDataProvider, useAppData } from "./context/AppDataContext";
 import { ArchivePage } from "./pages/ArchivePage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { NotesPage } from "./pages/NotesPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { TasksPage } from "./pages/TasksPage";
 
 function RoutedApp() {
   const { isReady } = useAppData();
@@ -20,8 +20,9 @@ function RoutedApp() {
         <Route element={<AppShell />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/tasks" element={<Navigate to="/dashboard" replace />} />
           <Route path="/ai" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/notes" element={<NotesPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/types" element={<Navigate to="/settings" replace />} />
           <Route path="/archive" element={<ArchivePage />} />
