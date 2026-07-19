@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isAbortError } from "../agent/agentUtils";
+import { generationOptionsFromSetting } from "../agent/llmClient";
 import { runQaAgent, type QaReference } from "../agent/qaAgent";
 import { useAppData } from "../context/AppDataContext";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface AskDataModalProps {
@@ -26,18 +28,9 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
   const [trace, setTrace] = useState("");
   const [error, setError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose });
 
   const hasApiConfig = Boolean((setting.llmEndpoint ?? "").trim());
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   // 모달이 닫히면 진행 중인 요청을 중단한다.
   useEffect(() => {
@@ -70,6 +63,7 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions: generationOptionsFromSetting(setting),
         signal: controller.signal,
         onProgress: (info) =>
           setProgress(info.phase === "writing" ? `${info.label}… ${info.chars ?? 0}자` : `${info.label} 조회 중…`),
@@ -105,10 +99,12 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="modal-card ask-data-modal"
         role="dialog"
         aria-modal="true"
         aria-label="내 데이터에 질문"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="panel-header">
@@ -129,11 +125,11 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
         <div className="ask-input-row">
           <textarea
             className="ask-textarea"
+            data-dialog-initial-focus
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
             placeholder="예: 지난달 표준특허 관련해서 뭐 결정했지?"
             rows={2}
-            autoFocus
             disabled={isRunning}
             onKeyDown={(event) => {
               // AI 일정 추가 입력창과 동일하게: Enter 제출, Shift+Enter 줄바꿈 (한글 조합 중엔 무시)
@@ -168,7 +164,7 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
             </p>
           ) : null}
           {answer ? <MarkdownRenderer content={answer} /> : null}
-          {error ? <p className="error-text">{error}</p> : null}
+          {error ? <p className="error-text" role="alert">{error}</p> : null}
 
           {references.length > 0 ? (
             <div className="ask-references">

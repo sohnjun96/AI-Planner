@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { NOTE_STATUS_LABELS } from "../constants";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 import type { NoteFormInput, NoteStatus, Project, ProjectSubcategory } from "../models";
 
 interface NoteMetaModalProps {
@@ -19,20 +20,11 @@ export function NoteMetaModal({ draft, projects, subcategories, onApply, onClose
   const [isPinned, setIsPinned] = useState(draft.isPinned);
   const [tags, setTags] = useState<string[]>(draft.tags);
   const [tagDraft, setTagDraft] = useState("");
+  const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose });
 
   const projectSubcategories = subcategories
     .filter((sub) => sub.projectId === projectId)
     .sort((a, b) => a.order - b.order);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   function commitTag() {
     const value = tagDraft.trim();
@@ -56,10 +48,12 @@ export function NoteMetaModal({ draft, projects, subcategories, onApply, onClose
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="modal-card note-meta-modal"
         role="dialog"
         aria-modal="true"
         aria-label="노트 분류 수정"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="panel-header">

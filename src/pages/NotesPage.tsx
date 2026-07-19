@@ -11,6 +11,7 @@ import { NoteActionModal, type ConfirmedAction } from "../components/NoteActionM
 import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteTree";
 import { showToast } from "../components/ToastHost";
 import { isAbortError } from "../agent/agentUtils";
+import { generationOptionsFromSetting } from "../agent/llmClient";
 import {
   classifyNoteWithAi,
   extractNoteActions,
@@ -26,6 +27,7 @@ import {
   NOTE_SUGGESTION_DATE_WINDOW_DAYS,
 } from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 import type { Note, NoteAiAction, NoteFormInput, NoteStatus, NoteVersion, NoteVersionEditType } from "../models";
 import { deriveNoteTitle, isAutoTitle, isFollowingTitle } from "../utils/noteTitle";
 
@@ -196,6 +198,10 @@ export function NotesPage() {
     [projects],
   );
   const hasApiConfig = Boolean((setting.llmEndpoint ?? "").trim());
+  const generationOptions = useMemo(
+    () => generationOptionsFromSetting(setting),
+    [setting],
+  );
   const aiActions: NoteAiAction[] = setting.noteAiActions ?? [];
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
@@ -209,6 +215,10 @@ export function NotesPage() {
     () => notes.find((note) => note.id === selectedNoteId) ?? null,
     [notes, selectedNoteId],
   );
+  const historyDialogRef = useDialogFocus<HTMLDivElement>({
+    isOpen: historyOpen && Boolean(selectedNote),
+    onClose: () => setHistoryOpen(false),
+  });
 
   // 선택 노트가 바뀔 때만 draft 로드 (live query 지연 대응)
   useEffect(() => {
@@ -304,6 +314,7 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions,
       })
         .then((classification) =>
           applyNoteAiClassification(candidate.id, classification.projectId, classification.subcategoryId, candidate.updatedAt),
@@ -327,6 +338,7 @@ export function NotesPage() {
     setting.llmEndpoint,
     setting.llmApiKey,
     setting.llmModel,
+    generationOptions,
     applyNoteAiClassification,
     classificationRevision,
   ]);
@@ -478,6 +490,21 @@ export function NotesPage() {
     }
     ids.splice(fromIndex, 1);
     ids.splice(toIndex, 0, draggedId);
+    void reorderNotes(ids);
+  }
+
+  function moveNoteByOffset(noteId: string, offset: -1 | 1) {
+    if (!isNoteDragEnabled) {
+      return;
+    }
+    const ids = filteredNotes.map((note) => note.id);
+    const fromIndex = ids.indexOf(noteId);
+    const toIndex = fromIndex + offset;
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= ids.length) {
+      return;
+    }
+    ids.splice(fromIndex, 1);
+    ids.splice(toIndex, 0, noteId);
     void reorderNotes(ids);
   }
 
@@ -681,6 +708,8 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions,
+        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -719,6 +748,25 @@ export function NotesPage() {
       { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
       { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) },
     ];
+    const noteIndex = filteredNotes.findIndex((item) => item.id === noteId);
+    if (isNoteDragEnabled && noteIndex >= 0) {
+      items.push(
+        {
+          id: "move-up",
+          label: "위로 이동",
+          description: "노트 순서를 한 칸 위로 이동",
+          disabled: noteIndex === 0,
+          onSelect: () => moveNoteByOffset(noteId, -1),
+        },
+        {
+          id: "move-down",
+          label: "아래로 이동",
+          description: "노트 순서를 한 칸 아래로 이동",
+          disabled: noteIndex === filteredNotes.length - 1,
+          onSelect: () => moveNoteByOffset(noteId, 1),
+        },
+      );
+    }
     if (note.status !== "active") {
       items.push({ id: "activate", label: "활성화", onSelect: () => void setNoteStatus(noteId, "active") });
     }
@@ -755,6 +803,8 @@ export function NotesPage() {
           endpoint: setting.llmEndpoint,
           apiKey: setting.llmApiKey ?? "",
           model: setting.llmModel,
+          generationOptions,
+          noteAiRules: setting.noteAiRules,
           onProgress: handleAiProgress,
           signal: controller.signal,
         });
@@ -780,7 +830,7 @@ export function NotesPage() {
         }
       }
     },
-    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress, beginAiRequest],
+    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, generationOptions, setting.noteAiRules, handleAiProgress, beginAiRequest],
   );
 
   const runInlineAssist = useCallback(async () => {
@@ -818,6 +868,8 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions,
+        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -837,7 +889,7 @@ export function NotesPage() {
         setIsAiRunning(false);
       }
     }
-  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, handleAiProgress, beginAiRequest]);
+  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, generationOptions, setting.noteAiRules, handleAiProgress, beginAiRequest]);
 
   async function acceptProposal() {
     if (!selectedNoteId || !draft || !aiProposal) return;
@@ -874,6 +926,7 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -967,7 +1020,7 @@ export function NotesPage() {
       id: "ai-manage",
       label: "기능 관리…",
       description: "AI 편집 기능 추가·수정",
-      onSelect: () => navigate("/settings"),
+      onSelect: () => navigate("/settings?section=ai"),
     });
     return items;
   }
@@ -1015,6 +1068,8 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions,
+        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -1067,6 +1122,8 @@ export function NotesPage() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions,
+        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -1259,7 +1316,7 @@ export function NotesPage() {
             {filteredNotes.length === 0 ? (
               <p className="empty-text">
                 {filterNode.kind === "archived"
-                  ? "보관된 노트가 없습니다. 노트 우클릭 → 보관으로 정리할 수 있어요."
+                  ? "보관된 노트가 없습니다. 노트의 더보기 메뉴에서 보관할 수 있어요."
                   : "노트가 없습니다. \"새 노트\"로 시작하세요."}
               </p>
             ) : (
@@ -1323,7 +1380,7 @@ export function NotesPage() {
       </aside>
       )}
 
-      <main className="notes-detail-scroll">
+      <section className="notes-detail-scroll" aria-label="노트 내용">
         {filterNode.kind === "checklist" ? (
           <section className="notes-checklist-main" aria-label="전체 체크리스트">
             <header className="notes-stack-head">
@@ -1503,12 +1560,15 @@ export function NotesPage() {
               </button>
             ) : null}
           </div>
-        ) : (
+        ) : filterNode.kind !== "checklist" ? (
           <div className="notes-empty-detail">
             <p className="empty-text">노트를 선택하거나 새 노트를 만들어 시작하세요.</p>
+            <button type="button" className="btn btn-primary notes-empty-action" onClick={() => void handleCreateNote()}>
+              + 새 노트
+            </button>
           </div>
-        )}
-      </main>
+        ) : null}
+      </section>
 
       {metaModalOpen && draft ? (
         <NoteMetaModal
@@ -1531,7 +1591,15 @@ export function NotesPage() {
 
       {historyOpen && selectedNote ? (
         <div className="modal-backdrop" onClick={() => setHistoryOpen(false)}>
-          <div className="modal-card note-history-modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            ref={historyDialogRef}
+            className="modal-card note-history-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="노트 변경 이력"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
             <NoteHistoryPanel
               versions={selectedVersions}
               timeFormat={setting.timeFormat}

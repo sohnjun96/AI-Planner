@@ -1,6 +1,6 @@
 ﻿import type { AppSetting, NoteAiAction, NoteStatus, Project, RecurrencePattern, TaskStatus, TaskType } from "./models";
 
-import type { UserContext } from "./models";
+import type { LlmReasoningEffort, NoteAiRules, UserContext } from "./models";
 
 export const SETTINGS_ID = "default";
 export const USER_CONTEXT_ID = "user-context";
@@ -9,6 +9,28 @@ export const LUNCH_PROJECT_ID = "project-lunch";
 
 export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
 export const LLM_DEFAULT_MODEL = "gpt-4o-mini";
+export const DEFAULT_LLM_TEMPERATURE = 0;
+export const MIN_LLM_TEMPERATURE = 0;
+export const MAX_LLM_TEMPERATURE = 2;
+export const DEFAULT_LLM_REASONING_EFFORT: LlmReasoningEffort = "default";
+export const DEFAULT_LLM_GEMMA_THINKING_ENABLED = false;
+
+export function clampLlmTemperature(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_LLM_TEMPERATURE;
+  }
+  return Math.max(MIN_LLM_TEMPERATURE, Math.min(MAX_LLM_TEMPERATURE, value));
+}
+
+export function normalizeLlmReasoningEffort(value: unknown): LlmReasoningEffort {
+  return value === "none" || value === "low" || value === "medium" || value === "high"
+    ? value
+    : DEFAULT_LLM_REASONING_EFFORT;
+}
+
+export function normalizeLlmGemmaThinkingEnabled(value: unknown): boolean {
+  return value === true;
+}
 
 export const DEFAULT_NOTIFY_BEFORE_MINUTES = 30;
 export const DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES = 360;
@@ -37,6 +59,15 @@ export const DEFAULT_NOTE_AI_ACTIONS: NoteAiAction[] = [
   { id: "expand", label: "구체화", prompt: "각 항목을 더 구체적이고 실행 가능하게 확장해줘." },
 ];
 
+export const DEFAULT_NOTE_AI_RULES: NoteAiRules = {
+  tone: "professional",
+  detail: "balanced",
+  preserveFacts: true,
+  preserveMarkdown: true,
+  preserveChecklists: true,
+  customInstructions: "",
+};
+
 export const COLOR_PRESETS = [
   "#ef4444",
   "#f97316",
@@ -49,10 +80,10 @@ export const COLOR_PRESETS = [
   "#06b6d4",
   "#0ea5e9",
   "#3b82f6",
-  "#6366f1",
-  "#8b5cf6",
-  "#a855f7",
-  "#d946ef",
+  "#1d4ed8",
+  "#2563eb",
+  "#60a5fa",
+  "#38bdf8",
   "#ec4899",
   "#f43f5e",
   "#64748b",
@@ -147,7 +178,7 @@ export const DEFAULT_TASK_TYPES: TaskType[] = [
   {
     id: "type-trip",
     name: "출장",
-    color: "#7c3aed",
+    color: "#1d4ed8",
     isDefault: true,
     isActive: true,
     order: 7,
@@ -273,11 +304,15 @@ export const DEFAULT_SETTING: AppSetting = {
   llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   llmApiKey: "",
   llmModel: LLM_DEFAULT_MODEL,
+  llmTemperature: DEFAULT_LLM_TEMPERATURE,
+  llmReasoningEffort: DEFAULT_LLM_REASONING_EFFORT,
+  llmGemmaThinkingEnabled: DEFAULT_LLM_GEMMA_THINKING_ENABLED,
   notificationsEnabled: true,
   notifyBeforeMinutes: DEFAULT_NOTIFY_BEFORE_MINUTES,
   autoBackupEnabled: true,
   autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   aiContextMaxLength: DEFAULT_AI_CONTEXT_MAX_LENGTH,
   noteAiActions: DEFAULT_NOTE_AI_ACTIONS,
+  noteAiRules: DEFAULT_NOTE_AI_RULES,
   updatedAt: "",
 };

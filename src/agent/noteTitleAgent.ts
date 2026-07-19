@@ -1,10 +1,11 @@
-import { pickFirstString, requestJsonWithRetry } from "./agentUtils";
+import { pickFirstString, requestJsonWithRetry, type LlmGenerationOptions } from "./agentUtils";
 
 export async function generateNoteTitleWithAi(input: {
   content: string;
   endpoint?: string;
   apiKey: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   signal?: AbortSignal;
 }): Promise<string> {
   const { payload } = await requestJsonWithRetry({
@@ -25,6 +26,7 @@ Keep the title within 30 Korean characters.`,
     endpoint: input.endpoint,
     apiKey: input.apiKey,
     model: input.model,
+    generationOptions: input.generationOptions,
     signal: input.signal,
   });
 

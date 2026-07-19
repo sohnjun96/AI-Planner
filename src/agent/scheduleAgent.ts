@@ -18,6 +18,7 @@ import {
   resolveEntityId,
   tryParseJsonLikeValue,
   type LlmChatMessage,
+  type LlmGenerationOptions,
 } from "./agentUtils";
 
 type AgentToolName = "list_projects" | "list_task_types" | "search_tasks" | "get_task";
@@ -100,6 +101,7 @@ export interface RunScheduleAgentInput {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   onProgress?: (info: ScheduleAgentProgress) => void;
   signal?: AbortSignal;
 }
@@ -948,6 +950,7 @@ export async function runScheduleAgent(input: RunScheduleAgentInput): Promise<Ru
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      generationOptions: input.generationOptions,
       signal: input.signal,
       onToken: input.onProgress
         ? (delta) => {

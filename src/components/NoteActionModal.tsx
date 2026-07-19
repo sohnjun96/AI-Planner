@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { NoteActionItem } from "../agent/notesAgent";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 export interface ConfirmedAction {
   title: string;
@@ -47,16 +48,7 @@ export function NoteActionModal({ items, isBusy, onConfirm, onClose }: NoteActio
     [items],
   );
   const [rows, setRows] = useState<Row[]>(initialRows);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose });
 
   function update(index: number, patch: Partial<Row>) {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -80,10 +72,12 @@ export function NoteActionModal({ items, isBusy, onConfirm, onClose }: NoteActio
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="modal-card note-action-modal"
         role="dialog"
         aria-modal="true"
         aria-label="추출한 액션 아이템"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="panel-header">

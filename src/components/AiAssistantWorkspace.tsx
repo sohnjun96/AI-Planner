@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  buildLlmChatRequestBody,
+  generationOptionsFromSetting,
+  type LlmGenerationOptions,
+} from "../agent/llmClient";
 import { runScheduleAgent } from "../agent/scheduleAgent";
 import type {
   AgentConversationMessage,
@@ -33,6 +38,9 @@ interface AiAssistantWorkspaceProps {
   initialDraft?: string;
   onApplied?: () => void;
   onRequestClose?: () => void;
+  onDraftPreserved?: (draft: string) => void;
+  onOpenAiSettings?: () => void;
+  isActive?: boolean;
 }
 
 type EndpointStatus = "checking" | "ok" | "error";
@@ -100,7 +108,12 @@ function toFriendlyError(error: unknown): string {
   return raw;
 }
 
-async function probeEndpoint(endpoint: string, apiKey: string, model: string): Promise<void> {
+async function probeEndpoint(
+  endpoint: string,
+  apiKey: string,
+  model: string,
+  generationOptions: LlmGenerationOptions,
+): Promise<void> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -120,10 +133,12 @@ async function probeEndpoint(endpoint: string, apiKey: string, model: string): P
       headers,
       signal: controller.signal,
       body: JSON.stringify({
-        model: model.trim() || "gpt-4o-mini",
-        messages: [{ role: "user", content: "ping" }],
-        stream: false,
-        temperature: 0,
+        ...buildLlmChatRequestBody({
+          model,
+          messages: [{ role: "user", content: "ping" }],
+          stream: false,
+          generationOptions,
+        }),
         max_tokens: 2,
       }),
     });
@@ -198,11 +213,17 @@ export function AiAssistantWorkspace({
   initialDraft = "",
   onApplied,
   onRequestClose,
+  onDraftPreserved,
+  onOpenAiSettings,
+  isActive = true,
 }: AiAssistantWorkspaceProps) {
   const { tasks, projects, taskTypes, setting, userContext, createTask, updateTask, removeTask, acceptUserContextSuggestion } = useAppData();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const draftRef = useRef(initialDraft);
+  const onDraftPreservedRef = useRef(onDraftPreserved);
   const [draft, setDraft] = useState(initialDraft);
+  const [retryMessage, setRetryMessage] = useState(initialDraft.trim());
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastAssistantMessage, setLastAssistantMessage] = useState(
     "일정 요청을 입력하면 AI가 필요한 질문과 초안, 변경안을 정리해서 보여줍니다.",
@@ -216,16 +237,23 @@ export function AiAssistantWorkspace({
   const [lastTrace, setLastTrace] = useState("");
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [applyResult, setApplyResult] = useState("");
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>("checking");
   const [endpointStatusMessage, setEndpointStatusMessage] = useState("연결 확인 중");
 
   const taskMap = useMemo(() => Object.fromEntries(tasks.map((task) => [task.id, task])), [tasks]);
+  const generationOptions = useMemo(
+    () => generationOptionsFromSetting(setting),
+    [setting],
+  );
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const taskTypeMap = useMemo(() => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])), [taskTypes]);
   const selectedOperationSet = useMemo(() => new Set(selectedOperationIndexes), [selectedOperationIndexes]);
   const hasOperations = (pendingProposal?.operations.length ?? 0) > 0;
-  const hasVisibleResult = Boolean(pendingProposal || pendingContextSuggestions.length > 0 || lastQuestion || error || applyResult || isLoading);
+  const hasVisibleResult = Boolean(
+    pendingProposal || pendingContextSuggestions.length > 0 || lastQuestion || error || notice || applyResult || isLoading,
+  );
   const canApplyProposalWithEnter = Boolean(
     pendingProposal && hasOperations && selectedOperationIndexes.length > 0 && !isApplying,
   );
@@ -255,11 +283,19 @@ export function AiAssistantWorkspace({
   }, [pendingProposal]);
 
   useEffect(() => {
+    if (!isActive) {
+      return;
+    }
     let isMounted = true;
     setEndpointStatus("checking");
     setEndpointStatusMessage("연결 확인 중");
 
-    void probeEndpoint(setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL, setting.llmApiKey ?? "", setting.llmModel ?? "")
+    void probeEndpoint(
+      setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+      setting.llmApiKey ?? "",
+      setting.llmModel ?? "",
+      generationOptions,
+    )
       .then(() => {
         if (!isMounted) {
           return;
@@ -278,16 +314,26 @@ export function AiAssistantWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [setting.llmApiKey, setting.llmEndpoint, setting.llmModel]);
+  }, [generationOptions, isActive, setting.llmApiKey, setting.llmEndpoint, setting.llmModel]);
 
   // 모달을 닫는 등 컴포넌트가 사라지면 진행 중인 AI 요청을 중단한다.
   useEffect(() => {
+    onDraftPreservedRef.current = onDraftPreserved;
+  }, [onDraftPreserved]);
+
+  useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      onDraftPreservedRef.current?.(draftRef.current);
     };
   }, []);
 
   useEffect(() => {
+    if (!isActive) {
+      abortRef.current?.abort();
+      onDraftPreservedRef.current?.(draftRef.current);
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       focusTextareaAtEnd(textareaRef.current);
     });
@@ -295,10 +341,15 @@ export function AiAssistantWorkspace({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [isActive]);
 
   useEffect(() => {
     setDraft(initialDraft);
+    draftRef.current = initialDraft;
+    setRetryMessage(initialDraft.trim());
+    if (!isActive) {
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       focusTextareaAtEnd(textareaRef.current, initialDraft);
     });
@@ -306,10 +357,10 @@ export function AiAssistantWorkspace({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [initialDraft]);
+  }, [initialDraft, isActive]);
 
   useEffect(() => {
-    if (!pendingProposal) {
+    if (!pendingProposal || !isActive) {
       return;
     }
 
@@ -320,7 +371,7 @@ export function AiAssistantWorkspace({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [pendingProposal]);
+  }, [isActive, pendingProposal]);
 
   async function handleSend(messageOverride?: string) {
     const userMessage = (messageOverride ?? draft).trim();
@@ -329,13 +380,12 @@ export function AiAssistantWorkspace({
     }
 
     setError("");
+    setNotice("");
     setApplyResult("");
     setLastQuestion("");
     setPendingProposal(undefined);
     setPendingContextSuggestions([]);
-    if (!messageOverride) {
-      setDraft("");
-    }
+    setRetryMessage(userMessage);
     // 새 요청은 진행 중이던 이전 요청을 중단하고 시작한다.
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -359,6 +409,7 @@ export function AiAssistantWorkspace({
         endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions,
         onProgress: handleProgress,
         signal: controller.signal,
       });
@@ -369,16 +420,19 @@ export function AiAssistantWorkspace({
       setPendingProposal(result.proposal);
       setPendingContextSuggestions(result.contextSuggestions);
       setLastTrace(result.trace ?? "");
+      if (draftRef.current.trim() === userMessage) {
+        setDraft("");
+        draftRef.current = "";
+      }
       setEndpointStatus("ok");
       setEndpointStatusMessage("정상");
     } catch (runError) {
-      // 사용자가 취소한 요청은 오류로 표시하지 않는다.
       if (isAbortError(runError)) {
+        setNotice("요청을 취소했습니다. 입력 내용은 그대로 남아 있습니다.");
         return;
       }
       const message = toFriendlyError(runError);
       setError(message);
-      setLastAssistantMessage(`요청 처리에 실패했습니다: ${message}`);
       setLastQuestion("");
       setPendingContextSuggestions([]);
       setEndpointStatus("error");
@@ -389,6 +443,22 @@ export function AiAssistantWorkspace({
         setIsLoading(false);
       }
     }
+  }
+
+  function handleCancelRequest() {
+    if (!isLoading) {
+      return;
+    }
+    setAiProgress("요청 취소 중…");
+    abortRef.current?.abort();
+  }
+
+  function handleOpenAiSettings() {
+    if (onOpenAiSettings) {
+      onOpenAiSettings();
+      return;
+    }
+    window.location.hash = "/settings?section=ai";
   }
 
   async function applyCreateOperation(operation: AgentCreateTaskOperation): Promise<void> {
@@ -516,6 +586,7 @@ export function AiAssistantWorkspace({
     }
 
     setError("");
+    setNotice("");
     setIsApplying(true);
 
     const successLogs: string[] = [];
@@ -558,12 +629,10 @@ export function AiAssistantWorkspace({
         .join("\n"),
     );
 
-    const remainingOperations = pendingProposal.operations.filter((_, index) => {
-      if (!selectedOperationSet.has(index)) {
-        return true;
-      }
-      return failedIndexSet.has(index);
-    });
+    const remainingEntries = pendingProposal.operations
+      .map((operation, index) => ({ operation, originalIndex: index }))
+      .filter(({ originalIndex }) => !selectedOperationSet.has(originalIndex) || failedIndexSet.has(originalIndex));
+    const remainingOperations = remainingEntries.map(({ operation }) => operation);
 
     if (remainingOperations.length === 0) {
       setPendingProposal(undefined);
@@ -575,10 +644,18 @@ export function AiAssistantWorkspace({
         operations: remainingOperations,
       };
       setPendingProposal(nextProposal);
-      setSelectedOperationIndexes(nextProposal.operations.map((_, index) => index));
+      setSelectedOperationIndexes(
+        remainingEntries
+          .map(({ originalIndex }, index) => (failedIndexSet.has(originalIndex) ? index : -1))
+          .filter((index) => index >= 0),
+      );
     }
 
     setIsApplying(false);
+    if (failedLogs.length > 0) {
+      setError(`일부 변경을 반영하지 못했습니다. 실패한 ${failedLogs.length}건을 선택한 상태로 남겨두었습니다. 다시 시도해 주세요.\n${failedLogs.join("\n")}`);
+      return;
+    }
     onApplied?.();
   }
 
@@ -586,7 +663,7 @@ export function AiAssistantWorkspace({
     try {
       await acceptUserContextSuggestion(suggestion);
       setPendingContextSuggestions((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
-      setApplyResult("user.md에 새 규칙을 저장했습니다.");
+      setApplyResult("AI 맞춤 규칙에 새 규칙을 저장했습니다.");
     } catch (suggestionError) {
       setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
     }
@@ -598,7 +675,7 @@ export function AiAssistantWorkspace({
         await acceptUserContextSuggestion(suggestion);
       }
       setPendingContextSuggestions([]);
-      setApplyResult("user.md에 규칙을 모두 저장했습니다.");
+      setApplyResult("AI 맞춤 규칙에 규칙을 모두 저장했습니다.");
     } catch (suggestionError) {
       setError(suggestionError instanceof Error ? suggestionError.message : "컨텍스트 저장에 실패했습니다.");
     }
@@ -728,7 +805,7 @@ export function AiAssistantWorkspace({
           <div className="context-suggestion-head">
             <div className="context-suggestion-head-copy">
               <div className="context-suggestion-title-row">
-                <span className="badge-pill">user.md</span>
+                <span className="badge-pill">AI 맞춤 규칙</span>
                 <strong>💡 AI가 학습한 규칙 {pendingContextSuggestions.length}개</strong>
               </div>
               <p className="description-text">
@@ -845,8 +922,31 @@ export function AiAssistantWorkspace({
         <p className="empty-text">대기 중인 초안이나 변경안이 없습니다.</p>
       )}
 
-      {applyResult ? <p className="success-text">{applyResult}</p> : null}
-      {error ? <p className="error-text">{error}</p> : null}
+      {applyResult ? (
+        <p className="success-text" role="status" aria-live="polite">
+          {applyResult}
+        </p>
+      ) : null}
+      {notice ? (
+        <p className="description-text" role="status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
+      {error ? (
+        <div className="ai-error-recovery">
+          <p className="error-text" role="alert" aria-live="assertive">{error}</p>
+          <div className="button-row compact">
+            {retryMessage ? (
+              <button className="btn btn-outline btn-compact" type="button" disabled={isLoading} onClick={() => void handleSend(retryMessage)}>
+                다시 시도
+              </button>
+            ) : null}
+            <button className="btn btn-soft btn-compact" type="button" onClick={handleOpenAiSettings}>
+              AI 설정 열기
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -864,16 +964,19 @@ export function AiAssistantWorkspace({
             <h2>{title}</h2>
             <small>{subtitle}</small>
           </div>
-          <p className={`endpoint-status ${endpointStatus}`} title={endpointStatusMessage}>
+          <p className={`endpoint-status ${endpointStatus}`} title={endpointStatusMessage} role="status" aria-live="polite">
             {endpointStatus === "ok" ? "연결 정상" : endpointStatus === "checking" ? "연결 확인" : "연결 오류"}
           </p>
         </header>
       ) : null}
 
       {!showHeader && endpointStatus === "error" && !isLoading ? (
-        <p className="ai-connection-warn" role="status">
-          ⚠ AI 서버에 연결할 수 없어요. 설정에서 엔드포인트를 확인해 주세요.
-        </p>
+        <div className="ai-connection-warn" role="alert">
+          <span>⚠ AI 서버에 연결할 수 없어요. 설정에서 연결 상태를 확인해 주세요.</span>{" "}
+          <button className="btn btn-outline btn-compact" type="button" onClick={handleOpenAiSettings}>
+            AI 설정 열기
+          </button>
+        </div>
       ) : null}
 
       {showEndpointInfo ? (
@@ -898,14 +1001,22 @@ export function AiAssistantWorkspace({
           {inputLabel ? <span>{inputLabel}</span> : <span className="sr-only">AI 요청</span>}
           <textarea
             ref={textareaRef}
+            data-dialog-initial-focus
             autoFocus
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              draftRef.current = event.target.value;
+            }}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.preventDefault();
                 event.stopPropagation();
-                onRequestClose?.();
+                if (isLoading) {
+                  handleCancelRequest();
+                } else {
+                  onRequestClose?.();
+                }
                 return;
               }
               if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
@@ -938,6 +1049,7 @@ export function AiAssistantWorkspace({
                 type="button"
                 onClick={() => {
                   setDraft(prompt);
+                  draftRef.current = prompt;
                   focusTextareaAtEnd(textareaRef.current, prompt);
                 }}
               >
@@ -954,16 +1066,21 @@ export function AiAssistantWorkspace({
               : "Enter 초안 만들기 · Shift+Enter 줄바꿈"}
           </span>
           <div className="ai-action-stack">
-            {showRetryButton ? (
+            {isLoading ? (
+              <button className="btn btn-outline" type="button" onClick={handleCancelRequest}>
+                요청 취소
+              </button>
+            ) : null}
+            {!isLoading && (showRetryButton || Boolean(notice)) ? (
               <button
                 className="btn btn-outline"
                 type="button"
-                disabled={isLoading || !lastUserMessage}
+                disabled={!retryMessage}
                 onClick={() => {
-                  void handleSend(lastUserMessage);
+                  void handleSend(retryMessage);
                 }}
               >
-                다시 실행
+                다시 시도
               </button>
             ) : null}
             <button className="btn btn-primary btn-large" type="button" disabled={isLoading || !draft.trim()} onClick={() => void handleSend()}>

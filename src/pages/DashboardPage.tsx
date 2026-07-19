@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { DailyBriefing } from "../components/DailyBriefing";
 import { DayCompleteCelebration } from "../components/DayCompleteCelebration";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
-import { TaskForm } from "../components/TaskForm";
+import { TaskForm, type TaskFormInteractionState } from "../components/TaskForm";
+import { TaskModal } from "../components/TaskModal";
 import { TaskViewSegmentedControl } from "../components/TaskViewSegmentedControl";
 import { DEFAULT_PROJECT_ID, LUNCH_PROJECT_ID, STATUS_LABELS } from "../constants";
-import type { TaskViewMode } from "../constants/taskViewModes";
+import { isTaskViewMode, type TaskViewMode } from "../constants/taskViewModes";
 import { useAppData } from "../context/AppDataContext";
 import type { Project, Task, TaskFormInput, TaskStatus, TaskType } from "../models";
 import {
@@ -29,6 +30,28 @@ import {
 } from "../utils/taskStatus";
 
 const GLOBAL_MEMO_KEY = "global";
+const DASHBOARD_VIEW_MODE_STORAGE_KEY = "ai-planner:dashboard-view-mode";
+
+function getInitialCalendarViewMode(): TaskViewMode {
+  try {
+    const savedMode = window.localStorage.getItem(DASHBOARD_VIEW_MODE_STORAGE_KEY);
+    if (isTaskViewMode(savedMode)) {
+      return savedMode;
+    }
+  } catch {
+    // 저장소 접근이 제한된 환경에서는 화면 너비 기반 기본값을 사용한다.
+  }
+
+  return window.matchMedia("(max-width: 640px)").matches ? "LIST" : "MONTH";
+}
+
+function isValidDateKey(value: string | null): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isFinite(date.getTime()) && getDateKey(date) === value;
+}
 
 type TaskModalState =
   | {
@@ -446,13 +469,18 @@ function CompactTaskCard({
 export function DashboardPage() {
   const { tasks, projects, taskTypes, memos, notes, setting, createTask, updateTask, removeTask, saveMemo } = useAppData();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [memoSaved, setMemoSaved] = useState("");
   const [memoError, setMemoError] = useState("");
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
+  const [taskFormInteraction, setTaskFormInteraction] = useState<TaskFormInteractionState>({
+    isDirty: false,
+    isBusy: false,
+  });
   const [taskFormSerial, setTaskFormSerial] = useState(0);
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
   const [datePopoverKey, setDatePopoverKey] = useState<string | null>(null);
-  const [calendarViewMode, setCalendarViewMode] = useState<TaskViewMode>("MONTH");
+  const [calendarViewMode, setCalendarViewMode] = useState<TaskViewMode>(getInitialCalendarViewMode);
   const [isTopbarExpanded, setIsTopbarExpanded] = useState(false);
   const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("priority");
   const [contextMenu, setContextMenu] = useState<DashboardContextMenu | null>(null);
@@ -460,6 +488,8 @@ export function DashboardPage() {
   const previousTasksRef = useRef<Task[] | null>(null);
   const celebrationStartTimerRef = useRef<number | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
+  const handledDeepLinkRef = useRef("");
+  const taskModalReturnDateRef = useRef<string | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const todayKey = getDateKey(today);
@@ -498,6 +528,42 @@ export function DashboardPage() {
     },
     [],
   );
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      const dateParam = searchParams.get("date");
+      if (isValidDateKey(dateParam)) {
+        setSelectedDate((current) => (current === dateParam ? current : dateParam));
+      }
+
+      const taskId = searchParams.get("taskId");
+      if (!taskId) {
+        handledDeepLinkRef.current = "";
+        return;
+      }
+
+      const task = tasks.find((item) => item.id === taskId);
+      if (!task) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("taskId");
+        setSearchParams(nextParams, { replace: true });
+        return;
+      }
+
+      const deepLinkKey = `${dateParam ?? ""}:${taskId}`;
+      if (handledDeepLinkRef.current === deepLinkKey) {
+        return;
+      }
+
+      handledDeepLinkRef.current = deepLinkKey;
+      if (!isValidDateKey(dateParam)) {
+        setSelectedDate(getDateKey(task.startAt));
+      }
+      setTaskModalState({ mode: "edit", taskId });
+    }, 250);
+
+    return () => window.clearTimeout(timerId);
+  }, [searchParams, setSearchParams, tasks]);
 
   const visibleTasks = useMemo(
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
@@ -605,11 +671,11 @@ export function DashboardPage() {
   const listViewSummary = useMemo(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
 
   // 월간 보기에서 일정 보드 아래(메모 위)에 보여줄 선택일 일정 — 상태 뱃지로 필터링 가능
-  const [selectedDayFilter, setSelectedDayFilter] = useState<"all" | TaskStatus>("all");
-
-  useEffect(() => {
-    setSelectedDayFilter("all");
-  }, [selectedDate]);
+  const [selectedDayFilterState, setSelectedDayFilterState] = useState<{
+    date: string;
+    value: "all" | TaskStatus;
+  }>({ date: selectedDate, value: "all" });
+  const selectedDayFilter = selectedDayFilterState.date === selectedDate ? selectedDayFilterState.value : "all";
 
   const selectedDayTasks = useMemo(
     () =>
@@ -628,7 +694,10 @@ export function DashboardPage() {
   );
 
   function toggleSelectedDayFilter(status: TaskStatus) {
-    setSelectedDayFilter((prev) => (prev === status ? "all" : status));
+    setSelectedDayFilterState((previous) => ({
+      date: selectedDate,
+      value: previous.date === selectedDate && previous.value === status ? "all" : status,
+    }));
   }
 
   const editingTask = useMemo(() => {
@@ -647,20 +716,22 @@ export function DashboardPage() {
   const activeTaskModalState: TaskModalState = taskModalState?.mode === "edit" && !editingTask ? null : taskModalState;
   const globalMemoSource = memoMap[GLOBAL_MEMO_KEY]?.content ?? "";
 
-  useEffect(() => {
-    if (!activeTaskModalState) {
-      return;
+  function closeTaskModal() {
+    const returnDateKey = taskModalReturnDateRef.current;
+    taskModalReturnDateRef.current = null;
+    setTaskModalState(null);
+    setTaskFormInteraction({ isDirty: false, isBusy: false });
+    if (searchParams.has("taskId")) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("taskId");
+      setSearchParams(nextParams, { replace: true });
     }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setTaskModalState(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeTaskModalState]);
+    if (returnDateKey) {
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLButtonElement>(`[data-calendar-date="${returnDateKey}"]`)?.focus();
+      });
+    }
+  }
 
   // 노트 탭에서 "일정 열기"로 넘어오면 해당 일정 수정창을 연다.
   useEffect(() => {
@@ -719,11 +790,19 @@ export function DashboardPage() {
 
   async function handleCreateTask(input: TaskFormInput) {
     await createTask(input);
-    setTaskModalState(null);
+    closeTaskModal();
     setTaskFormSerial((prev) => prev + 1);
   }
 
   async function handleUpdateTask(input: TaskFormInput) {
+    if (!editingTask) {
+      return;
+    }
+    await updateTask(editingTask.id, input);
+    closeTaskModal();
+  }
+
+  async function handleAutoSaveTask(input: TaskFormInput) {
     if (!editingTask) {
       return;
     }
@@ -735,7 +814,7 @@ export function DashboardPage() {
       return;
     }
     await removeTask(editingTask.id);
-    setTaskModalState(null);
+    closeTaskModal();
   }
 
   async function handleSaveGlobalMemo(content: string) {
@@ -778,6 +857,9 @@ export function DashboardPage() {
   }
 
   function openCreateTask(defaultDate = selectedDate) {
+    const activeElement = document.activeElement;
+    taskModalReturnDateRef.current =
+      activeElement instanceof Element && activeElement.closest(".calendar-day-popover") ? defaultDate : null;
     setDatePopoverKey(null);
     setTaskFormSerial((prev) => prev + 1);
     setTaskModalState({ mode: "create", defaultDate });
@@ -785,6 +867,15 @@ export function DashboardPage() {
 
   function openEditTask(taskId: string) {
     setTaskModalState({ mode: "edit", taskId });
+  }
+
+  function handleCalendarViewModeChange(mode: TaskViewMode) {
+    setCalendarViewMode(mode);
+    try {
+      window.localStorage.setItem(DASHBOARD_VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      // 보기 변경 자체는 유지하고, 저장소를 사용할 수 없을 때만 기억 기능을 건너뛴다.
+    }
   }
 
   function changeTaskStatus(task: Task, status: TaskStatus) {
@@ -1148,7 +1239,11 @@ export function DashboardPage() {
         </button>
         <div className="dashboard-hero-actions">
           <DailyBriefing />
-          <TaskViewSegmentedControl value={calendarViewMode} onChange={setCalendarViewMode} ariaLabel="대시보드 일정 보기 방식" />
+          <TaskViewSegmentedControl
+            value={calendarViewMode}
+            onChange={handleCalendarViewModeChange}
+            ariaLabel="대시보드 일정 보기 방식"
+          />
           {/* 제목 버튼과 같은 패널을 여닫는 보조 버튼 — 보조기술에는 중복이라 숨긴다 */}
           <button
             type="button"
@@ -1182,6 +1277,27 @@ export function DashboardPage() {
           })}
         </div>
       </section>
+
+      {tasks.length === 0 && notes.length === 0 ? (
+        <section className="dashboard-onboarding" aria-labelledby="dashboard-onboarding-title">
+          <div className="dashboard-onboarding-copy">
+            <p className="eyebrow">GET STARTED</p>
+            <h3 id="dashboard-onboarding-title">오늘 할 일을 하나 만들어 볼까요?</h3>
+            <p>직접 입력하거나 AI에게 말해 첫 일정을 만들고, 필요한 기록은 노트에 남길 수 있어요.</p>
+          </div>
+          <div className="dashboard-onboarding-actions">
+            <button type="button" className="btn btn-primary" onClick={() => openCreateTask(todayKey)}>
+              첫 일정 직접 추가
+            </button>
+            <button type="button" className="btn btn-soft" onClick={() => openAiSchedule("")}>
+              AI로 일정 추가
+            </button>
+            <button type="button" className="btn btn-soft" onClick={() => navigate("/notes")}>
+              첫 노트 작성
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <div className="dashboard-primary-grid">
         <section className="dashboard-card dashboard-calendar-card premium-calendar-card">
@@ -1319,7 +1435,7 @@ export function DashboardPage() {
             <button
               type="button"
               className={`all ${selectedDayFilter === "all" ? "active" : ""}`}
-              onClick={() => setSelectedDayFilter("all")}
+              onClick={() => setSelectedDayFilterState({ date: selectedDate, value: "all" })}
               aria-pressed={selectedDayFilter === "all"}
             >
               전체 {selectedDaySummary.total}
@@ -1389,63 +1505,50 @@ export function DashboardPage() {
       ) : null}
 
       {activeTaskModalState ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setTaskModalState(null);
-          }}
+        <TaskModal
+          title={activeTaskModalState.mode === "create" ? "일정 추가" : "일정 수정"}
+          onCancel={closeTaskModal}
+          hasUnsavedChanges={taskFormInteraction.isDirty}
+          isBusy={taskFormInteraction.isBusy}
         >
-          <section
-            className="modal-card panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="일정 상세 또는 수정"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            <header className="panel-header">
-              <h2>{activeTaskModalState.mode === "create" ? "일정 추가" : "일정 수정"}</h2>
-              <button type="button" className="btn btn-soft" onClick={() => setTaskModalState(null)}>
-                닫기
-              </button>
-            </header>
-
-            {activeTaskModalState.mode === "create" ? (
-              <TaskForm
-                key={`dashboard-new-task-${activeTaskModalState.defaultDate ?? selectedDate}-${taskFormSerial}`}
-                projects={projects}
-                taskTypes={taskTypes}
-                allTasks={tasks}
-                defaultStartDate={activeTaskModalState.defaultDate ?? selectedDate}
-                timeFormat={setting.timeFormat}
-                onSubmit={handleCreateTask}
-              />
-            ) : editingTask ? (
-              <TaskForm
-                key={`dashboard-edit-task-${editingTask.id}`}
-                projects={projects}
-                taskTypes={taskTypes}
-                allTasks={tasks}
-                initialTask={editingTask}
-                timeFormat={setting.timeFormat}
-                linkedNotes={notes
-                  .filter((note) => (editingTask.linkedNoteIds ?? []).includes(note.id))
-                  .map((note) => ({ id: note.id, title: note.title }))}
-                onOpenNote={(noteId) => {
-                  setTaskModalState(null);
-                  navigate("/notes");
-                  window.setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent("ai-planner:focus-note", { detail: { noteId } }));
-                  }, 80);
-                }}
-                onSubmit={handleUpdateTask}
-                onDelete={handleDeleteTask}
-                onCancel={() => setTaskModalState(null)}
-              />
-            ) : null}
-          </section>
-        </div>
+          {activeTaskModalState.mode === "create" ? (
+            <TaskForm
+              key={`dashboard-new-task-${activeTaskModalState.defaultDate ?? selectedDate}-${taskFormSerial}`}
+              projects={projects}
+              taskTypes={taskTypes}
+              allTasks={tasks}
+              defaultStartDate={activeTaskModalState.defaultDate ?? selectedDate}
+              timeFormat={setting.timeFormat}
+              onSubmit={handleCreateTask}
+              onCancel={closeTaskModal}
+              onStateChange={setTaskFormInteraction}
+            />
+          ) : editingTask ? (
+            <TaskForm
+              key={`dashboard-edit-task-${editingTask.id}`}
+              projects={projects}
+              taskTypes={taskTypes}
+              allTasks={tasks}
+              initialTask={editingTask}
+              timeFormat={setting.timeFormat}
+              linkedNotes={notes
+                .filter((note) => (editingTask.linkedNoteIds ?? []).includes(note.id))
+                .map((note) => ({ id: note.id, title: note.title }))}
+              onOpenNote={(noteId) => {
+                closeTaskModal();
+                navigate("/notes");
+                window.setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent("ai-planner:focus-note", { detail: { noteId } }));
+                }, 80);
+              }}
+              onSubmit={handleUpdateTask}
+              onAutoSave={handleAutoSaveTask}
+              onDelete={handleDeleteTask}
+              onCancel={closeTaskModal}
+              onStateChange={setTaskFormInteraction}
+            />
+          ) : null}
+        </TaskModal>
       ) : null}
     </div>
   );

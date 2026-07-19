@@ -1,4 +1,4 @@
-import { type CSSProperties, type MouseEvent } from "react";
+import { useRef, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { STATUS_LABELS } from "../constants";
 import type { Project, Task, TaskStatus, TaskType } from "../models";
@@ -38,6 +38,11 @@ export function TaskItem({
   onContextMenu,
 }: TaskItemProps) {
   const navigate = useNavigate();
+  const openButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  function isInteractiveTarget(target: EventTarget | null): boolean {
+    return target instanceof Element && Boolean(target.closest("button, input, select, textarea, a[href], [role='button']"));
+  }
 
   return (
     <article
@@ -47,8 +52,13 @@ export function TaskItem({
         draggableTask ? "draggable" : ""
       }`}
       style={{ "--task-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}
-      onClick={onClick}
+      onClick={(event) => {
+        if (onClick && !isInteractiveTarget(event.target)) {
+          onClick();
+        }
+      }}
       onContextMenu={(event) => {
+        openButtonRef.current?.focus();
         onContextMenu?.(event, task);
       }}
       draggable={draggableTask}
@@ -67,15 +77,6 @@ export function TaskItem({
         }
         onDragTaskStateChange?.(null);
       }}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-label={`${task.title} 일정 카드`}
-      onKeyDown={(event) => {
-        if (onClick && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          onClick();
-        }
-      }}
     >
       {selectable ? (
         <label className="task-select-row" onClick={(event) => event.stopPropagation()}>
@@ -92,7 +93,33 @@ export function TaskItem({
       ) : null}
 
       <header>
-        <h4>{task.title}</h4>
+        <h4>
+          {onClick ? (
+            <button
+              ref={openButtonRef}
+              type="button"
+              aria-label={`${task.title} 일정 열기`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClick();
+              }}
+              style={{
+                border: 0,
+                margin: 0,
+                padding: 0,
+                background: "transparent",
+                color: "inherit",
+                font: "inherit",
+                textAlign: "left",
+                cursor: "pointer",
+              }}
+            >
+              {task.title}
+            </button>
+          ) : (
+            task.title
+          )}
+        </h4>
         <div className="badge-row">
           {hasConflict ? <span className="conflict-badge">시간 충돌</span> : null}
           <span className={`status-badge ${task.status.toLowerCase()}`}>{STATUS_LABELS[task.status]}</span>

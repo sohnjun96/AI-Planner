@@ -1,4 +1,5 @@
-import type { Note, Project, ProjectSubcategory, Task, TaskType } from "../models";
+import { DEFAULT_NOTE_AI_RULES } from "../constants";
+import type { Note, NoteAiRules, Project, ProjectSubcategory, Task, TaskType } from "../models";
 import { toIsoNow } from "../utils/date";
 import {
   ToolCallCache,
@@ -17,6 +18,7 @@ import {
   pickFirstStringArray,
   requestJsonWithRetry,
   type LlmChatMessage,
+  type LlmGenerationOptions,
 } from "./agentUtils";
 
 export type NotesAgentMode = "edit" | "inline_edit" | "summarize" | "merge" | "search";
@@ -51,6 +53,8 @@ export interface RunNotesAgentInput {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
+  noteAiRules?: NoteAiRules;
   /** 진행 상황 콜백 (도구 실행 / 스트리밍 작성) */
   onProgress?: (info: NotesAgentProgress) => void;
   signal?: AbortSignal;
@@ -152,6 +156,41 @@ Leave proposedContent and replacementText empty.
 `.trim(),
 };
 
+function buildNoteAiPolicy(inputRules?: NoteAiRules): string {
+  const rules = { ...DEFAULT_NOTE_AI_RULES, ...inputRules };
+  const tone = {
+    professional: "Use a clear, professional work-document tone.",
+    neutral: "Use a plain, neutral tone.",
+    friendly: "Use a warm, approachable tone without becoming casual.",
+  }[rules.tone];
+  const detail = {
+    concise: "Prefer the shortest complete result; remove only redundant wording.",
+    balanced: "Use enough detail to make the result immediately useful, without padding.",
+    detailed: "Retain useful context and make implied steps explicit when the source supports them.",
+  }[rules.detail];
+
+  const policy = [
+    "User-configured note policy (apply unless the current request explicitly conflicts):",
+    `- ${tone}`,
+    `- ${detail}`,
+    rules.preserveFacts
+      ? "- Preserve facts, numbers, dates, names, decisions, and uncertainty. Never invent missing information; use [확인 필요] only when the source itself indicates an unresolved item."
+      : "- You may reorganize factual details when it helps the requested result, but do not knowingly add false information.",
+    rules.preserveMarkdown
+      ? "- Preserve existing Markdown hierarchy, links, tables, code blocks, and emphasis where possible. Do not flatten a structured note unless asked."
+      : "- You may change the Markdown structure when it improves readability.",
+    rules.preserveChecklists
+      ? "- Preserve checklist items and their checked/unchecked state. Do not add, remove, or complete action items unless the user asks."
+      : "- You may reorganize checklists when it helps the requested result.",
+  ];
+
+  const customInstructions = rules.customInstructions.trim();
+  if (customInstructions) {
+    policy.push(`- Additional user instructions:\n${customInstructions.slice(0, 1000)}`);
+  }
+  return policy.join("\n");
+}
+
 function parseToolCalls(value: unknown): NotesAgentToolCall[] {
   if (!Array.isArray(value)) {
     return [];
@@ -229,7 +268,7 @@ function buildPromptMessages(input: RunNotesAgentInput, toolResults: ToolExecuti
   const toolPolicy = needsLookup
     ? "Tool calls are available only for this search request."
     : "Tool calls are disabled for this self-contained request; produce the final result directly.";
-  const systemPrompt = `${BASE_RULES}\n\n${toolPolicy}\n\nCurrent mode instructions:\n${MODE_INSTRUCTIONS[input.mode]}`;
+  const systemPrompt = `${BASE_RULES}\n\n${toolPolicy}\n\nCurrent mode instructions:\n${MODE_INSTRUCTIONS[input.mode]}\n\n${buildNoteAiPolicy(input.noteAiRules)}`;
 
   return [
     { role: "system", content: systemPrompt },
@@ -274,6 +313,7 @@ export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAge
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      generationOptions: input.generationOptions,
       signal: input.signal,
       onToken: input.onProgress
         ? (delta) => {
@@ -339,6 +379,7 @@ export async function classifyNoteWithAi(input: {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   signal?: AbortSignal;
 }): Promise<NoteClassificationResult> {
   const availableProjects = input.projects.filter((project) => project.isActive);
@@ -391,6 +432,7 @@ Rules:
     endpoint: input.endpoint,
     apiKey: input.apiKey,
     model: input.model,
+    generationOptions: input.generationOptions,
     signal: input.signal,
   });
 
@@ -487,6 +529,7 @@ export async function extractNoteActions(input: {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   onProgress?: (info: NotesAgentProgress) => void;
   signal?: AbortSignal;
 }): Promise<NoteActionItem[]> {
@@ -510,6 +553,7 @@ No markdown fences, no text before or after the JSON.
     endpoint: input.endpoint,
     apiKey: input.apiKey,
     model: input.model,
+    generationOptions: input.generationOptions,
     signal: input.signal,
     onToken: input.onProgress
       ? (delta) => {
