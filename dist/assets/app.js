@@ -35776,6 +35776,7 @@ var NAV_ITEMS = [
 ];
 function AppShell() {
   const { undoLastChange, projects, setting, createNote } = useAppData();
+  const location2 = useLocation();
   const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = (0, import_react10.useState)(false);
   const [aiInitialDraft, setAiInitialDraft] = (0, import_react10.useState)("");
@@ -36026,7 +36027,7 @@ function AppShell() {
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("main", { className: "page-content", id: "main-content", tabIndex: -1, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Outlet, {}) }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("main", { className: "page-content", id: "main-content", tabIndex: -1, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "route-transition", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Outlet, {}) }, location2.pathname) }),
     /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("footer", { className: "app-copyright", children: "(c) 2026. 손준혁 All rights reserved." }),
     /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
       "div",
@@ -36622,8 +36623,10 @@ function getSafePosition(x, y, width = MENU_WIDTH, height = 0) {
   const maxY = Math.max(MENU_MARGIN, window.innerHeight - height - MENU_MARGIN);
   const preferredTop = height > 0 && y + height > window.innerHeight - MENU_MARGIN ? y - height : y;
   return {
-    left: Math.min(Math.max(MENU_MARGIN, x), maxX),
-    top: Math.min(Math.max(MENU_MARGIN, preferredTop), maxY)
+    // The pointer coordinates are relative to the viewport. Convert them to
+    // document coordinates so the menu scrolls together with its page.
+    left: Math.min(Math.max(MENU_MARGIN, x), maxX) + window.scrollX,
+    top: Math.min(Math.max(MENU_MARGIN, preferredTop), maxY) + window.scrollY
   };
 }
 function ContextMenu({ x, y, title, items, onClose }) {
@@ -36634,8 +36637,7 @@ function ContextMenu({ x, y, title, items, onClose }) {
     if (!menuElement) {
       return;
     }
-    const rect = menuElement.getBoundingClientRect();
-    const measuredPosition = getSafePosition(x, y, rect.width, rect.height);
+    const measuredPosition = getSafePosition(x, y, menuElement.offsetWidth, menuElement.offsetHeight);
     menuElement.style.left = `${measuredPosition.left}px`;
     menuElement.style.top = `${measuredPosition.top}px`;
   }, [items.length, title, x, y]);
@@ -36693,25 +36695,36 @@ function ContextMenu({ x, y, title, items, onClose }) {
     };
   }, []);
   (0, import_react12.useEffect)(() => {
-    const close = () => onClose();
-    const closeOnOutsideScroll = (event) => {
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) {
-        return;
-      }
-      onClose();
+    let ignoreNextOutsideClick = false;
+    let scrollIdleTimer;
+    const markScrolling = () => {
+      ignoreNextOutsideClick = true;
+      window.clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = window.setTimeout(() => {
+        ignoreNextOutsideClick = false;
+      }, 180);
     };
+    const closeOnOutsideClick = () => {
+      if (!ignoreNextOutsideClick) {
+        onClose();
+      }
+    };
+    const close = () => onClose();
     const timerId = window.setTimeout(() => {
-      window.addEventListener("click", close);
+      window.addEventListener("click", closeOnOutsideClick);
       window.addEventListener("contextmenu", close);
       window.addEventListener("resize", close);
-      window.addEventListener("scroll", closeOnOutsideScroll, true);
+      window.addEventListener("wheel", markScrolling, { passive: true });
+      window.addEventListener("scroll", markScrolling, true);
     }, 0);
     return () => {
       window.clearTimeout(timerId);
-      window.removeEventListener("click", close);
+      window.clearTimeout(scrollIdleTimer);
+      window.removeEventListener("click", closeOnOutsideClick);
       window.removeEventListener("contextmenu", close);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", closeOnOutsideScroll, true);
+      window.removeEventListener("wheel", markScrolling);
+      window.removeEventListener("scroll", markScrolling, true);
     };
   }, [onClose]);
   return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
@@ -37033,10 +37046,29 @@ function DailyBriefing() {
 
 // src/components/DayCompleteCelebration.tsx
 var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
-var CONFETTI_PIECES = Array.from({ length: 36 }, (_, index) => index);
+var DAY_COMPLETE_CELEBRATION_DURATION_MS = 4600;
+var CONFETTI_COLORS = ["#3b82f6", "#f0b84b", "#46bfa3", "#ef7797", "#60a5fa", "#8b5cf6"];
+var CONFETTI_PIECES = Array.from({ length: 84 }, (_, index) => {
+  const spread = index * 47 % 101 / 100 * 92 - 46;
+  const fallDistance = 220 + index * 67 % 220;
+  const rotation = -540 + index * 137 % 1080;
+  const delay = index * 83 % 1250;
+  const duration = 2300 + index * 61 % 900;
+  const size = 5 + index * 3 % 6;
+  const style = {
+    "--confetti-x": `${spread.toFixed(1)}vw`,
+    "--confetti-y": `${fallDistance}px`,
+    "--confetti-rotation": `${rotation}deg`,
+    "--confetti-delay": `${delay}ms`,
+    "--confetti-duration": `${duration}ms`,
+    "--confetti-color": CONFETTI_COLORS[index % CONFETTI_COLORS.length],
+    "--confetti-size": `${size}px`
+  };
+  return { id: index, style };
+});
 function DayCompleteCelebration() {
   return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "day-complete-celebration", role: "status", "aria-live": "polite", "aria-atomic": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "day-complete-confetti", "aria-hidden": "true", children: CONFETTI_PIECES.map((piece) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", {}, piece)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "day-complete-confetti", "aria-hidden": "true", children: CONFETTI_PIECES.map((piece) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: piece.style }, piece.id)) }),
     /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "day-complete-sparkles", "aria-hidden": "true", children: [
       /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { children: "✦" }),
       /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { children: "✧" }),
@@ -38333,6 +38365,7 @@ function TaskForm({
 
 // src/components/TaskModal.tsx
 var import_react17 = __toESM(require_react(), 1);
+var import_react_dom = __toESM(require_react_dom(), 1);
 var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
 function TaskModal({ title, onCancel, children, hasUnsavedChanges = false, isBusy = false }) {
   const titleId = (0, import_react17.useId)();
@@ -38349,47 +38382,50 @@ function TaskModal({ title, onCancel, children, hasUnsavedChanges = false, isBus
     onCancel();
   }
   const dialogRef = useDialogFocus({ isOpen: true, onClose: requestClose });
-  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-    "div",
-    {
-      className: "modal-backdrop task-modal-backdrop",
-      onClick: (event) => {
-        if (event.target === event.currentTarget) {
-          requestClose();
-        }
-      },
-      children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
-        "section",
-        {
-          ref: dialogRef,
-          className: "modal-card panel task-modal-card",
-          role: "dialog",
-          "aria-modal": "true",
-          "aria-labelledby": titleId,
-          tabIndex: -1,
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("header", { className: "panel-header task-modal-header", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { className: "eyebrow", children: "SCHEDULE" }),
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("h2", { id: titleId, children: title })
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+      "div",
+      {
+        className: "modal-backdrop task-modal-backdrop",
+        onClick: (event) => {
+          if (event.target === event.currentTarget) {
+            requestClose();
+          }
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+          "section",
+          {
+            ref: dialogRef,
+            className: "modal-card panel task-modal-card",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-labelledby": titleId,
+            tabIndex: -1,
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("header", { className: "panel-header task-modal-header", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { className: "eyebrow", children: "SCHEDULE" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("h2", { id: titleId, children: title })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn btn-soft task-modal-close",
+                    onClick: requestClose,
+                    disabled: isBusy,
+                    "aria-label": `${title} 창 닫기`,
+                    children: isBusy ? "저장 중…" : "닫기"
+                  }
+                )
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-                "button",
-                {
-                  type: "button",
-                  className: "btn btn-soft task-modal-close",
-                  onClick: requestClose,
-                  disabled: isBusy,
-                  "aria-label": `${title} 창 닫기`,
-                  children: isBusy ? "저장 중…" : "닫기"
-                }
-              )
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "task-modal-body", children })
-          ]
-        }
-      )
-    }
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "task-modal-body", children })
+            ]
+          }
+        )
+      }
+    ),
+    document.body
   );
 }
 
@@ -38808,7 +38844,7 @@ function DashboardPage() {
       celebrationTimerRef.current = window.setTimeout(() => {
         setCelebrationRevision(0);
         celebrationTimerRef.current = null;
-      }, 2800);
+      }, DAY_COMPLETE_CELEBRATION_DURATION_MS);
     }, 0);
   }, [tasks, todayKey2]);
   (0, import_react18.useEffect)(

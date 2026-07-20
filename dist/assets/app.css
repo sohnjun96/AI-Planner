@@ -290,6 +290,21 @@ a {
   margin: 0;
   padding: 0;
 }
+@keyframes route-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.route-transition {
+  width: 100%;
+  min-width: 0;
+  animation: route-content-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 .app-copyright {
   padding: 16px 24px 20px;
   border-top: 1px solid var(--hairline);
@@ -810,6 +825,21 @@ textarea:focus-visible,
 .calendar-day.selected {
   border-color: var(--primary-focus);
   box-shadow: inset 0 0 0 1px var(--primary-focus);
+  animation: calendar-day-select 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes calendar-day-select {
+  0% {
+    transform: scale(0.975);
+    box-shadow: inset 0 0 0 1px var(--primary-focus), 0 0 0 0 rgba(37, 99, 235, 0.18);
+  }
+  65% {
+    transform: scale(1.012);
+    box-shadow: inset 0 0 0 1px var(--primary-focus), 0 0 0 5px rgba(37, 99, 235, 0.08);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: inset 0 0 0 1px var(--primary-focus), 0 0 0 0 rgba(37, 99, 235, 0);
+  }
 }
 @media (hover: hover) {
   .calendar-day:not(.selected):hover {
@@ -1938,6 +1968,16 @@ textarea:focus-visible,
   padding: var(--space-md);
   background: rgba(0, 0, 0, 0.48);
   backdrop-filter: saturate(180%) blur(20px);
+  animation: modal-backdrop-in 180ms ease-out both;
+}
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+    backdrop-filter: saturate(100%) blur(0);
+  }
+  to {
+    opacity: 1;
+  }
 }
 .modal-card {
   width: min(920px, 95vw);
@@ -2018,7 +2058,7 @@ textarea:focus-visible,
   display: none;
 }
 .context-menu {
-  position: fixed;
+  position: absolute;
   z-index: 2100;
   width: 220px;
   max-height: calc(100dvh - 24px);
@@ -2029,6 +2069,18 @@ textarea:focus-visible,
   border-radius: var(--radius-lg);
   background: var(--canvas);
   box-shadow: var(--product-shadow);
+  transform-origin: top left;
+  animation: context-menu-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .context-menu-title {
   margin: 2px 4px 8px;
@@ -4066,11 +4118,24 @@ textarea:focus-visible,
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 22px 54px -32px rgba(15, 23, 42, 0.46);
+  transform-origin: top left;
+  animation: calendar-popover-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes calendar-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .calendar-day-slot:nth-child(7n) .calendar-day-popover,
 .calendar-day-slot:nth-child(7n-1) .calendar-day-popover {
   right: 0;
   left: auto;
+  transform-origin: top right;
 }
 .calendar-day-detail-popover {
   display: grid;
@@ -6820,17 +6885,17 @@ textarea:focus-visible,
   z-index: 2800;
   display: grid;
   place-items: start center;
-  padding-top: clamp(88px, 14vh, 148px);
+  padding-top: clamp(96px, 16vh, 176px);
   overflow: hidden;
   pointer-events: none;
 }
 .day-complete-celebration::before {
   content: "";
   position: absolute;
-  top: clamp(58px, 9vh, 98px);
+  top: clamp(48px, 8vh, 92px);
   left: 50%;
-  width: min(560px, 94vw);
-  height: 180px;
+  width: min(920px, 100vw);
+  height: 300px;
   border-radius: 50%;
   background:
     radial-gradient(
@@ -6838,39 +6903,40 @@ textarea:focus-visible,
       rgba(59, 130, 246, 0.24),
       rgba(240, 184, 75, 0.09) 42%,
       transparent 72%);
-  filter: blur(12px);
+  filter: blur(18px);
   transform: translateX(-50%);
-  animation: day-complete-glow 2800ms ease both;
+  animation: day-complete-glow 4600ms ease both;
 }
 .day-complete-banner {
   position: relative;
   z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  max-width: min(440px, calc(100vw - 32px));
+  gap: 18px;
+  width: min(640px, calc(100vw - 32px));
+  min-height: 88px;
   border: 1px solid rgba(37, 99, 235, 0.38);
-  border-radius: 16px;
-  padding: 12px 18px 12px 13px;
+  border-radius: 22px;
+  padding: 20px 30px 20px 20px;
   background:
     linear-gradient(
       135deg,
       rgba(255, 255, 255, 0.98),
       rgba(239, 246, 255, 0.97));
   color: var(--ink);
-  box-shadow: 0 20px 56px -22px rgba(30, 64, 175, 0.62), 0 0 0 5px rgba(59, 130, 246, 0.08);
+  box-shadow: 0 28px 76px -26px rgba(30, 64, 175, 0.68), 0 0 0 7px rgba(59, 130, 246, 0.08);
   backdrop-filter: blur(12px);
-  animation: day-complete-banner 2800ms ease both;
+  animation: day-complete-banner 4600ms ease both;
 }
 .day-complete-banner strong {
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.45;
 }
 .day-complete-icon {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 46px;
+  height: 46px;
   flex: 0 0 auto;
   border-radius: 50%;
   background:
@@ -6879,248 +6945,43 @@ textarea:focus-visible,
       #60a5fa,
       #2563eb);
   color: #fff;
-  font-size: 15px;
+  font-size: 22px;
   font-weight: 800;
   box-shadow: 0 8px 18px -8px rgba(30, 64, 175, 0.9), 0 0 0 4px rgba(59, 130, 246, 0.12);
   animation: day-complete-icon-pop 700ms 120ms ease-out both;
 }
 .day-complete-confetti {
   position: absolute;
-  top: clamp(64px, 10vh, 108px);
+  top: clamp(36px, 7vh, 82px);
   left: 50%;
-  width: min(520px, 94vw);
-  height: 190px;
+  width: 100vw;
+  height: min(560px, 70vh);
   transform: translateX(-50%);
 }
 .day-complete-confetti span {
   --confetti-x: 0px;
+  --confetti-y: 320px;
   --confetti-rotation: 90deg;
+  --confetti-delay: 0ms;
+  --confetti-duration: 2600ms;
+  --confetti-color: #3b82f6;
+  --confetti-size: 7px;
   position: absolute;
-  top: 42px;
+  top: 20px;
   left: 50%;
-  width: 7px;
-  height: 11px;
+  width: var(--confetti-size);
+  height: calc(var(--confetti-size) + 5px);
   border-radius: 2px;
-  background: #3b82f6;
+  background: var(--confetti-color);
   opacity: 0;
-  animation: day-complete-confetti 1050ms ease-out forwards;
-}
-.day-complete-confetti span:nth-child(2) {
-  --confetti-x: -48px;
-  --confetti-rotation: -130deg;
-  background: #f0b84b;
-  animation-delay: 30ms;
-}
-.day-complete-confetti span:nth-child(3) {
-  --confetti-x: 54px;
-  --confetti-rotation: 145deg;
-  background: #46bfa3;
-  animation-delay: 55ms;
-}
-.day-complete-confetti span:nth-child(4) {
-  --confetti-x: -92px;
-  --confetti-rotation: 210deg;
-  background: #ef7797;
-  animation-delay: 75ms;
-}
-.day-complete-confetti span:nth-child(5) {
-  --confetti-x: 98px;
-  --confetti-rotation: -220deg;
-  background: #60a5fa;
-  animation-delay: 95ms;
-}
-.day-complete-confetti span:nth-child(6) {
-  --confetti-x: -138px;
-  --confetti-rotation: -260deg;
-  background: #63b5e5;
-  animation-delay: 115ms;
-}
-.day-complete-confetti span:nth-child(7) {
-  --confetti-x: 142px;
-  --confetti-rotation: 275deg;
-  background: #f2c75b;
-  animation-delay: 130ms;
-}
-.day-complete-confetti span:nth-child(8) {
-  --confetti-x: -178px;
-  --confetti-rotation: 320deg;
-  background: #50bea0;
-  animation-delay: 150ms;
-}
-.day-complete-confetti span:nth-child(9) {
-  --confetti-x: 184px;
-  --confetti-rotation: -330deg;
-  background: #ed7899;
-  animation-delay: 165ms;
-}
-.day-complete-confetti span:nth-child(10) {
-  --confetti-x: -218px;
-  --confetti-rotation: -380deg;
-  background: #3b82f6;
-  animation-delay: 180ms;
-}
-.day-complete-confetti span:nth-child(11) {
-  --confetti-x: 224px;
-  --confetti-rotation: 390deg;
-  background: #5aaee0;
-  animation-delay: 195ms;
-}
-.day-complete-confetti span:nth-child(12) {
-  --confetti-x: 26px;
-  --confetti-rotation: -180deg;
-  background: #f0b84b;
-  animation-delay: 210ms;
-}
-.day-complete-confetti span:nth-child(13) {
-  --confetti-x: -28px;
-  --confetti-rotation: 190deg;
-  background: #ef7797;
-  animation-delay: 20ms;
-}
-.day-complete-confetti span:nth-child(14) {
-  --confetti-x: 76px;
-  --confetti-rotation: -210deg;
-  background: #54c2a5;
-  animation-delay: 45ms;
-}
-.day-complete-confetti span:nth-child(15) {
-  --confetti-x: -118px;
-  --confetti-rotation: 250deg;
-  background: #f3c34f;
-  animation-delay: 65ms;
-}
-.day-complete-confetti span:nth-child(16) {
-  --confetti-x: 126px;
-  --confetti-rotation: -270deg;
-  background: #2563eb;
-  animation-delay: 85ms;
-}
-.day-complete-confetti span:nth-child(17) {
-  --confetti-x: -162px;
-  --confetti-rotation: 310deg;
-  background: #58afe0;
-  animation-delay: 105ms;
-}
-.day-complete-confetti span:nth-child(18) {
-  --confetti-x: 168px;
-  --confetti-rotation: -325deg;
-  background: #f07c99;
-  animation-delay: 125ms;
-}
-.day-complete-confetti span:nth-child(19) {
-  --confetti-x: -202px;
-  --confetti-rotation: 370deg;
-  background: #48b99c;
-  animation-delay: 145ms;
-}
-.day-complete-confetti span:nth-child(20) {
-  --confetti-x: 208px;
-  --confetti-rotation: -390deg;
-  background: #f2bc45;
-  animation-delay: 160ms;
-}
-.day-complete-confetti span:nth-child(21) {
-  --confetti-x: -246px;
-  --confetti-rotation: 430deg;
-  background: #60a5fa;
-  animation-delay: 175ms;
-}
-.day-complete-confetti span:nth-child(22) {
-  --confetti-x: 252px;
-  --confetti-rotation: -445deg;
-  background: #5ab6e5;
-  animation-delay: 190ms;
-}
-.day-complete-confetti span:nth-child(23) {
-  --confetti-x: -272px;
-  --confetti-rotation: 470deg;
-  background: #ee7898;
-  animation-delay: 205ms;
-}
-.day-complete-confetti span:nth-child(24) {
-  --confetti-x: 278px;
-  --confetti-rotation: -490deg;
-  background: #51c2a1;
-  animation-delay: 220ms;
-}
-.day-complete-confetti span:nth-child(25) {
-  --confetti-x: -64px;
-  --confetti-rotation: 230deg;
-  background: #f4c14d;
-  animation-delay: 255ms;
-}
-.day-complete-confetti span:nth-child(26) {
-  --confetti-x: 68px;
-  --confetti-rotation: -245deg;
-  background: #38bdf8;
-  animation-delay: 270ms;
-}
-.day-complete-confetti span:nth-child(27) {
-  --confetti-x: -106px;
-  --confetti-rotation: 285deg;
-  background: #50b89b;
-  animation-delay: 285ms;
-}
-.day-complete-confetti span:nth-child(28) {
-  --confetti-x: 112px;
-  --confetti-rotation: -300deg;
-  background: #ef7898;
-  animation-delay: 300ms;
-}
-.day-complete-confetti span:nth-child(29) {
-  --confetti-x: -148px;
-  --confetti-rotation: 340deg;
-  background: #58b2e3;
-  animation-delay: 315ms;
-}
-.day-complete-confetti span:nth-child(30) {
-  --confetti-x: 154px;
-  --confetti-rotation: -355deg;
-  background: #f0b742;
-  animation-delay: 330ms;
-}
-.day-complete-confetti span:nth-child(31) {
-  --confetti-x: -188px;
-  --confetti-rotation: 395deg;
-  background: #1d4ed8;
-  animation-delay: 345ms;
-}
-.day-complete-confetti span:nth-child(32) {
-  --confetti-x: 194px;
-  --confetti-rotation: -410deg;
-  background: #4fc09f;
-  animation-delay: 360ms;
-}
-.day-complete-confetti span:nth-child(33) {
-  --confetti-x: -228px;
-  --confetti-rotation: 450deg;
-  background: #ed7796;
-  animation-delay: 375ms;
-}
-.day-complete-confetti span:nth-child(34) {
-  --confetti-x: 234px;
-  --confetti-rotation: -465deg;
-  background: #59afe0;
-  animation-delay: 390ms;
-}
-.day-complete-confetti span:nth-child(35) {
-  --confetti-x: -292px;
-  --confetti-rotation: 510deg;
-  background: #f3c24e;
-  animation-delay: 405ms;
-}
-.day-complete-confetti span:nth-child(36) {
-  --confetti-x: 298px;
-  --confetti-rotation: -525deg;
-  background: #93c5fd;
-  animation-delay: 420ms;
+  animation: day-complete-confetti var(--confetti-duration) cubic-bezier(0.12, 0.6, 0.2, 1) var(--confetti-delay) forwards;
 }
 .day-complete-sparkles {
   position: absolute;
   top: clamp(76px, 11vh, 118px);
   left: 50%;
   z-index: 2;
-  width: min(500px, 92vw);
+  width: min(760px, 96vw);
   transform: translateX(-50%);
 }
 .day-complete-sparkles span {
@@ -7128,7 +6989,7 @@ textarea:focus-visible,
   color: #3b82f6;
   font-size: 20px;
   opacity: 0;
-  animation: day-complete-sparkle 1100ms ease-out forwards;
+  animation: day-complete-sparkle 1800ms ease-out forwards;
 }
 .day-complete-sparkles span:nth-child(1) {
   left: 4%;
@@ -7167,7 +7028,7 @@ textarea:focus-visible,
     opacity: 0;
     transform: translateY(-8px) scale(0.98);
   }
-  9%, 82% {
+  7%, 88% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
@@ -7179,14 +7040,33 @@ textarea:focus-visible,
 @keyframes day-complete-confetti {
   0% {
     opacity: 0;
-    transform: translate(0, -12px) rotate(0);
+    transform: translate(0, -24px) rotate(0) scale(0.65);
   }
-  16% {
-    opacity: 0.9;
+  10%, 62% {
+    opacity: 0.95;
   }
   100% {
     opacity: 0;
-    transform: translate(var(--confetti-x), 120px) rotate(var(--confetti-rotation));
+    transform: translate(var(--confetti-x), var(--confetti-y)) rotate(var(--confetti-rotation)) scale(1);
+  }
+}
+@media (max-width: 600px) {
+  .day-complete-celebration {
+    padding-top: clamp(82px, 13vh, 118px);
+  }
+  .day-complete-banner {
+    gap: 13px;
+    min-height: 78px;
+    padding: 16px 18px 16px 16px;
+    border-radius: 18px;
+  }
+  .day-complete-banner strong {
+    font-size: 16px;
+  }
+  .day-complete-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 19px;
   }
 }
 @keyframes day-complete-glow {
@@ -8806,5 +8686,14 @@ body:has(.modal-backdrop:not([hidden])) {
   }
   .dashboard-onboarding-actions {
     justify-content: flex-start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-transition,
+  .modal-backdrop,
+  .context-menu,
+  .calendar-day.selected,
+  .calendar-day-popover {
+    animation: none;
   }
 }
