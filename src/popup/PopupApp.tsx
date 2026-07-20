@@ -37,7 +37,7 @@ function PopupContent() {
     <div className="popup-app">
       <header className="popup-header">
         <div>
-          <p className="eyebrow">일정아이</p>
+          <p className="eyebrow">PLANAI</p>
           <h1>빠른 AI 등록</h1>
         </div>
         <button type="button" className="btn btn-outline" onClick={openFullPage}>

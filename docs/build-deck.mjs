@@ -34,8 +34,8 @@ const softShadow = () => ({ type: "outer", color: "16172A", blur: 12, offset: 4,
 const pres = new pptxgen();
 pres.defineLayout({ name: "W", width: 13.33, height: 7.5 });
 pres.layout = "W";
-pres.author = "일정아이";
-pres.title = "일정아이 소개";
+pres.author = "플래나이(PLANAI)";
+pres.title = "플래나이(PLANAI) 소개";
 
 async function iconPng(Icon, color, size = 256) {
   const svg = ReactDOMServer.renderToStaticMarkup(React.createElement(Icon, { color, size: String(size) }));
@@ -89,13 +89,13 @@ async function main() {
     s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 1.0, y: 1.4, w: 0.86, h: 0.86, fill: { color: VIOLET }, rectRadius: 0.16 });
     s.addText("AI", { x: 1.0, y: 1.4, w: 0.86, h: 0.86, align: "center", valign: "middle", fontFace: HEAD, bold: true, fontSize: 22, color: "FFFFFF", margin: 0 });
 
-    s.addText("일정아이", { x: 0.95, y: 2.6, w: 9, h: 1.3, fontFace: HEAD, bold: true, fontSize: 60, color: "FFFFFF", margin: 0 });
+    s.addText("플래나이(PLANAI)", { x: 0.95, y: 2.6, w: 9, h: 1.3, fontFace: HEAD, bold: true, fontSize: 60, color: "FFFFFF", margin: 0 });
     s.addText("흩어진 쪽지와 마감을, 한 곳에서", { x: 1.0, y: 3.95, w: 11, h: 0.7, fontFace: HEAD, fontSize: 26, color: "B7ADF7", bold: true, margin: 0 });
     s.addText("취합·제출·마감이 많은 하루를 자연어로 정리하는 업무 플래너.",
       { x: 1.0, y: 4.8, w: 10, h: 0.6, fontFace: BODY, fontSize: 16, color: ICE, margin: 0 });
 
     s.addText("쪽지 정리   ·   마감 관리   ·   자연어 입력   ·   내 컴퓨터에 보관", { x: 1.0, y: 6.5, w: 10, h: 0.4, fontFace: BODY, fontSize: 12.5, color: "7A7A98", bold: true, charSpacing: 1, margin: 0 });
-    s.addNotes("일정아이 — 취합·제출·마감이 많은 사람을 위한 업무 플래너. 흩어진 쪽지를 정리하고, 마감을 먼저 보여 주고, 자연어로 일정을 넣는다.");
+    s.addNotes("플래나이(PLANAI) — 취합·제출·마감이 많은 사람을 위한 업무 플래너. 흩어진 쪽지를 정리하고, 마감을 먼저 보여 주고, 자연어로 일정을 넣는다.");
   }
 
   // ============ 2. 이런 하루, 익숙하신가요 ============
@@ -276,12 +276,12 @@ async function main() {
       { text: ".", options: { color: "FFFFFF", bold: true } },
     ], { x: 1.2, y: 2.4, w: 11.4, h: 2.0, fontFace: HEAD, fontSize: 32, margin: 0, lineSpacingMultiple: 1.32, valign: "middle" });
 
-    s.addText("일정아이", { x: 1.2, y: 4.55, w: 6, h: 0.7, fontFace: HEAD, bold: true, fontSize: 26, color: "8B7CF0", margin: 0 });
+    s.addText("플래나이(PLANAI)", { x: 1.2, y: 4.55, w: 6, h: 0.7, fontFace: HEAD, bold: true, fontSize: 26, color: "8B7CF0", margin: 0 });
     s.addText("github.com/sohnjun96/AI-Planner", { x: 1.2, y: 5.3, w: 9, h: 0.4, fontFace: BODY, fontSize: 14, color: "8A8AA8", margin: 0 });
     s.addNotes("클로징: 제품 가치 한 줄과 저장소 링크.");
   }
 
-  await pres.writeFile({ fileName: path.join(__dirname, "일정아이_소개.pptx") });
+  await pres.writeFile({ fileName: path.join(__dirname, "플래나이_PLANAI_소개.pptx") });
   console.log("deck written");
 }
 

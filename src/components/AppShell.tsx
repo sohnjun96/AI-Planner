@@ -12,6 +12,7 @@ import { HelpModal } from "./HelpModal";
 import { NoteQuickAddModal } from "./NoteQuickAddModal";
 import { ToastHost, showToast } from "./ToastHost";
 import { WeeklyBackupReminder } from "./WeeklyBackupReminder";
+import planaiLogo from "../../아이콘.png";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
@@ -199,11 +200,11 @@ export function AppShell() {
       </a>
 
       <header className="app-top-nav">
-        <NavLink className="top-nav-brand" to="/dashboard" aria-label="일정아이 대시보드로 이동">
-          <span className="brand-mark">AI</span>
+        <NavLink className="top-nav-brand" to="/dashboard" aria-label="플래나이 대시보드로 이동">
+          <img className="brand-mark" src={planaiLogo} alt="PLANAI 로고" />
           <div>
-            <p className="eyebrow">AI Planner</p>
-            <h1>일정아이</h1>
+            <p className="eyebrow">PLANAI</p>
+            <h1>플래나이</h1>
           </div>
         </NavLink>
 

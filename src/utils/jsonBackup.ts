@@ -109,7 +109,7 @@ function createBackupFileName(now: Date): string {
   const day = String(now.getDate()).padStart(2, "0");
   const hour = String(now.getHours()).padStart(2, "0");
   const minute = String(now.getMinutes()).padStart(2, "0");
-  return `일정아이-백업-${year}-${month}-${day}-${hour}${minute}.json`;
+  return `플래나이-백업-${year}-${month}-${day}-${hour}${minute}.json`;
 }
 
 export async function downloadJsonBackup(content: string): Promise<JsonBackupReminderStatus> {

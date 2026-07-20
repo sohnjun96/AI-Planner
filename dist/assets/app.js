@@ -990,7 +990,7 @@ var require_react_development = __commonJS({
       exports.useTransition = function() {
         return resolveDispatcher().useTransition();
       };
-      exports.version = "19.2.7";
+      exports.version = "19.2.4";
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
   }
@@ -1517,7 +1517,7 @@ var require_react_dom_development = __commonJS({
       exports.useFormStatus = function() {
         return resolveDispatcher().useHostTransitionStatus();
       };
-      exports.version = "19.2.7";
+      exports.version = "19.2.4";
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
   }
@@ -21309,9 +21309,9 @@ var require_react_dom_client_development = __commonJS({
       };
       (function() {
         var isomorphicReactPackageVersion = React13.version;
-        if ("19.2.7" !== isomorphicReactPackageVersion)
+        if ("19.2.4" !== isomorphicReactPackageVersion)
           throw Error(
-            'Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:\n  - react:      ' + (isomorphicReactPackageVersion + "\n  - react-dom:  19.2.7\nLearn more: https://react.dev/warnings/version-mismatch")
+            'Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:\n  - react:      ' + (isomorphicReactPackageVersion + "\n  - react-dom:  19.2.4\nLearn more: https://react.dev/warnings/version-mismatch")
           );
       })();
       "function" === typeof Map && null != Map.prototype && "function" === typeof Map.prototype.forEach && "function" === typeof Set && null != Set.prototype && "function" === typeof Set.prototype.clear && "function" === typeof Set.prototype.forEach || console.error(
@@ -21335,10 +21335,10 @@ var require_react_dom_client_development = __commonJS({
       if (!(function() {
         var internals = {
           bundleType: 1,
-          version: "19.2.7",
+          version: "19.2.4",
           rendererPackageName: "react-dom",
           currentDispatcherRef: ReactSharedInternals,
-          reconcilerVersion: "19.2.7"
+          reconcilerVersion: "19.2.4"
         };
         internals.overrideHookState = overrideHookState;
         internals.overrideHookStateDeletePath = overrideHookStateDeletePath;
@@ -21429,7 +21429,7 @@ var require_react_dom_client_development = __commonJS({
         listenToAllSupportedEvents(container);
         return new ReactDOMHydrationRoot(initialChildren);
       };
-      exports.version = "19.2.7";
+      exports.version = "19.2.4";
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
   }
@@ -35559,7 +35559,7 @@ function createBackupFileName(now) {
   const day = String(now.getDate()).padStart(2, "0");
   const hour = String(now.getHours()).padStart(2, "0");
   const minute = String(now.getMinutes()).padStart(2, "0");
-  return `일정아이-백업-${year}-${month}-${day}-${hour}${minute}.json`;
+  return `플래나이-백업-${year}-${month}-${day}-${hour}${minute}.json`;
 }
 async function downloadJsonBackup(content) {
   const now = /* @__PURE__ */ new Date();
@@ -35723,6 +35723,9 @@ function WeeklyBackupReminder() {
   );
 }
 
+// 아이콘.png
+var __default = "./asset-아이콘-TPAVFJIL.png";
+
 // src/components/AppShell.tsx
 var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
 var NAV_ITEMS = [
@@ -35880,11 +35883,11 @@ function AppShell() {
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "app-shell", children: [
     /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("a", { className: "skip-link", href: "#main-content", children: "본문으로 건너뛰기" }),
     /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("header", { className: "app-top-nav", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(NavLink, { className: "top-nav-brand", to: "/dashboard", "aria-label": "일정아이 대시보드로 이동", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "brand-mark", children: "AI" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(NavLink, { className: "top-nav-brand", to: "/dashboard", "aria-label": "플래나이 대시보드로 이동", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("img", { className: "brand-mark", src: __default, alt: "PLANAI 로고" }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "eyebrow", children: "AI Planner" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "일정아이" })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "eyebrow", children: "PLANAI" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "플래나이" })
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("nav", { className: "top-nav-list", "aria-label": "페이지 이동", children: NAV_ITEMS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(

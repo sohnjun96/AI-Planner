@@ -1,10 +1,16 @@
 ﻿{
   "manifest_version": 3,
-  "name": "일정아이",
-  "description": "달력, 프로젝트, 일정 종류와 AI 입력으로 일정을 관리하는 확장 프로그램입니다.",
+  "name": "플래나이(PLANAI)",
+  "description": "쪽지로 쏟아지는 업무 일정과 메모를 AI가 정리·검색·브리핑하는 지능형 업무 플래너입니다.",
   "version": "1.0.4",
   "action": {
-    "default_title": "일정아이 열기"
+    "default_title": "플래나이(PLANAI) 열기"
+  },
+  "icons": {
+    "16": "아이콘.png",
+    "32": "아이콘.png",
+    "48": "아이콘.png",
+    "128": "아이콘.png"
   },
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": ["<all_urls>"],

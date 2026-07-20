@@ -219,15 +219,12 @@ a {
 .brand-mark {
   width: 28px;
   height: 28px;
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: 0 0 auto;
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-sm);
   background: var(--canvas);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
+  object-fit: cover;
 }
 
 .brand,

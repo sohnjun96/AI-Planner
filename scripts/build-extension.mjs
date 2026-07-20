@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const publicDir = path.join(rootDir, "public");
+const iconSourcePath = path.join(rootDir, "아이콘.png");
 
 function toDistHref(outputPath) {
   return `./${path.relative(distDir, path.resolve(rootDir, outputPath)).replace(/\\/g, "/")}`;
@@ -54,6 +55,7 @@ async function runBuild() {
   await rm(distDir, { recursive: true, force: true });
   await mkdir(distDir, { recursive: true });
   await cp(publicDir, distDir, { recursive: true, force: true });
+  await cp(iconSourcePath, path.join(distDir, "아이콘.png"), { force: true });
 
   const buildResult = await build({
     absWorkingDir: rootDir,
@@ -67,6 +69,9 @@ async function runBuild() {
     charset: "utf8",
     target: ["chrome107"],
     jsx: "automatic",
+    loader: {
+      ".png": "file",
+    },
     minify: false,
     sourcemap: false,
     entryNames: "[name]",
@@ -86,7 +91,7 @@ async function runBuild() {
     throw new Error("Failed to locate bundled JavaScript outputs.");
   }
 
-  const appMeta = await readHtmlMetadata(path.join(rootDir, "index.html"), "업무 일정관리");
+  const appMeta = await readHtmlMetadata(path.join(rootDir, "index.html"), "플래나이(PLANAI)");
   await writeBuiltHtml({
     fileName: "index.html",
     title: appMeta.title,
