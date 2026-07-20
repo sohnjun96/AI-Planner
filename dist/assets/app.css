@@ -4821,10 +4821,6 @@ textarea:focus-visible,
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.settings-ai-modal-body .note-ai-rule-toggles,
-.settings-ai-modal-body .note-ai-custom-instructions {
-  margin-top: 0;
-}
 .settings-ai-modal-footer {
   flex: 0 0 auto;
   display: flex;
@@ -4915,46 +4911,6 @@ textarea:focus-visible,
 }
 .settings-context-card {
   grid-column: 1 / -1;
-}
-.settings-note-ai-rules-card {
-  grid-column: 1 / -1;
-}
-.note-ai-rule-toggles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 14px;
-}
-.note-ai-rule-toggles .settings-toggle-row {
-  align-items: flex-start;
-  min-height: 104px;
-}
-.note-ai-rule-toggles small {
-  display: block;
-  margin-top: 5px;
-  color: var(--body-muted);
-  line-height: 1.45;
-}
-.note-ai-custom-instructions {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-.note-ai-custom-instructions > small {
-  color: var(--body-muted);
-  font-weight: 400;
-}
-.note-ai-custom-instructions textarea {
-  min-height: 112px;
-  resize: vertical;
-}
-@media (max-width: 860px) {
-  .note-ai-rule-toggles {
-    grid-template-columns: 1fr;
-  }
-  .note-ai-rule-toggles .settings-toggle-row {
-    min-height: 0;
-  }
 }
 .settings-context-card .user-context-editor {
   display: grid;

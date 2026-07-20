@@ -6,7 +6,6 @@ import {
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   DEFAULT_NOTE_AI_ACTIONS,
-  DEFAULT_NOTE_AI_RULES,
   DEFAULT_NOTIFY_BEFORE_MINUTES,
   DEFAULT_PROJECT_IDS,
   DEFAULT_SETTING,
@@ -25,7 +24,6 @@ import type {
   AppSetting,
   Memo,
   Note,
-  NoteAiRules,
   NoteFormInput,
   NoteTaskLink,
   NoteTaskLinkSource,
@@ -138,7 +136,6 @@ interface AppDataContextValue {
         | "autoBackupIntervalMinutes"
         | "aiContextMaxLength"
         | "noteAiActions"
-        | "noteAiRules"
       >
     >,
   ) => Promise<void>;
@@ -329,17 +326,6 @@ function clampAiContextMaxLength(value: number | undefined): number {
   return Math.max(MIN_AI_CONTEXT_MAX_LENGTH, Math.min(MAX_AI_CONTEXT_MAX_LENGTH, Math.floor(value ?? DEFAULT_AI_CONTEXT_MAX_LENGTH)));
 }
 
-function normalizeNoteAiRules(rules: Partial<NoteAiRules> | undefined): NoteAiRules {
-  return {
-    tone: rules?.tone === "neutral" || rules?.tone === "friendly" ? rules.tone : DEFAULT_NOTE_AI_RULES.tone,
-    detail: rules?.detail === "concise" || rules?.detail === "detailed" ? rules.detail : DEFAULT_NOTE_AI_RULES.detail,
-    preserveFacts: typeof rules?.preserveFacts === "boolean" ? rules.preserveFacts : DEFAULT_NOTE_AI_RULES.preserveFacts,
-    preserveMarkdown: typeof rules?.preserveMarkdown === "boolean" ? rules.preserveMarkdown : DEFAULT_NOTE_AI_RULES.preserveMarkdown,
-    preserveChecklists: typeof rules?.preserveChecklists === "boolean" ? rules.preserveChecklists : DEFAULT_NOTE_AI_RULES.preserveChecklists,
-    customInstructions: typeof rules?.customInstructions === "string" ? rules.customInstructions.slice(0, 1000) : "",
-  };
-}
-
 function normalizeSetting(setting: AppSetting): AppSetting {
   return {
     ...setting,
@@ -358,7 +344,6 @@ function normalizeSetting(setting: AppSetting): AppSetting {
       Array.isArray(setting.noteAiActions) && setting.noteAiActions.length > 0
         ? setting.noteAiActions
         : DEFAULT_NOTE_AI_ACTIONS,
-    noteAiRules: normalizeNoteAiRules(setting.noteAiRules),
   };
 }
 
@@ -1258,7 +1243,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           | "autoBackupIntervalMinutes"
           | "aiContextMaxLength"
           | "noteAiActions"
-          | "noteAiRules"
         >
       >,
     ) => {

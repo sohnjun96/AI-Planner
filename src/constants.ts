@@ -1,6 +1,6 @@
 ﻿import type { AppSetting, NoteAiAction, NoteStatus, Project, RecurrencePattern, TaskStatus, TaskType } from "./models";
 
-import type { LlmReasoningEffort, NoteAiRules, UserContext } from "./models";
+import type { LlmReasoningEffort, UserContext } from "./models";
 
 export const SETTINGS_ID = "default";
 export const USER_CONTEXT_ID = "user-context";
@@ -58,15 +58,6 @@ export const DEFAULT_NOTE_AI_ACTIONS: NoteAiAction[] = [
   { id: "checklist", label: "체크리스트", prompt: "할 일 항목을 마크다운 체크리스트로 정리해줘." },
   { id: "expand", label: "구체화", prompt: "각 항목을 더 구체적이고 실행 가능하게 확장해줘." },
 ];
-
-export const DEFAULT_NOTE_AI_RULES: NoteAiRules = {
-  tone: "professional",
-  detail: "balanced",
-  preserveFacts: true,
-  preserveMarkdown: true,
-  preserveChecklists: true,
-  customInstructions: "",
-};
 
 export const COLOR_PRESETS = [
   "#ef4444",
@@ -313,6 +304,5 @@ export const DEFAULT_SETTING: AppSetting = {
   autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   aiContextMaxLength: DEFAULT_AI_CONTEXT_MAX_LENGTH,
   noteAiActions: DEFAULT_NOTE_AI_ACTIONS,
-  noteAiRules: DEFAULT_NOTE_AI_RULES,
   updatedAt: "",
 };

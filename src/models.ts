@@ -122,19 +122,6 @@ export interface NoteAiAction {
   prompt: string;
 }
 
-export type NoteAiTone = "professional" | "neutral" | "friendly";
-export type NoteAiDetail = "concise" | "balanced" | "detailed";
-
-/** Rules shared by note editing, selection edits, summaries, and merges. */
-export interface NoteAiRules {
-  tone: NoteAiTone;
-  detail: NoteAiDetail;
-  preserveFacts: boolean;
-  preserveMarkdown: boolean;
-  preserveChecklists: boolean;
-  customInstructions: string;
-}
-
 export type LlmReasoningEffort = "default" | "none" | "low" | "medium" | "high";
 
 export interface AppSetting {
@@ -154,7 +141,6 @@ export interface AppSetting {
   autoBackupIntervalMinutes?: number;
   aiContextMaxLength?: number;
   noteAiActions?: NoteAiAction[];
-  noteAiRules?: NoteAiRules;
   updatedAt: string;
 }
 

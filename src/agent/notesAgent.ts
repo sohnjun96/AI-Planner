@@ -1,5 +1,4 @@
-import { DEFAULT_NOTE_AI_RULES } from "../constants";
-import type { Note, NoteAiRules, Project, ProjectSubcategory, Task, TaskType } from "../models";
+import type { Note, Project, ProjectSubcategory, Task, TaskType } from "../models";
 import { toIsoNow } from "../utils/date";
 import {
   ToolCallCache,
@@ -54,7 +53,6 @@ export interface RunNotesAgentInput {
   apiKey: string;
   model?: string;
   generationOptions?: LlmGenerationOptions;
-  noteAiRules?: NoteAiRules;
   /** 진행 상황 콜백 (도구 실행 / 스트리밍 작성) */
   onProgress?: (info: NotesAgentProgress) => void;
   signal?: AbortSignal;
@@ -156,8 +154,15 @@ Leave proposedContent and replacementText empty.
 `.trim(),
 };
 
-function buildNoteAiPolicy(inputRules?: NoteAiRules): string {
-  const rules = { ...DEFAULT_NOTE_AI_RULES, ...inputRules };
+function buildNoteAiPolicy(): string {
+  const rules = {
+    tone: "professional" as const,
+    detail: "balanced" as const,
+    preserveFacts: true,
+    preserveMarkdown: true,
+    preserveChecklists: true,
+    customInstructions: "",
+  };
   const tone = {
     professional: "Use a clear, professional work-document tone.",
     neutral: "Use a plain, neutral tone.",
@@ -268,7 +273,7 @@ function buildPromptMessages(input: RunNotesAgentInput, toolResults: ToolExecuti
   const toolPolicy = needsLookup
     ? "Tool calls are available only for this search request."
     : "Tool calls are disabled for this self-contained request; produce the final result directly.";
-  const systemPrompt = `${BASE_RULES}\n\n${toolPolicy}\n\nCurrent mode instructions:\n${MODE_INSTRUCTIONS[input.mode]}\n\n${buildNoteAiPolicy(input.noteAiRules)}`;
+  const systemPrompt = `${BASE_RULES}\n\n${toolPolicy}\n\nCurrent mode instructions:\n${MODE_INSTRUCTIONS[input.mode]}\n\n${buildNoteAiPolicy()}`;
 
   return [
     { role: "system", content: systemPrompt },

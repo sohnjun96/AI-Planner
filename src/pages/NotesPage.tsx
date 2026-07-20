@@ -709,7 +709,6 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         generationOptions,
-        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -804,7 +803,6 @@ export function NotesPage() {
           apiKey: setting.llmApiKey ?? "",
           model: setting.llmModel,
           generationOptions,
-          noteAiRules: setting.noteAiRules,
           onProgress: handleAiProgress,
           signal: controller.signal,
         });
@@ -830,7 +828,7 @@ export function NotesPage() {
         }
       }
     },
-    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, generationOptions, setting.noteAiRules, handleAiProgress, beginAiRequest],
+    [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, generationOptions, handleAiProgress, beginAiRequest],
   );
 
   const runInlineAssist = useCallback(async () => {
@@ -869,7 +867,6 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         generationOptions,
-        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -889,7 +886,7 @@ export function NotesPage() {
         setIsAiRunning(false);
       }
     }
-  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, generationOptions, setting.noteAiRules, handleAiProgress, beginAiRequest]);
+  }, [selectedNote, draft, notes, tasks, projects, setting.llmEndpoint, setting.llmApiKey, setting.llmModel, generationOptions, handleAiProgress, beginAiRequest]);
 
   async function acceptProposal() {
     if (!selectedNoteId || !draft || !aiProposal) return;
@@ -1069,7 +1066,6 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         generationOptions,
-        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
@@ -1123,7 +1119,6 @@ export function NotesPage() {
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
         generationOptions,
-        noteAiRules: setting.noteAiRules,
         onProgress: handleAiProgress,
         signal: controller.signal,
       });

@@ -8,7 +8,6 @@ import {
   DEFAULT_LLM_REASONING_EFFORT,
   DEFAULT_LLM_TEMPERATURE,
   DEFAULT_NOTE_AI_ACTIONS,
-  DEFAULT_NOTE_AI_RULES,
   LLM_DEFAULT_MODEL,
   MAX_AI_CONTEXT_MAX_LENGTH,
   MAX_LLM_TEMPERATURE,
@@ -21,7 +20,7 @@ import type { ImportDataPreview } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { useJsonBackupStatus } from "../hooks/useJsonBackupStatus";
 import { generationOptionsFromSetting, isGemma4ThinkingModel, requestLlmResponse } from "../agent/llmClient";
-import type { AppSetting, NoteAiAction, NoteAiRules } from "../models";
+import type { AppSetting, NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
 import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
 import { downloadJsonBackup } from "../utils/jsonBackup";
@@ -109,7 +108,7 @@ function createEmptyTypeForm(): TypeFormState {
 const TYPE_FORM_AUTOSAVE_DELAY_MS = 700;
 type AiConnectionStatus = "idle" | "checking" | "ok" | "error";
 type LlmReasoningEffortOption = NonNullable<AppSetting["llmReasoningEffort"]>;
-type AiSettingsDialog = "actions" | "rules" | "context";
+type AiSettingsDialog = "actions" | "context";
 
 interface PendingImport {
   fileName: string;
@@ -150,18 +149,6 @@ function serializeTaskTypeInput(input: TaskTypeInputPayload): string {
 }
 
 type SettingsSection = "overview" | "general" | "ai" | "notify" | "stats";
-
-const NOTE_AI_TONE_LABELS: Record<NoteAiRules["tone"], string> = {
-  professional: "업무형",
-  neutral: "중립형",
-  friendly: "친근형",
-};
-
-const NOTE_AI_DETAIL_LABELS: Record<NoteAiRules["detail"], string> = {
-  concise: "간결",
-  balanced: "균형",
-  detailed: "상세",
-};
 
 const SETTINGS_TABS: Array<{ id: SettingsSection; label: string }> = [
   { id: "overview", label: "개요" },
@@ -248,10 +235,6 @@ export function SettingsPage() {
     () => setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS,
   );
   const [aiActionMessage, setAiActionMessage] = useState("");
-  const [noteAiRulesDraft, setNoteAiRulesDraft] = useState<NoteAiRules>(
-    () => ({ ...DEFAULT_NOTE_AI_RULES, ...(setting.noteAiRules ?? {}) }),
-  );
-  const [noteAiRulesMessage, setNoteAiRulesMessage] = useState("");
   const [activeSection, setActiveSection] = useState<SettingsSection>(() => {
     return resolveSettingsSection(searchParams.get("section"));
   });
@@ -289,12 +272,6 @@ export function SettingsPage() {
   const savedUserContextLength = Math.min(userContext.markdown.length, aiContextMaxLength);
   const isGemma4ThinkingAvailable = isGemma4ThinkingModel(setting.llmModel ?? LLM_DEFAULT_MODEL);
   const savedNoteAiActions = setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS;
-  const savedNoteAiRules = { ...DEFAULT_NOTE_AI_RULES, ...(setting.noteAiRules ?? {}) };
-  const savedPreservationRuleCount = [
-    savedNoteAiRules.preserveFacts,
-    savedNoteAiRules.preserveMarkdown,
-    savedNoteAiRules.preserveChecklists,
-  ].filter(Boolean).length;
   const savedActionPreview = savedNoteAiActions
     .slice(0, 3)
     .map((action) => action.label)
@@ -302,21 +279,15 @@ export function SettingsPage() {
   const activeAiDialogTitle =
     activeAiSettingsDialog === "actions"
       ? "노트 AI 편집 기능"
-      : activeAiSettingsDialog === "rules"
-        ? "노트 AI 공통 규칙"
-        : "AI 맞춤 규칙";
+      : "AI 맞춤 규칙";
   const activeAiDialogEyebrow =
     activeAiSettingsDialog === "actions"
       ? "NOTE AI"
-      : activeAiSettingsDialog === "rules"
-        ? "NOTE AI POLICY"
-        : "USER CONTEXT";
+      : "USER CONTEXT";
   const activeAiDialogDescription =
     activeAiSettingsDialog === "actions"
       ? "노트 편집 화면과 우클릭 메뉴에 표시할 AI 기능과 프롬프트를 관리합니다."
-      : activeAiSettingsDialog === "rules"
-        ? "노트 다듬기·선택 편집·요약·통합에 공통으로 적용할 규칙을 설정합니다."
-        : "AI가 일정 요청을 해석할 때 참고할 개인 규칙을 관리합니다.";
+      : "AI가 일정 요청을 해석할 때 시스템 지침으로 적용할 개인 규칙을 관리합니다.";
 
   useEffect(() => {
     setActiveSection(resolveSettingsSection(searchParams.get("section")));
@@ -432,10 +403,6 @@ export function SettingsPage() {
     setNoteAiActionsDraft(setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS);
   }, [setting.noteAiActions]);
 
-  useEffect(() => {
-    setNoteAiRulesDraft({ ...DEFAULT_NOTE_AI_RULES, ...(setting.noteAiRules ?? {}) });
-  }, [setting.noteAiRules]);
-
   async function handleSaveAiActions() {
     setAiActionMessage("");
     const cleaned = noteAiActionsDraft
@@ -521,21 +488,6 @@ export function SettingsPage() {
       setError(exportError instanceof Error ? exportError.message : "백업 파일 내보내기에 실패했습니다.");
     } finally {
       setIsExporting(false);
-    }
-  }
-
-  async function handleSaveNoteAiRules() {
-    setNoteAiRulesMessage("");
-    try {
-      await updateSetting({
-        noteAiRules: {
-          ...noteAiRulesDraft,
-          customInstructions: noteAiRulesDraft.customInstructions.trim().slice(0, 1000),
-        },
-      });
-      setNoteAiRulesMessage("노트 AI 공통 규칙을 저장했습니다.");
-    } catch (saveError) {
-      setNoteAiRulesMessage(saveError instanceof Error ? saveError.message : "저장에 실패했습니다.");
     }
   }
 
@@ -1279,28 +1231,8 @@ export function SettingsPage() {
 
             <div className="settings-ai-management-row">
               <div>
-                <strong>노트 AI 공통 규칙</strong>
-                <p>
-                  {NOTE_AI_TONE_LABELS[savedNoteAiRules.tone]} · {NOTE_AI_DETAIL_LABELS[savedNoteAiRules.detail]} · 보존 규칙 {savedPreservationRuleCount}/3
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn btn-soft"
-                aria-label="노트 AI 공통 규칙 편집"
-                onClick={() => {
-                  setNoteAiRulesMessage("");
-                  setActiveAiSettingsDialog("rules");
-                }}
-              >
-                편집
-              </button>
-            </div>
-
-            <div className="settings-ai-management-row">
-              <div>
                 <strong>AI 맞춤 규칙</strong>
-                <p>{savedUserContextLength} / {aiContextMaxLength}자 · 일정 해석에 적용</p>
+                <p>{savedUserContextLength} / {aiContextMaxLength}자 · 일정 AI 시스템 지침에 적용</p>
               </div>
               <button
                 type="button"
@@ -1562,102 +1494,6 @@ export function SettingsPage() {
                 </>
               ) : null}
 
-              {activeAiSettingsDialog === "rules" ? (
-                <>
-                  <div className="form-grid two-col">
-                    <label>
-                      기본 문체
-                      <select
-                        value={noteAiRulesDraft.tone}
-                        onChange={(event) =>
-                          setNoteAiRulesDraft((current) => ({
-                            ...current,
-                            tone: event.target.value as NoteAiRules["tone"],
-                          }))
-                        }
-                      >
-                        <option value="professional">업무형 — 명확하고 정돈된 표현</option>
-                        <option value="neutral">중립형 — 담백한 표현</option>
-                        <option value="friendly">친근형 — 부드럽고 협업적인 표현</option>
-                      </select>
-                    </label>
-
-                    <label>
-                      기본 결과 분량
-                      <select
-                        value={noteAiRulesDraft.detail}
-                        onChange={(event) =>
-                          setNoteAiRulesDraft((current) => ({
-                            ...current,
-                            detail: event.target.value as NoteAiRules["detail"],
-                          }))
-                        }
-                      >
-                        <option value="concise">간결 — 중복 표현을 줄인 핵심 결과</option>
-                        <option value="balanced">균형 — 바로 활용할 수 있는 적정 분량</option>
-                        <option value="detailed">상세 — 근거가 있는 맥락과 단계까지 유지</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="note-ai-rule-toggles" role="group" aria-label="노트 AI 보존 규칙">
-                    <label className="checkbox-inline settings-toggle-row">
-                      <input
-                        type="checkbox"
-                        checked={noteAiRulesDraft.preserveFacts}
-                        onChange={(event) =>
-                          setNoteAiRulesDraft((current) => ({ ...current, preserveFacts: event.target.checked }))
-                        }
-                      />
-                      사실·수치·고유명사 보존
-                      <small>근거 없는 내용은 추가하지 않고, 불확실한 항목은 그대로 둡니다.</small>
-                    </label>
-                    <label className="checkbox-inline settings-toggle-row">
-                      <input
-                        type="checkbox"
-                        checked={noteAiRulesDraft.preserveMarkdown}
-                        onChange={(event) =>
-                          setNoteAiRulesDraft((current) => ({ ...current, preserveMarkdown: event.target.checked }))
-                        }
-                      />
-                      마크다운 구조 보존
-                      <small>제목·목록·표·링크 같은 기존 형식을 요청 없이는 평면화하지 않습니다.</small>
-                    </label>
-                    <label className="checkbox-inline settings-toggle-row">
-                      <input
-                        type="checkbox"
-                        checked={noteAiRulesDraft.preserveChecklists}
-                        onChange={(event) =>
-                          setNoteAiRulesDraft((current) => ({ ...current, preserveChecklists: event.target.checked }))
-                        }
-                      />
-                      체크리스트 상태 보존
-                      <small>할 일과 완료 상태를 요청 없이 추가·삭제·완료 처리하지 않습니다.</small>
-                    </label>
-                  </div>
-
-                  <label className="note-ai-custom-instructions">
-                    추가 지시 <small>{noteAiRulesDraft.customInstructions.length} / 1000자</small>
-                    <textarea
-                      value={noteAiRulesDraft.customInstructions}
-                      maxLength={1000}
-                      onChange={(event) =>
-                        setNoteAiRulesDraft((current) => ({ ...current, customInstructions: event.target.value }))
-                      }
-                      rows={4}
-                      placeholder="예: 회의록은 결정 사항·담당자·기한을 먼저 정리하고, 담당자가 없으면 [담당자 확인]으로 남겨줘."
-                      spellCheck={false}
-                    />
-                  </label>
-
-                  {noteAiRulesMessage ? (
-                    <p className="success-text" role="status" aria-live="polite">
-                      {noteAiRulesMessage}
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-
               {activeAiSettingsDialog === "context" ? (
                 <>
                   <div className="form-grid two-col">
@@ -1687,7 +1523,7 @@ export function SettingsPage() {
                   </div>
 
                   <label className="user-context-editor">
-                    AI가 일정 해석에 사용할 맞춤 규칙
+                    AI 일정 추가에 사용할 맞춤 규칙
                     <textarea
                       value={userContextDraft}
                       maxLength={aiContextMaxLength}
@@ -1699,7 +1535,7 @@ export function SettingsPage() {
 
                   <div className="settings-inline-note">
                     <span>
-                      AI 일정 추가 시 이 내용이 개인 규칙으로 전달됩니다. 현재 입력이 더 구체적이면 현재 입력을 우선합니다.
+                      AI 일정 추가의 첫 요청부터 시스템 지침으로 전달됩니다. 현재 입력이 더 구체적이면 현재 입력을 우선합니다.
                     </span>
                   </div>
 
@@ -1718,15 +1554,6 @@ export function SettingsPage() {
             </div>
 
             <footer className="settings-ai-modal-footer">
-              {activeAiSettingsDialog === "rules" ? (
-                <button
-                  type="button"
-                  className="btn btn-soft"
-                  onClick={() => setNoteAiRulesDraft({ ...DEFAULT_NOTE_AI_RULES })}
-                >
-                  기본값으로 되돌리기
-                </button>
-              ) : null}
               {activeAiSettingsDialog === "context" ? (
                 <button className="btn btn-soft" type="button" onClick={() => void handleResetUserContext()}>
                   기본값 복원
@@ -1740,11 +1567,6 @@ export function SettingsPage() {
               </button>
               {activeAiSettingsDialog === "actions" ? (
                 <button type="button" className="btn btn-primary" onClick={() => void handleSaveAiActions()}>
-                  저장
-                </button>
-              ) : null}
-              {activeAiSettingsDialog === "rules" ? (
-                <button type="button" className="btn btn-primary" onClick={() => void handleSaveNoteAiRules()}>
                   저장
                 </button>
               ) : null}
