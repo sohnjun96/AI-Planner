@@ -136,6 +136,8 @@ interface AppDataContextValue {
         | "autoBackupIntervalMinutes"
         | "aiContextMaxLength"
         | "noteAiActions"
+        | "noteTaskSuggestionsEnabled"
+        | "relatedNoteSuggestionsEnabled"
       >
     >,
   ) => Promise<void>;
@@ -344,6 +346,8 @@ function normalizeSetting(setting: AppSetting): AppSetting {
       Array.isArray(setting.noteAiActions) && setting.noteAiActions.length > 0
         ? setting.noteAiActions
         : DEFAULT_NOTE_AI_ACTIONS,
+    noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
+    relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled,
   };
 }
 
@@ -1243,6 +1247,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           | "autoBackupIntervalMinutes"
           | "aiContextMaxLength"
           | "noteAiActions"
+          | "noteTaskSuggestionsEnabled"
+          | "relatedNoteSuggestionsEnabled"
         >
       >,
     ) => {

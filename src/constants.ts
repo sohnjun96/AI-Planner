@@ -304,5 +304,7 @@ export const DEFAULT_SETTING: AppSetting = {
   autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   aiContextMaxLength: DEFAULT_AI_CONTEXT_MAX_LENGTH,
   noteAiActions: DEFAULT_NOTE_AI_ACTIONS,
+  noteTaskSuggestionsEnabled: true,
+  relatedNoteSuggestionsEnabled: true,
   updatedAt: "",
 };

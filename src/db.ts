@@ -149,7 +149,9 @@ export async function bootstrapDatabase(): Promise<void> {
       setting.notifyBeforeMinutes === undefined ||
       setting.autoBackupEnabled === undefined ||
       setting.autoBackupIntervalMinutes === undefined ||
-      setting.aiContextMaxLength === undefined
+      setting.aiContextMaxLength === undefined ||
+      setting.noteTaskSuggestionsEnabled === undefined ||
+      setting.relatedNoteSuggestionsEnabled === undefined
     )
   ) {
     await db.settings.put({
@@ -165,6 +167,8 @@ export async function bootstrapDatabase(): Promise<void> {
       autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
       autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_SETTING.autoBackupIntervalMinutes,
       aiContextMaxLength: setting.aiContextMaxLength ?? DEFAULT_SETTING.aiContextMaxLength,
+      noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
+      relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled,
       updatedAt: now,
     });
   }

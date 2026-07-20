@@ -30695,6 +30695,8 @@ var DEFAULT_SETTING = {
   autoBackupIntervalMinutes: DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   aiContextMaxLength: DEFAULT_AI_CONTEXT_MAX_LENGTH,
   noteAiActions: DEFAULT_NOTE_AI_ACTIONS,
+  noteTaskSuggestionsEnabled: true,
+  relatedNoteSuggestionsEnabled: true,
   updatedAt: ""
 };
 
@@ -31415,7 +31417,7 @@ async function bootstrapDatabase() {
   const normalizedLlmTemperature = clampLlmTemperature(setting?.llmTemperature);
   const normalizedLlmReasoningEffort = normalizeLlmReasoningEffort(setting?.llmReasoningEffort);
   const normalizedLlmGemmaThinkingEnabled = normalizeLlmGemmaThinkingEnabled(setting?.llmGemmaThinkingEnabled);
-  if (setting && (setting.llmEndpoint === void 0 || setting.llmApiKey === void 0 || setting.llmModel === void 0 || setting.llmTemperature !== normalizedLlmTemperature || setting.llmReasoningEffort !== normalizedLlmReasoningEffort || setting.llmGemmaThinkingEnabled !== normalizedLlmGemmaThinkingEnabled || setting.notificationsEnabled === void 0 || setting.notifyBeforeMinutes === void 0 || setting.autoBackupEnabled === void 0 || setting.autoBackupIntervalMinutes === void 0 || setting.aiContextMaxLength === void 0)) {
+  if (setting && (setting.llmEndpoint === void 0 || setting.llmApiKey === void 0 || setting.llmModel === void 0 || setting.llmTemperature !== normalizedLlmTemperature || setting.llmReasoningEffort !== normalizedLlmReasoningEffort || setting.llmGemmaThinkingEnabled !== normalizedLlmGemmaThinkingEnabled || setting.notificationsEnabled === void 0 || setting.notifyBeforeMinutes === void 0 || setting.autoBackupEnabled === void 0 || setting.autoBackupIntervalMinutes === void 0 || setting.aiContextMaxLength === void 0 || setting.noteTaskSuggestionsEnabled === void 0 || setting.relatedNoteSuggestionsEnabled === void 0)) {
     await db.settings.put({
       ...setting,
       llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
@@ -31429,6 +31431,8 @@ async function bootstrapDatabase() {
       autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
       autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_SETTING.autoBackupIntervalMinutes,
       aiContextMaxLength: setting.aiContextMaxLength ?? DEFAULT_SETTING.aiContextMaxLength,
+      noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
+      relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled,
       updatedAt: now
     });
   }
@@ -31573,7 +31577,9 @@ function normalizeSetting(setting) {
     llmReasoningEffort: normalizeLlmReasoningEffort(setting.llmReasoningEffort),
     llmGemmaThinkingEnabled: normalizeLlmGemmaThinkingEnabled(setting.llmGemmaThinkingEnabled),
     aiContextMaxLength: clampAiContextMaxLength(setting.aiContextMaxLength),
-    noteAiActions: Array.isArray(setting.noteAiActions) && setting.noteAiActions.length > 0 ? setting.noteAiActions : DEFAULT_NOTE_AI_ACTIONS
+    noteAiActions: Array.isArray(setting.noteAiActions) && setting.noteAiActions.length > 0 ? setting.noteAiActions : DEFAULT_NOTE_AI_ACTIONS,
+    noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
+    relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled
   };
 }
 function normalizeUserContext(context) {
@@ -41568,7 +41574,7 @@ function NotesPage() {
     return selectedNote.linkedTaskIds.map((id) => taskMap[id]).filter((task) => Boolean(task));
   }, [selectedNote, taskMap]);
   const suggestions = (0, import_react25.useMemo)(() => {
-    if (!selectedNote) return [];
+    if (!selectedNote || !setting.noteTaskSuggestionsEnabled) return [];
     return suggestTasksForNote({
       noteTitle: selectedNote.title,
       noteContent: selectedNote.content,
@@ -41579,12 +41585,12 @@ function NotesPage() {
       dateWindowDays: NOTE_SUGGESTION_DATE_WINDOW_DAYS,
       limit: MAX_NOTE_TASK_SUGGESTIONS
     }).map((item) => ({ task: taskMap[item.taskId], reason: item.reason })).filter((item) => Boolean(item.task));
-  }, [selectedNote, tasks, taskMap]);
+  }, [selectedNote, setting.noteTaskSuggestionsEnabled, tasks, taskMap]);
   const relatedNotes = (0, import_react25.useMemo)(() => {
-    if (!selectedNote) return [];
+    if (!selectedNote || !setting.relatedNoteSuggestionsEnabled) return [];
     const noteMap = Object.fromEntries(notes.map((note) => [note.id, note]));
     return suggestRelatedNotes({ note: selectedNote, notes, limit: 5 }).map((item) => ({ note: noteMap[item.noteId], reason: item.reason })).filter((item) => Boolean(item.note));
-  }, [selectedNote, notes]);
+  }, [selectedNote, setting.relatedNoteSuggestionsEnabled, notes]);
   const isDirty = (0, import_react25.useMemo)(() => {
     if (!selectedNote || !draft) return false;
     return isDraftDifferentFromNote(selectedNote, draft);
@@ -44927,6 +44933,44 @@ function SettingsPage() {
                 children: "편집"
               }
             )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { className: "settings-ai-management-row", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("strong", { children: "관련 일정 자동 추천" }),
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("p", { children: "노트의 내용, 프로젝트, 작성일을 기준으로 연결할 일정을 추천합니다." })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("label", { className: "checkbox-inline settings-toggle-row settings-ai-feature-toggle", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: setting.noteTaskSuggestionsEnabled ?? true,
+                  onChange: (event) => {
+                    void updateSetting({ noteTaskSuggestionsEnabled: event.currentTarget.checked });
+                  }
+                }
+              ),
+              "사용"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { className: "settings-ai-management-row", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("strong", { children: "관련 노트 자동 추천" }),
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("p", { children: "제목, 내용, 프로젝트, 태그가 비슷한 다른 노트를 추천합니다." })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("label", { className: "checkbox-inline settings-toggle-row settings-ai-feature-toggle", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: setting.relatedNoteSuggestionsEnabled ?? true,
+                  onChange: (event) => {
+                    void updateSetting({ relatedNoteSuggestionsEnabled: event.currentTarget.checked });
+                  }
+                }
+              ),
+              "사용"
+            ] })
           ] })
         ] })
       ] }) : null,

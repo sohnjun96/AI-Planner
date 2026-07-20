@@ -141,6 +141,8 @@ export interface AppSetting {
   autoBackupIntervalMinutes?: number;
   aiContextMaxLength?: number;
   noteAiActions?: NoteAiAction[];
+  noteTaskSuggestionsEnabled?: boolean;
+  relatedNoteSuggestionsEnabled?: boolean;
   updatedAt: string;
 }
 

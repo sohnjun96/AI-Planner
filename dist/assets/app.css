@@ -4794,6 +4794,12 @@ textarea:focus-visible,
   font-size: 13px;
   line-height: 1.45;
 }
+.settings-ai-feature-toggle {
+  min-width: 52px;
+  justify-content: flex-end;
+  color: var(--ink);
+  font-weight: 500;
+}
 .settings-ai-modal-card {
   width: min(760px, 94vw);
   max-height: min(900px, 90vh);
@@ -4839,6 +4845,9 @@ textarea:focus-visible,
   }
   .settings-ai-management-row .btn {
     width: 100%;
+  }
+  .settings-ai-feature-toggle {
+    justify-content: flex-start;
   }
   .settings-ai-modal-card,
   .settings-ai-modal-card.wide {

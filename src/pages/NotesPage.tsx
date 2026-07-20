@@ -521,7 +521,7 @@ export function NotesPage() {
   }, [selectedNote, taskMap]);
 
   const suggestions = useMemo(() => {
-    if (!selectedNote) return [];
+    if (!selectedNote || !setting.noteTaskSuggestionsEnabled) return [];
     return suggestTasksForNote({
       noteTitle: selectedNote.title,
       noteContent: selectedNote.content,
@@ -534,15 +534,15 @@ export function NotesPage() {
     })
       .map((item) => ({ task: taskMap[item.taskId], reason: item.reason }))
       .filter((item): item is { task: NonNullable<typeof item.task>; reason: string } => Boolean(item.task));
-  }, [selectedNote, tasks, taskMap]);
+  }, [selectedNote, setting.noteTaskSuggestionsEnabled, tasks, taskMap]);
 
   const relatedNotes = useMemo(() => {
-    if (!selectedNote) return [];
+    if (!selectedNote || !setting.relatedNoteSuggestionsEnabled) return [];
     const noteMap = Object.fromEntries(notes.map((note) => [note.id, note]));
     return suggestRelatedNotes({ note: selectedNote, notes, limit: 5 })
       .map((item) => ({ note: noteMap[item.noteId], reason: item.reason }))
       .filter((item): item is { note: Note; reason: string } => Boolean(item.note));
-  }, [selectedNote, notes]);
+  }, [selectedNote, setting.relatedNoteSuggestionsEnabled, notes]);
 
   const isDirty = useMemo(() => {
     if (!selectedNote || !draft) return false;

@@ -1247,6 +1247,40 @@ export function SettingsPage() {
                 편집
               </button>
             </div>
+
+            <div className="settings-ai-management-row">
+              <div>
+                <strong>관련 일정 자동 추천</strong>
+                <p>노트의 내용, 프로젝트, 작성일을 기준으로 연결할 일정을 추천합니다.</p>
+              </div>
+              <label className="checkbox-inline settings-toggle-row settings-ai-feature-toggle">
+                <input
+                  type="checkbox"
+                  checked={setting.noteTaskSuggestionsEnabled ?? true}
+                  onChange={(event) => {
+                    void updateSetting({ noteTaskSuggestionsEnabled: event.currentTarget.checked });
+                  }}
+                />
+                사용
+              </label>
+            </div>
+
+            <div className="settings-ai-management-row">
+              <div>
+                <strong>관련 노트 자동 추천</strong>
+                <p>제목, 내용, 프로젝트, 태그가 비슷한 다른 노트를 추천합니다.</p>
+              </div>
+              <label className="checkbox-inline settings-toggle-row settings-ai-feature-toggle">
+                <input
+                  type="checkbox"
+                  checked={setting.relatedNoteSuggestionsEnabled ?? true}
+                  onChange={(event) => {
+                    void updateSetting({ relatedNoteSuggestionsEnabled: event.currentTarget.checked });
+                  }}
+                />
+                사용
+              </label>
+            </div>
           </div>
         </section>
         ) : null}
