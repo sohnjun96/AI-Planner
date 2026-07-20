@@ -12,6 +12,34 @@ React 19 + TypeScript + Vite로 만든 SPA이며, Chrome 확장(Manifest V3)으�
 
 ---
 
+## 30초 미리보기
+
+**말하면 일정이 된다** — 자연어를 초안으로 정리하고, 반복되는 기준은 규칙으로 제안합니다.
+
+<p align="center">
+  <img src="docs/images/demo-ai-schedule.gif" alt="AI 일정 추가 데모" width="660">
+</p>
+
+**물어보면 찾아준다** — 노트와 일정을 검색해 답하고, 근거를 눌러 바로 이동합니다.
+
+<p align="center">
+  <img src="docs/images/demo-ask.gif" alt="내 데이터에 질문 데모" width="660">
+</p>
+
+**쪽지를 쌓아서 본다** — 카테고리를 고르면 노트가 이어져 펼쳐지고, 체크박스는 그 자리에서 토글됩니다.
+
+<p align="center">
+  <img src="docs/images/demo-notes.gif" alt="노트 이어보기 데모" width="820">
+</p>
+
+**상태 배지가 곧 필터** — 선택한 날의 일정을 미완료·보류·완료로 즉시 걸러 봅니다.
+
+<p align="center">
+  <img src="docs/images/demo-day-filter.gif" alt="선택일 상태 필터 데모" width="820">
+</p>
+
+---
+
 ## 왜 만들었나
 
 일정 관리는 날짜를 저장하는 문제가 아니라 **지금 뭘 먼저 할지 판단하는** 문제입니다. 실제 업무에서는 이런 일이 반복됩니다.
