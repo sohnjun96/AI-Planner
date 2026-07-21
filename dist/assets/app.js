@@ -35766,7 +35766,7 @@ function WeeklyBackupReminder() {
 
 // src/components/AppShell.tsx
 var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
-var planaiLogo = "./아이콘_수정.svg";
+var planaiLogo = "./icon.svg";
 var NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
   { to: "/notes", label: "노트" },
