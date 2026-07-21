@@ -8,7 +8,8 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const publicDir = path.join(rootDir, "public");
-const iconSourcePath = path.join(rootDir, "아이콘.png");
+const logoFileName = "icon.svg";
+const logoSourcePath = path.join(rootDir, logoFileName);
 
 function toDistHref(outputPath) {
   return `./${path.relative(distDir, path.resolve(rootDir, outputPath)).replace(/\\/g, "/")}`;
@@ -38,6 +39,7 @@ async function writeBuiltHtml({ fileName, title, lang, jsHref, cssHrefs, bodyCla
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="./${logoFileName}" />
     <title>${title}</title>
     ${cssLinks}
   </head>
@@ -55,7 +57,7 @@ async function runBuild() {
   await rm(distDir, { recursive: true, force: true });
   await mkdir(distDir, { recursive: true });
   await cp(publicDir, distDir, { recursive: true, force: true });
-  await cp(iconSourcePath, path.join(distDir, "아이콘.png"), { force: true });
+  await cp(logoSourcePath, path.join(distDir, logoFileName), { force: true });
 
   const buildResult = await build({
     absWorkingDir: rootDir,

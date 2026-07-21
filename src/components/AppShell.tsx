@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { generateNoteTitleWithAi } from "../agent/noteTitleAgent";
 import { generationOptionsFromSetting } from "../agent/llmClient";
 import { DEFAULT_PROJECT_ID } from "../constants";
@@ -12,7 +12,8 @@ import { HelpModal } from "./HelpModal";
 import { NoteQuickAddModal } from "./NoteQuickAddModal";
 import { ToastHost, showToast } from "./ToastHost";
 import { WeeklyBackupReminder } from "./WeeklyBackupReminder";
-import planaiLogo from "../../아이콘.png";
+
+const planaiLogo = "./icon.svg";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
@@ -28,6 +29,7 @@ type AiScheduleOpenDetail = {
 
 export function AppShell() {
   const { undoLastChange, projects, setting, createNote } = useAppData();
+  const location = useLocation();
   const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
   const [aiInitialDraft, setAiInitialDraft] = useState("");
@@ -311,7 +313,9 @@ export function AppShell() {
       </header>
 
       <main className="page-content" id="main-content" tabIndex={-1}>
-        <Outlet />
+        <div key={location.pathname} className="route-transition">
+          <Outlet />
+        </div>
       </main>
 
       <footer className="app-copyright">(c) 2026. 손준혁 All rights reserved.</footer>
