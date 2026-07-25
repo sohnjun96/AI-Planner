@@ -81,12 +81,35 @@ function readUserRequest(body) {
   }
 }
 
+// MOCK_RULES=1 이면 재사용 규칙 제안을 함께 반환한다 (규칙 UI 스크린샷용)
+const RULE_SUGGESTIONS = [
+  {
+    category: "time",
+    label: "제출 기본 시간",
+    trigger: ["제출", "마감"],
+    defaultTime: "18:00",
+    taskTypeId: "type-submit",
+    isMajor: false,
+    reason: "제출 일정에 시간이 없으면 오후 6시로 맞춥니다.",
+  },
+  {
+    category: "classification",
+    label: "실적 관련은 보고 프로젝트로",
+    trigger: ["실적", "보고"],
+    taskTypeId: "type-submit",
+    projectId: "project-report",
+    isMajor: false,
+    reason: "실적·보고 키워드 일정은 보고 프로젝트로 분류합니다.",
+  },
+];
+
 function scheduleReply(body) {
   const req = readUserRequest(body);
-  if (req.includes("점심") || req.includes("김키포")) {
-    return lunchWithKipo;
+  const base = req.includes("점심") || req.includes("김키포") ? lunchWithKipo : trainingThenReport;
+  if (process.env.MOCK_RULES === "1") {
+    return { ...base, contextSuggestions: RULE_SUGGESTIONS };
   }
-  return trainingThenReport;
+  return base;
 }
 
 function qaReply(body) {
