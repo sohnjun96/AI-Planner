@@ -14,10 +14,16 @@ React 19 + TypeScript + Vite로 만든 SPA이며, Chrome 확장(Manifest V3)으�
 
 ## 30초 미리보기
 
-**말하면 일정이 된다** — 자연어를 초안으로 정리하고, 반복되는 기준은 규칙으로 제안합니다.
+**말하면 일정이 된다** — "다음주 금요일까지 교육 이수 후 실적 제출" 한 줄이 교육과 제출 2건으로 나뉘어 초안이 됩니다.
 
 <p align="center">
-  <img src="docs/images/demo-ai-schedule.gif" alt="AI 일정 추가 데모" width="660">
+  <img src="docs/images/demo-ai-schedule.gif" alt="AI 일정 추가 데모 — 교육 이수와 실적 제출" width="660">
+</p>
+
+**약속도 한 줄로** — "이번주 수요일 점심 김키포와"처럼 말하면 날짜·시간·종류를 채워 줍니다.
+
+<p align="center">
+  <img src="docs/images/demo-ai-schedule-lunch.gif" alt="AI 일정 추가 데모 — 점심 약속" width="660">
 </p>
 
 **물어보면 찾아준다** — 노트와 일정을 검색해 답하고, 근거를 눌러 바로 이동합니다.
