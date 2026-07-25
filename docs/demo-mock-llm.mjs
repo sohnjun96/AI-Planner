@@ -43,18 +43,15 @@ const op = (title, taskTypeId, projectId, startAt, isMajor = false) => ({
   isMajor,
 });
 
-// 1) "다음주 금요일까지 교육 이수 후 실적 제출" → 교육 + 제출 2건
+// 1) "다음주 금요일까지 교육 이수 후 실적 제출" → 마감 기준 1건
 const trainingThenReport = {
-  assistantMessage: "다음 주 금요일 마감에 맞춰 교육 이수와 실적 제출을 나눠 정리했어요.",
+  assistantMessage: "다음 주 금요일 마감으로 정리했어요.",
   needsUserInput: false,
   userQuestion: "",
   toolCalls: [],
   proposal: {
-    summary: "교육 이수와 실적 제출 2건 추가",
-    operations: [
-      op("교육 이수", "type-event", "project-ai", nextWeek(3, 10, 0)),
-      op("실적 제출", "type-submit", "project-report", nextWeek(5, 18, 0), true),
-    ],
+    summary: "교육 이수 후 실적 제출 1건 추가",
+    operations: [op("교육 이수 후 실적 제출", "type-submit", "project-report", nextWeek(5, 18, 0), true)],
   },
   contextSuggestions: [],
 };
@@ -127,15 +124,17 @@ const server = http.createServer((req, res) => {
     const isQa = !isSchedule && (body.includes("noteIndex") || body.includes('"question"'));
     const reply = isQa ? qaReply(body) : scheduleReply(body);
     console.log(`#${n} ${isQa ? "QA" : "SCHEDULE"} -> ${reply.toolCalls?.length ? "toolCalls" : "final"}`);
-    res.writeHead(200, { "Content-Type": "application/json", ...CORS });
-    res.end(
-      JSON.stringify({
-        id: "demo",
-        object: "chat.completion",
-        choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(reply) }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 1200, completion_tokens: 180, total_tokens: 1380 },
-      }),
-    );
+    const payload = JSON.stringify({
+      id: "demo",
+      object: "chat.completion",
+      choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(reply) }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1200, completion_tokens: 180, total_tokens: 1380 },
+    });
+    // 실제 모델처럼 잠깐 생각하는 시간을 둔다 (녹화 시 진행 상태를 담기 위함)
+    setTimeout(() => {
+      res.writeHead(200, { "Content-Type": "application/json", ...CORS });
+      res.end(payload);
+    }, Number(process.env.MOCK_DELAY_MS ?? 1400));
   });
 });
 
