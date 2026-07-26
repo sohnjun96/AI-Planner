@@ -1970,6 +1970,178 @@ textarea:focus-visible,
   backdrop-filter: saturate(180%) blur(20px);
   animation: modal-backdrop-in 180ms ease-out both;
 }
+.reminder-review-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(5px);
+  animation: modal-backdrop-in 180ms ease-out both;
+}
+.reminder-review-modal {
+  width: min(470px, 100%);
+  overflow: hidden;
+  color: #172554;
+  border: 1px solid #dbe5f4;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 20px 46px rgba(15, 23, 42, 0.2);
+  outline: none;
+}
+.reminder-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 0 18px;
+  border-bottom: 1px solid #e7edf7;
+}
+.reminder-review-header p,
+.reminder-review-kicker {
+  margin: 0;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.reminder-review-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  color: #41608d;
+  background: #f1f5fb;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+.reminder-review-close:hover:not(:disabled) {
+  background: #e4edf9;
+}
+.reminder-review-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.reminder-review-ai-edit {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #c9daf7;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.reminder-review-ai-edit:hover:not(:disabled) {
+  background: #dbeafe;
+}
+.reminder-review-content {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 20px 20px 16px;
+}
+.reminder-review-content h2 {
+  margin: 0;
+  color: #172554;
+  font-size: clamp(26px, 5vw, 32px);
+  line-height: 1.18;
+  letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+}
+.reminder-review-time {
+  margin: 0 0 5px;
+  color: #49627f;
+  font-size: 14px;
+  font-weight: 700;
+}
+.reminder-review-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 1px 0 3px;
+}
+.reminder-review-details div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 9px;
+  border: 1px solid #d9e4f4;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+.reminder-review-details dd {
+  margin: 0;
+  overflow: hidden;
+  color: #31517d;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reminder-review-error {
+  margin: 0;
+  color: #fee2e2;
+  font-size: 13px;
+}
+.reminder-review-primary-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid #e7edf7;
+  background: #f8fbff;
+}
+.reminder-review-primary-actions button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+.reminder-action-complete {
+  color: #fff;
+  background: #2563eb;
+}
+.reminder-action-cancel {
+  color: #b4233b;
+  border-color: #f2c7d0 !important;
+  background: #fff5f6;
+}
+.reminder-action-hold {
+  color: #8a5a08;
+  background: #fff8df;
+}
+.reminder-review-primary-actions button:hover:not(:disabled) {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+.reminder-review-modal button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+@media (max-width: 520px) {
+  .reminder-review-backdrop {
+    padding: 14px;
+  }
+  .reminder-review-content {
+    padding: 18px 16px 14px;
+  }
+  .reminder-review-primary-actions {
+    padding: 10px;
+  }
+  .reminder-review-primary-actions button {
+    min-height: 40px;
+    font-size: 12px;
+  }
+}
 @keyframes modal-backdrop-in {
   from {
     opacity: 0;
@@ -2455,6 +2627,8 @@ textarea:focus-visible,
   align-items: center;
 }
 .ai-add-workspace .proposal-date-time {
+  display: inline-grid;
+  justify-items: end;
   color: #2563eb;
   font-size: 27px;
   font-weight: 800;
@@ -2462,6 +2636,13 @@ textarea:focus-visible,
   line-height: 1.28;
   text-align: right;
   white-space: nowrap;
+}
+.ai-add-workspace .proposal-date-time.different-day {
+  gap: 2px;
+}
+.ai-add-workspace .proposal-date-time-arrow {
+  justify-self: center;
+  line-height: 1;
 }
 .ai-add-workspace .proposal-card-topline,
 .ai-add-workspace .proposal-meta-grid {
@@ -2543,6 +2724,16 @@ textarea:focus-visible,
   }
   .ai-add-workspace .proposal-summary-row .button-row {
     grid-column: 1 / -1;
+  }
+  .ai-add-workspace .proposal-create-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-add-workspace .proposal-date-time {
+    justify-items: start;
+    text-align: left;
+  }
+  .ai-add-workspace .proposal-date-time-arrow {
+    justify-self: start;
   }
 }
 @media (prefers-reduced-motion: reduce) {

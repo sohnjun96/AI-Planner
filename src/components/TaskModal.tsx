@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 
 interface TaskModalProps {
@@ -27,7 +28,7 @@ export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false
 
   const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose: requestClose });
 
-  return (
+  return createPortal(
     <div
       className="modal-backdrop task-modal-backdrop"
       onClick={(event) => {
@@ -61,6 +62,7 @@ export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false
         </header>
         <div className="task-modal-body">{children}</div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

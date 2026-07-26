@@ -2,9 +2,13 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEve
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { DailyBriefing } from "../components/DailyBriefing";
-import { DayCompleteCelebration } from "../components/DayCompleteCelebration";
+import {
+  DAY_COMPLETE_CELEBRATION_DURATION_MS,
+  DayCompleteCelebration,
+} from "../components/DayCompleteCelebration";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
+import { ScheduleReminderModal } from "../components/ScheduleReminderModal";
 import { TaskForm, type TaskFormInteractionState } from "../components/TaskForm";
 import { TaskModal } from "../components/TaskModal";
 import { TaskViewSegmentedControl } from "../components/TaskViewSegmentedControl";
@@ -341,7 +345,12 @@ function summarizeTasks(tasks: Task[], conflictMap: Record<string, string[]>): C
       summary.conflicts += (conflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
       summary.major += task.isMajor ? 1 : 0;
       if (isTaskVisibleOnBoard(task)) {
-        summary.titles.push(task.title);
+        summary.titles.push({
+          id: task.id,
+          title: task.title,
+          startAt: task.startAt,
+          isMajor: task.isMajor,
+        });
       }
       return summary;
     },
@@ -473,6 +482,7 @@ export function DashboardPage() {
   const [memoSaved, setMemoSaved] = useState("");
   const [memoError, setMemoError] = useState("");
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
+  const [reminderReviewTaskId, setReminderReviewTaskId] = useState<string | null>(null);
   const [taskFormInteraction, setTaskFormInteraction] = useState<TaskFormInteractionState>({
     isDirty: false,
     isBusy: false,
@@ -513,7 +523,7 @@ export function DashboardPage() {
       celebrationTimerRef.current = window.setTimeout(() => {
         setCelebrationRevision(0);
         celebrationTimerRef.current = null;
-      }, 2800);
+      }, DAY_COMPLETE_CELEBRATION_DURATION_MS);
     }, 0);
   }, [tasks, todayKey]);
 
@@ -546,6 +556,7 @@ export function DashboardPage() {
       if (!task) {
         const nextParams = new URLSearchParams(searchParams);
         nextParams.delete("taskId");
+        nextParams.delete("review");
         setSearchParams(nextParams, { replace: true });
         return;
       }
@@ -559,7 +570,11 @@ export function DashboardPage() {
       if (!isValidDateKey(dateParam)) {
         setSelectedDate(getDateKey(task.startAt));
       }
-      setTaskModalState({ mode: "edit", taskId });
+      if (searchParams.get("review") === "1") {
+        setReminderReviewTaskId(taskId);
+      } else {
+        setTaskModalState({ mode: "edit", taskId });
+      }
     }, 250);
 
     return () => window.clearTimeout(timerId);
@@ -659,7 +674,12 @@ export function DashboardPage() {
       }
       // 월간 셀에는 미완료만 보이는 게 기본. "지난 완료 업무를 기본으로 표시"가 켜지면 완료도 보여준다
       if (isTaskVisibleOnBoard(task) || (setting.showPastCompleted && isTaskDone(task.status))) {
-        current.titles.push(task.title);
+        current.titles.push({
+          id: task.id,
+          title: task.title,
+          startAt: task.startAt,
+          isMajor: task.isMajor,
+        });
       }
       summaryMap[key] = current;
       return summaryMap;
@@ -706,6 +726,10 @@ export function DashboardPage() {
     }
     return tasks.find((task) => task.id === taskModalState.taskId);
   }, [taskModalState, tasks]);
+  const reminderReviewTask = useMemo(
+    () => (reminderReviewTaskId ? tasks.find((task) => task.id === reminderReviewTaskId) : undefined),
+    [reminderReviewTaskId, tasks],
+  );
   const contextTask = useMemo(() => {
     if (!contextMenu || contextMenu.kind !== "task") {
       return undefined;
@@ -724,6 +748,7 @@ export function DashboardPage() {
     if (searchParams.has("taskId")) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("taskId");
+      nextParams.delete("review");
       setSearchParams(nextParams, { replace: true });
     }
     if (returnDateKey) {
@@ -731,6 +756,37 @@ export function DashboardPage() {
         document.querySelector<HTMLButtonElement>(`[data-calendar-date="${returnDateKey}"]`)?.focus();
       });
     }
+  }
+
+  function closeReminderReview() {
+    setReminderReviewTaskId(null);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("taskId");
+    nextParams.delete("review");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function openReminderAiEdit() {
+    if (!reminderReviewTask) {
+      return;
+    }
+    const dateLabel = formatContextDateLabel(getDateKey(reminderReviewTask.startAt));
+    const timeLabel = formatTaskTime(reminderReviewTask, setting.timeFormat);
+    closeReminderReview();
+    openAiSchedule(
+      `다음 기존 일정을 수정해줘.\n- 날짜: ${dateLabel}\n- 시간: ${timeLabel}\n- 제목: ${reminderReviewTask.title}\n- 상태: ${STATUS_LABELS[reminderReviewTask.status]}\n\n수정 요청: `,
+    );
+  }
+
+  async function updateReminderTaskStatus(status: TaskStatus) {
+    if (!reminderReviewTask) {
+      return;
+    }
+    await updateTask(reminderReviewTask.id, {
+      ...toTaskInput(reminderReviewTask),
+      status,
+    });
+    closeReminderReview();
   }
 
   // 노트 탭에서 "일정 열기"로 넘어오면 해당 일정 수정창을 연다.
@@ -1549,6 +1605,18 @@ export function DashboardPage() {
             />
           ) : null}
         </TaskModal>
+      ) : null}
+
+      {reminderReviewTask ? (
+        <ScheduleReminderModal
+          task={reminderReviewTask}
+          project={projectMap[reminderReviewTask.projectId]}
+          taskType={typeMap[reminderReviewTask.taskTypeId]}
+          timeFormat={setting.timeFormat}
+          onStatusChange={updateReminderTaskStatus}
+          onAiEdit={openReminderAiEdit}
+          onClose={closeReminderReview}
+        />
       ) : null}
     </div>
   );

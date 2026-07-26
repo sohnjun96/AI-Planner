@@ -8,6 +8,7 @@ import {
   DEFAULT_LLM_REASONING_EFFORT,
   DEFAULT_LLM_TEMPERATURE,
   DEFAULT_NOTE_AI_ACTIONS,
+  DEFAULT_NOTIFY_BEFORE_MINUTES,
   LLM_DEFAULT_MODEL,
   MAX_AI_CONTEXT_MAX_LENGTH,
   MAX_LLM_TEMPERATURE,
@@ -154,7 +155,7 @@ const SETTINGS_TABS: Array<{ id: SettingsSection; label: string }> = [
   { id: "overview", label: "개요" },
   { id: "general", label: "기본·일정" },
   { id: "ai", label: "AI 설정" },
-  { id: "notify", label: "알림·백업" },
+  { id: "notify", label: "일정 호출·백업" },
   { id: "stats", label: "통계" },
 ];
 
@@ -725,7 +726,7 @@ export function SettingsPage() {
         <div>
           <p className="eyebrow">SETTINGS</p>
           <h2>설정</h2>
-          <p className="description-text">기본 환경과 일정 종류, AI, 알림·백업을 성격별로 모아 관리합니다.</p>
+          <p className="description-text">기본 환경과 일정 종류, AI, 일정 호출·백업을 성격별로 모아 관리합니다.</p>
         </div>
         <div className="settings-hero-actions">
           <div className="settings-json-export-control">
@@ -796,8 +797,8 @@ export function SettingsPage() {
             <small>노트 기능 {noteAiActionsDraft.length}개 · 맞춤 규칙 {userContextUsedLength}자</small>
           </button>
           <button type="button" className="settings-summary-card" onClick={() => selectSection("notify")}>
-            <span>알림·백업</span>
-            <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐"}</strong>
+            <span>일정 호출·백업</span>
+            <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES}분 전` : "꺼짐"}</strong>
             <small>{setting.autoBackupEnabled ? `자동 백업 ${autoBackups.length}개 보관` : "수동 백업"}</small>
           </button>
           <button type="button" className="settings-summary-card" onClick={() => selectSection("stats")}>
@@ -1290,7 +1291,7 @@ export function SettingsPage() {
           <header className="settings-card-header">
             <div>
               <p className="eyebrow">NOTIFY & BACKUP</p>
-              <h3>알림과 백업</h3>
+              <h3>일정 호출과 백업</h3>
             </div>
           </header>
 
@@ -1303,15 +1304,15 @@ export function SettingsPage() {
                   void updateSetting({ notificationsEnabled: event.target.checked });
                 }}
               />
-              일정 알림 사용
+              일정 시작 전 플래나이 창 표시
             </label>
 
             <label>
-              알림 사전 시간(분)
+              플래나이 표시 시간(분 전)
               <input
                 type="text"
                 inputMode="numeric"
-                value={String(setting.notifyBeforeMinutes ?? 30)}
+                value={String(setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES)}
                 onChange={(event) => {
                   const next = Number(event.target.value.replace(/[^0-9]/g, ""));
                   void updateSetting({ notifyBeforeMinutes: Number.isFinite(next) ? next : 0 });

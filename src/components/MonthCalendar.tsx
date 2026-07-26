@@ -13,6 +13,13 @@ export interface CalendarDayMarker {
   priority?: number;
 }
 
+export interface CalendarDayEvent {
+  id: string;
+  title: string;
+  startAt: string;
+  isMajor: boolean;
+}
+
 export interface CalendarDaySummary {
   total: number;
   done: number;
@@ -23,7 +30,7 @@ export interface CalendarDaySummary {
   major: number;
   lunch: number;
   markers: CalendarDayMarker[];
-  titles: string[];
+  titles: CalendarDayEvent[];
 }
 
 interface MonthCalendarProps {
@@ -98,6 +105,21 @@ function sortCalendarMarkers(markers: CalendarDayMarker[]): CalendarDayMarker[] 
       return priorityDiff;
     }
     return a.label.localeCompare(b.label, "ko");
+  });
+}
+
+function sortCalendarEvents(events: CalendarDayEvent[]): CalendarDayEvent[] {
+  return [...events].sort((a, b) => {
+    if (a.isMajor !== b.isMajor) {
+      return a.isMajor ? -1 : 1;
+    }
+
+    const startTimeDiff = a.startAt.localeCompare(b.startAt);
+    if (startTimeDiff !== 0) {
+      return startTimeDiff;
+    }
+
+    return a.title.localeCompare(b.title, "ko");
   });
 }
 
@@ -318,6 +340,7 @@ export function MonthCalendar({
           const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
           const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
           const markers = sortCalendarMarkers(summary.markers ?? []);
+          const events = sortCalendarEvents(summary.titles);
           const topMarkers = markers.filter((marker) => marker.tone !== "lunch");
           const lunchMarkers = markers.filter((marker) => marker.tone === "lunch");
           const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
@@ -325,7 +348,7 @@ export function MonthCalendar({
           const completionBase = Math.max(0, summary.total - summary.canceled);
           const completionRatio = completionBase > 0 ? Math.round((summary.done / completionBase) * 100) : 0;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-          const visibleTitleCount = summary.titles.length;
+          const visibleTitleCount = events.length;
           const hiddenTitleCount = Math.max(0, visibleTitleCount - 3);
 
           const ariaLabel = [
@@ -469,9 +492,9 @@ export function MonthCalendar({
                 </div>
 
                 <div className="calendar-event-stack">
-                  {summary.titles.slice(0, 3).map((title, index) => (
-                    <span key={`${key}-title-${index}`} className="calendar-event-line" title={title}>
-                      {title}
+                  {events.slice(0, 3).map((event) => (
+                    <span key={event.id} className="calendar-event-line" title={event.title}>
+                      {event.title}
                     </span>
                   ))}
                   {hiddenTitleCount > 0 ? <span className="calendar-event-more">+{hiddenTitleCount}</span> : null}

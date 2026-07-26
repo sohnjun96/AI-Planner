@@ -19,7 +19,6 @@ import { isAbortError } from "../agent/agentUtils";
 import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import type { Task, TaskFormInput, TaskStatus } from "../models";
-import { formatDateTime } from "../utils/date";
 
 interface AiAssistantWorkspaceProps {
   compact?: boolean;
@@ -44,17 +43,6 @@ interface AiAssistantWorkspaceProps {
 }
 
 type EndpointStatus = "checking" | "ok" | "error";
-
-const FIELD_LABELS: Record<string, string> = {
-  title: "제목",
-  content: "내용",
-  taskTypeId: "종류",
-  projectId: "프로젝트",
-  status: "상태",
-  startAt: "시작",
-  endAt: "종료",
-  isMajor: "중요",
-};
 
 function isTaskStatus(value: unknown): value is TaskStatus {
   return value === "NOT_DONE" || value === "ON_HOLD" || value === "DONE" || value === "CANCELED";
@@ -152,38 +140,40 @@ async function probeEndpoint(
   }
 }
 
-function describeChangeValue(key: string, value: unknown, timeFormat: "24h" | "12h"): string {
-  if (value === null || value === undefined || value === "") {
-    return "비움";
-  }
-  if ((key === "startAt" || key === "endAt") && typeof value === "string" && isValidIsoDate(value)) {
-    return formatDateTime(value, timeFormat);
-  }
-  if (key === "status" && isTaskStatus(value)) {
-    return STATUS_LABELS[value];
-  }
-  if (typeof value === "boolean") {
-    return value ? "예" : "아니오";
-  }
-  return String(value);
+function formatProposalDate(date: Date): string {
+  const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
+  return `${date.getMonth() + 1}/${date.getDate()}(${weekday}) ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-function formatProposalDateTime(startAt: string, endAt?: string): string {
+function formatProposalTime(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function ProposalDateTime({ startAt, endAt }: { startAt: string; endAt?: string }) {
   const start = new Date(startAt);
   if (Number.isNaN(start.getTime())) {
-    return startAt;
+    return <span className="proposal-date-time">{startAt}</span>;
   }
-  const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(start);
-  const formatTime = (value: Date) => `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
-  const startText = `${start.getMonth() + 1}/${start.getDate()}(${weekday}) ${formatTime(start)}`;
-  if (!endAt) return startText;
+  if (!endAt) {
+    return <span className="proposal-date-time">{formatProposalDate(start)}</span>;
+  }
 
   const end = new Date(endAt);
-  if (Number.isNaN(end.getTime())) return startText;
+  if (Number.isNaN(end.getTime())) {
+    return <span className="proposal-date-time">{formatProposalDate(start)}</span>;
+  }
   const isSameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
-  return isSameDay
-    ? `${startText}–${formatTime(end)}`
-    : `${startText} – ${end.getMonth() + 1}/${end.getDate()}(${new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(end)}) ${formatTime(end)}`;
+  if (isSameDay) {
+    return <span className="proposal-date-time same-day">{formatProposalTime(start)} → {formatProposalTime(end)}</span>;
+  }
+
+  return (
+    <span className="proposal-date-time different-day">
+      <span>{formatProposalDate(start)}</span>
+      <span className="proposal-date-time-arrow" aria-hidden="true">→</span>
+      <span>{formatProposalDate(end)}</span>
+    </span>
+  );
 }
 
 function focusTextareaAtEnd(textarea: HTMLTextAreaElement | null, value?: string) {
@@ -738,7 +728,7 @@ export function AiAssistantWorkspace({
                 </span>
                 {operation.content ? <small>{operation.content}</small> : null}
               </span>
-              <span className="proposal-date-time">{formatProposalDateTime(operation.startAt, operation.endAt)}</span>
+              <ProposalDateTime startAt={operation.startAt} endAt={operation.endAt} />
             </span>
           </label>
         </li>
@@ -746,21 +736,41 @@ export function AiAssistantWorkspace({
     }
 
     if (operation.action === "update_task") {
-      const taskTitle = taskMap[operation.taskId]?.title ?? operation.taskId;
-      const changeText = Object.entries(operation.changes)
-        .map(([key, value]) => `${FIELD_LABELS[key] ?? key}: ${describeChangeValue(key, value, setting.timeFormat)}`)
-        .join(" · ");
+      const target = taskMap[operation.taskId];
+      const nextTitle = typeof operation.changes.title === "string" ? operation.changes.title : target?.title ?? operation.taskId;
+      const nextStatus = isTaskStatus(operation.changes.status) ? operation.changes.status : target?.status ?? "NOT_DONE";
+      const nextProjectId = typeof operation.changes.projectId === "string" ? operation.changes.projectId : target?.projectId;
+      const nextTaskTypeId = typeof operation.changes.taskTypeId === "string" ? operation.changes.taskTypeId : target?.taskTypeId;
+      const nextStartAt = typeof operation.changes.startAt === "string" ? operation.changes.startAt : target?.startAt;
+      const nextEndAt = Object.hasOwn(operation.changes, "endAt") ? operation.changes.endAt ?? undefined : target?.endAt;
+      const nextIsMajor = typeof operation.changes.isMajor === "boolean" ? operation.changes.isMajor : target?.isMajor ?? false;
+      const nextContent = typeof operation.changes.content === "string" ? operation.changes.content : undefined;
+      const projectName = nextProjectId ? projectMap[nextProjectId]?.name ?? nextProjectId : "프로젝트 없음";
+      const taskTypeName = nextTaskTypeId ? taskTypeMap[nextTaskTypeId]?.name ?? nextTaskTypeId : "종류 없음";
       return (
         <li key={`proposal-${index}`} className={`proposal-card ${actionMeta.tone} ${isSelected ? "selected" : ""}`}>
           <label className="proposal-item-toggle">
             <input type="checkbox" checked={isSelected} onChange={(event) => toggleSelection(event.target.checked)} />
             <span className="proposal-checkmark" aria-hidden="true" />
-            <span className="proposal-card-body">
-              <span className="proposal-card-topline">
-                <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+            <span className="proposal-card-body proposal-create-body">
+              <span className="proposal-create-details">
+                <span className="proposal-create-primary">
+                  <span className={`proposal-action-pill ${actionMeta.tone}`}>{actionMeta.label}</span>
+                  <span className="proposal-title-line">
+                    <strong>{nextTitle}</strong>
+                  </span>
+                  {nextIsMajor ? <span className="major-tag">중요</span> : null}
+                </span>
+                <span className="proposal-create-secondary">
+                  <span className={`status-badge ${nextStatus.toLowerCase()}`}>{STATUS_LABELS[nextStatus]}</span>
+                  <span className="proposal-meta-grid">
+                    <span>{projectName}</span>
+                    <span>{taskTypeName}</span>
+                  </span>
+                </span>
+                {nextContent ? <small>{nextContent}</small> : null}
               </span>
-              <strong>{taskTitle}</strong>
-              <small>{changeText || "변경 필드 없음"}</small>
+              {nextStartAt ? <ProposalDateTime startAt={nextStartAt} endAt={nextEndAt} /> : null}
             </span>
           </label>
         </li>

@@ -105,7 +105,6 @@ function buildDefaultState(projects: Project[], taskTypes: TaskType[], defaultSt
   const startDate = defaultStartDate && defaultStartDate !== todayKey ? defaultStartDate : getDateKey(roundedStart);
   const [year, month, day] = startDate.split("-").map(Number);
   const normalizedStart = new Date(year, month - 1, day, roundedStart.getHours(), roundedStart.getMinutes(), 0, 0);
-  const defaultEnd = new Date(normalizedStart.getTime() + 60 * 60 * 1000);
 
   return {
     title: "",
@@ -115,8 +114,8 @@ function buildDefaultState(projects: Project[], taskTypes: TaskType[], defaultSt
     status: "NOT_DONE",
     startDate: getDateKey(normalizedStart),
     startTime: toLocalTimeInputValue(normalizedStart.toISOString()),
-    endDate: getDateKey(defaultEnd),
-    endTime: toLocalTimeInputValue(defaultEnd.toISOString()),
+    endDate: "",
+    endTime: "",
     isMajor: false,
     recurrencePattern: "NONE",
     recurrenceCount: "1",
