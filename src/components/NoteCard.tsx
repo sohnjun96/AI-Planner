@@ -1,4 +1,4 @@
-import { type CSSProperties, type DragEvent, type MouseEvent } from "react";
+import { useRef, type CSSProperties, type DragEvent, type MouseEvent } from "react";
 import type { Note, Project } from "../models";
 
 interface NoteCardProps {
@@ -39,6 +39,12 @@ export function NoteCard({
   onDrop,
   onDragEnd,
 }: NoteCardProps) {
+  const openButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  function isInteractiveTarget(target: EventTarget | null): boolean {
+    return target instanceof Element && Boolean(target.closest("button, input, select, textarea, a[href], [role='button']"));
+  }
+
   function handleCheckClick(event: MouseEvent<HTMLInputElement>) {
     event.stopPropagation();
   }
@@ -69,20 +75,21 @@ export function NoteCard({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onClick={onSelect}
-      onDoubleClick={onOpenForEdit}
+      onClick={(event) => {
+        if (!isInteractiveTarget(event.target)) {
+          onSelect();
+        }
+      }}
+      onDoubleClick={(event) => {
+        if (!isInteractiveTarget(event.target)) {
+          onOpenForEdit();
+        }
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
+        openButtonRef.current?.focus();
         onOpenMenu({ x: event.clientX, y: event.clientY });
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect();
-        }
       }}
     >
       <div className="note-card-top">
@@ -96,8 +103,33 @@ export function NoteCard({
           aria-label={`${note.title} 선택`}
         />
         <h3 className="note-card-title">
-          {note.isPinned ? <span aria-label="고정됨">📌 </span> : null}
-          {note.title}
+          <button
+            ref={openButtonRef}
+            type="button"
+            aria-label={`${note.title} 노트 선택`}
+            aria-current={isSelected ? "true" : undefined}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect();
+            }}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              onOpenForEdit();
+            }}
+            style={{
+              border: 0,
+              margin: 0,
+              padding: 0,
+              background: "transparent",
+              color: "inherit",
+              font: "inherit",
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+          >
+            {note.isPinned ? <span aria-label="고정됨">📌 </span> : null}
+            {note.title}
+          </button>
         </h3>
         <button
           type="button"
@@ -110,7 +142,6 @@ export function NoteCard({
           ⋯
         </button>
       </div>
-
     </article>
   );
 }

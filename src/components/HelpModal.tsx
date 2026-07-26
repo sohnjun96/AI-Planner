@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 interface HelpModalProps {
   onClose: () => void;
@@ -39,23 +39,17 @@ const GROUPS: ShortcutGroup[] = [
 ];
 
 export function HelpModal({ onClose }: HelpModalProps) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose });
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="modal-card help-modal-card"
         role="dialog"
         aria-modal="true"
         aria-label="단축키와 사용법"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="panel-header">

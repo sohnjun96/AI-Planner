@@ -74,7 +74,7 @@ scripts/
 ```
 
 ## 6) Future Extensions
-- deadline alerts (`chrome.alarms`, `notifications`)
+- deadline wake-up (`chrome.alarms`, `tabs`, `windows`)
 - recurring tasks (weekly/monthly)
 - dashboard analytics (completion rate, project/type distribution)
 - CSV export and sync support

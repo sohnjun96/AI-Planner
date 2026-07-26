@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isAbortError } from "../agent/agentUtils";
+import { generationOptionsFromSetting } from "../agent/llmClient";
 import { runBriefing, type BriefingNote, type BriefingTask } from "../agent/briefingAgent";
 import { DEFAULT_PROJECT_ID, STATUS_LABELS } from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 import { formatDateTime, getDateKey, toIsoNow } from "../utils/date";
 import { isTaskCanceled, isTaskDone } from "../utils/taskStatus";
@@ -34,25 +36,13 @@ export function DailyBriefing() {
     abortRef.current?.abort();
     setIsOpen(false);
   }, []);
+  const dialogRef = useDialogFocus<HTMLElement>({ isOpen, onClose: closeModal });
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeModal();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, closeModal]);
 
   function buildContext() {
     const projectMap = Object.fromEntries(projects.map((project) => [project.id, project]));
@@ -141,6 +131,7 @@ export function DailyBriefing() {
         endpoint: setting.llmEndpoint,
         apiKey: setting.llmApiKey ?? "",
         model: setting.llmModel,
+        generationOptions: generationOptionsFromSetting(setting),
         signal: controller.signal,
         onToken: (delta) => setBriefing((prev) => prev + delta),
       });
@@ -197,10 +188,12 @@ export function DailyBriefing() {
       {isOpen ? (
         <div className="modal-backdrop" onClick={closeModal}>
           <section
+            ref={dialogRef}
             className="modal-card briefing-modal-card"
             role="dialog"
             aria-modal="true"
             aria-label="AI 아침 브리핑"
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <header className="panel-header">
@@ -229,7 +222,7 @@ export function DailyBriefing() {
               ) : error ? null : (
                 <p className="empty-text">브리핑을 생성하려면 아래 버튼을 눌러 주세요.</p>
               )}
-              {error ? <p className="error-text">{error}</p> : null}
+              {error ? <p className="error-text" role="alert">{error}</p> : null}
             </div>
 
             <div className="button-row">

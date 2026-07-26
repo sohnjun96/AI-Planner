@@ -122,6 +122,8 @@ export interface NoteAiAction {
   prompt: string;
 }
 
+export type LlmReasoningEffort = "default" | "none" | "low" | "medium" | "high";
+
 export interface AppSetting {
   id: string;
   showPastCompleted: boolean;
@@ -130,12 +132,17 @@ export interface AppSetting {
   llmEndpoint?: string;
   llmApiKey?: string;
   llmModel?: string;
+  llmTemperature?: number;
+  llmReasoningEffort?: LlmReasoningEffort;
+  llmGemmaThinkingEnabled?: boolean;
   notificationsEnabled?: boolean;
   notifyBeforeMinutes?: number;
   autoBackupEnabled?: boolean;
   autoBackupIntervalMinutes?: number;
   aiContextMaxLength?: number;
   noteAiActions?: NoteAiAction[];
+  noteTaskSuggestionsEnabled?: boolean;
+  relatedNoteSuggestionsEnabled?: boolean;
   updatedAt: string;
 }
 

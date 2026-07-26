@@ -1,9 +1,71 @@
-import { DEFAULT_LLM_CHAT_COMPLETIONS_URL, LLM_DEFAULT_MODEL } from "../constants";
+import {
+  clampLlmTemperature,
+  DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  LLM_DEFAULT_MODEL,
+  normalizeLlmGemmaThinkingEnabled,
+  normalizeLlmReasoningEffort,
+} from "../constants";
+import type { AppSetting, LlmReasoningEffort } from "../models";
 import { estimateTokensFromChars, recordAiUsage } from "../utils/aiUsage";
 
 export interface LlmChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
+}
+
+export interface LlmGenerationOptions {
+  temperature?: number;
+  reasoningEffort?: LlmReasoningEffort;
+  gemmaThinkingEnabled?: boolean;
+}
+
+export interface BuildLlmChatRequestBodyParams {
+  messages: LlmChatMessage[];
+  model?: string;
+  stream?: boolean;
+  generationOptions?: LlmGenerationOptions;
+}
+
+export function generationOptionsFromSetting(setting?: AppSetting): LlmGenerationOptions {
+  return {
+    temperature: clampLlmTemperature(setting?.llmTemperature),
+    reasoningEffort: normalizeLlmReasoningEffort(setting?.llmReasoningEffort),
+    gemmaThinkingEnabled: normalizeLlmGemmaThinkingEnabled(setting?.llmGemmaThinkingEnabled),
+  };
+}
+
+export function isGemma4ThinkingModel(model?: string): boolean {
+  const normalized = model?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
+  return (
+    normalized.includes("gemma4") &&
+    normalized.includes("26b") &&
+    (normalized.includes("a4b") || normalized.includes("moe"))
+  );
+}
+
+export function buildLlmChatRequestBody(params: BuildLlmChatRequestBodyParams): Record<string, unknown> {
+  const model = params.model?.trim() || LLM_DEFAULT_MODEL;
+  const body: Record<string, unknown> = {
+    model,
+    messages: params.messages,
+    stream: params.stream ?? false,
+    temperature: clampLlmTemperature(params.generationOptions?.temperature),
+  };
+
+  const reasoningEffort = normalizeLlmReasoningEffort(params.generationOptions?.reasoningEffort);
+  if (reasoningEffort !== "default") {
+    body.reasoning_effort = reasoningEffort;
+  }
+
+  if (isGemma4ThinkingModel(model)) {
+    const enableThinking = normalizeLlmGemmaThinkingEnabled(params.generationOptions?.gemmaThinkingEnabled);
+    body.chat_template_kwargs = { enable_thinking: enableThinking };
+    if (enableThinking) {
+      body.skip_special_tokens = false;
+    }
+  }
+
+  return body;
 }
 
 interface LlmChatResponse {
@@ -105,6 +167,7 @@ export async function requestLlmResponse(params: {
   apiKey: string;
   endpoint?: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   onToken?: (delta: string) => void;
   /** 요청 취소용. 모달을 닫거나 새 요청을 보낼 때 이전 fetch를 중단한다. */
   signal?: AbortSignal;
@@ -123,12 +186,14 @@ export async function requestLlmResponse(params: {
     method: "POST",
     headers,
     signal: params.signal,
-    body: JSON.stringify({
-      model: params.model?.trim() || LLM_DEFAULT_MODEL,
-      messages: params.messages,
-      stream: useStream,
-      temperature: 0,
-    }),
+    body: JSON.stringify(
+      buildLlmChatRequestBody({
+        model: params.model,
+        messages: params.messages,
+        stream: useStream,
+        generationOptions: params.generationOptions,
+      }),
+    ),
   });
 
   if (!response.ok) {

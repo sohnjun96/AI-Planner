@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ColorSelector } from "../components/ColorSelector";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
-import { TaskForm } from "../components/TaskForm";
+import { TaskForm, type TaskFormInteractionState } from "../components/TaskForm";
 import { TaskItem } from "../components/TaskItem";
+import { TaskModal } from "../components/TaskModal";
 import { DEFAULT_PROJECT_IDS, STATUS_LABELS, pickRandomPresetColor } from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 import type { Project, ProjectSubcategory, Task, TaskFormInput, TaskStatus } from "../models";
 import { addDays, compareByStartAtAsc, formatDateTime, getDateKey } from "../utils/date";
 import { compareProjects } from "../utils/projectOrder";
@@ -56,8 +58,6 @@ interface ProjectContextMenuState {
   taskId: string;
 }
 
-const PROJECT_FORM_AUTOSAVE_DELAY_MS = 700;
-
 function createEmptyProjectForm(): ProjectFormState {
   return {
     id: undefined,
@@ -97,16 +97,6 @@ function buildProjectInput(form: ProjectFormState): { input?: ProjectInput; erro
       isActive: form.isActive,
     },
   };
-}
-
-function serializeProjectInput(input: ProjectInput): string {
-  return JSON.stringify({
-    id: input.id ?? "",
-    name: input.name.trim(),
-    color: input.color,
-    description: input.description?.trim() ?? "",
-    isActive: input.isActive,
-  });
 }
 
 function toTaskInput(task: Task, statusOverride?: TaskStatus, projectIdOverride?: string): TaskFormInput {
@@ -239,6 +229,8 @@ interface ProjectEditorPanelProps {
   onRenameSubcategory: (id: string, name: string) => Promise<void>;
   onDeleteSubcategory: (id: string) => Promise<void>;
   onClose: () => void;
+  onCommitClose: () => void;
+  onStateChange: (state: TaskFormInteractionState) => void;
 }
 
 function ProjectEditorPanel({
@@ -251,22 +243,24 @@ function ProjectEditorPanel({
   onRenameSubcategory,
   onDeleteSubcategory,
   onClose,
+  onCommitClose,
+  onStateChange,
 }: ProjectEditorPanelProps) {
   const [form, setForm] = useState<ProjectFormState>(() => {
     return createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject);
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const autoSaveSnapshotRef = useRef(
-    (() => {
-      const built = buildProjectInput(form);
-      return built.input ? serializeProjectInput(built.input) : "";
-    })(),
-  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const initialFormSnapshotRef = useRef(JSON.stringify(form));
+  const isDirty = JSON.stringify(form) !== initialFormSnapshotRef.current;
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
-      setForm(createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject));
+      const nextForm = createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject);
+      initialFormSnapshotRef.current = JSON.stringify(nextForm);
+      setForm(nextForm);
       setError("");
       setSuccess("");
     }, 0);
@@ -276,37 +270,8 @@ function ProjectEditorPanel({
   }, [createMode, initialProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (createMode || !form.id) {
-      autoSaveSnapshotRef.current = "";
-      return;
-    }
-
-    const built = buildProjectInput(form);
-    if (!built.input) {
-      return;
-    }
-
-    const snapshot = serializeProjectInput(built.input);
-    if (snapshot === autoSaveSnapshotRef.current) {
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      void onSaveProject(built.input as ProjectInput)
-        .then(() => {
-          autoSaveSnapshotRef.current = snapshot;
-          setError("");
-          setSuccess("자동 저장됨.");
-        })
-        .catch((saveError) => {
-          setError(saveError instanceof Error ? saveError.message : "프로젝트 저장에 실패했습니다.");
-        });
-    }, PROJECT_FORM_AUTOSAVE_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [createMode, form, onSaveProject]);
+    onStateChange({ isDirty, isBusy: isSubmitting });
+  }, [isDirty, isSubmitting, onStateChange]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -316,16 +281,19 @@ function ProjectEditorPanel({
     const built = buildProjectInput(form);
     if (!built.input) {
       setError(built.error ?? "프로젝트 입력값이 올바르지 않습니다.");
+      formRef.current?.querySelector<HTMLInputElement>('input[name="projectName"]')?.focus();
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await onSaveProject(built.input);
-      autoSaveSnapshotRef.current = serializeProjectInput(built.input);
       setSuccess(form.id ? "저장됨." : "프로젝트가 생성되었습니다.");
-      onClose();
+      onCommitClose();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "프로젝트 저장에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -336,12 +304,15 @@ function ProjectEditorPanel({
 
     setError("");
     setSuccess("");
+    setIsSubmitting(true);
     try {
       await onDeleteProject(form.id);
       setSuccess("프로젝트가 삭제되었습니다.");
-      onClose();
+      onCommitClose();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "프로젝트 삭제에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -349,16 +320,24 @@ function ProjectEditorPanel({
     <section className="modal-card panel project-settings-card" role="dialog" aria-modal="true" aria-label="프로젝트 설정">
       <header className="panel-header">
         <h2>{createMode ? "새 프로젝트" : "프로젝트 설정"}</h2>
-        <button className="btn btn-soft" type="button" onClick={onClose}>
-          닫기
+        <button className="btn btn-soft" type="button" onClick={onClose} disabled={isSubmitting}>
+          {isSubmitting ? "저장 중…" : "닫기"}
         </button>
       </header>
 
-      <form className="task-form" onSubmit={handleSubmit}>
+      <form
+        ref={formRef}
+        className="task-form"
+        onSubmit={handleSubmit}
+        aria-busy={isSubmitting}
+        data-project-form-dirty={isDirty ? "true" : "false"}
+        noValidate
+      >
         <label>
           프로젝트명
           <input
             type="text"
+            name="projectName"
             value={form.name}
             onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
             required
@@ -401,8 +380,8 @@ function ProjectEditorPanel({
         )}
 
         <div className="button-row">
-          <button className="btn btn-primary" type="submit">
-            {form.id ? "저장" : "생성"}
+          <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "저장 중…" : form.id ? "변경사항 저장" : "프로젝트 생성"}
           </button>
 
           {form.id ? (
@@ -412,7 +391,7 @@ function ProjectEditorPanel({
               onClick={() => {
                 void handleDelete();
               }}
-              disabled={DEFAULT_PROJECT_IDS.includes(form.id)}
+              disabled={isSubmitting || DEFAULT_PROJECT_IDS.includes(form.id)}
             >
               삭제
             </button>
@@ -449,7 +428,15 @@ export function ProjectsPage() {
   const [selectedTaskTypeIds, setSelectedTaskTypeIds] = useState<string[]>([]);
   const [overviewFilter, setOverviewFilter] = useState<ProjectOverviewFilter>("active");
   const [taskModalState, setTaskModalState] = useState<ProjectTaskModalState>(null);
+  const [taskFormInteraction, setTaskFormInteraction] = useState<TaskFormInteractionState>({
+    isDirty: false,
+    isBusy: false,
+  });
   const [projectSettingsModal, setProjectSettingsModal] = useState<ProjectSettingsModalState>(null);
+  const [projectFormInteraction, setProjectFormInteraction] = useState<TaskFormInteractionState>({
+    isDirty: false,
+    isBusy: false,
+  });
   const [contextMenu, setContextMenu] = useState<ProjectContextMenuState | null>(null);
   const [taskFormSerial, setTaskFormSerial] = useState(0);
 
@@ -608,24 +595,36 @@ export function ProjectsPage() {
     }
     return projects.find((project) => project.id === projectSettingsModal.projectId);
   }, [projectSettingsModal, projects]);
+  const projectSettingsDialogRef = useDialogFocus<HTMLDivElement>({
+    isOpen: Boolean(projectSettingsModal),
+    onClose: closeProjectSettings,
+  });
 
-  useEffect(() => {
-    if (!activeTaskModalState && !projectSettingsModal) {
+  function finishProjectSettings() {
+    setProjectSettingsModal(null);
+    setProjectFormInteraction({ isDirty: false, isBusy: false });
+  }
+
+  function closeProjectSettings() {
+    const activeForm = document.querySelector<HTMLFormElement>(".project-settings-card form");
+    const formIsBusy = activeForm?.getAttribute("aria-busy") === "true";
+    const formIsDirty = activeForm?.dataset.projectFormDirty === "true";
+    if (projectFormInteraction.isBusy || formIsBusy) {
       return;
     }
+    if (
+      (projectFormInteraction.isDirty || formIsDirty) &&
+      !window.confirm("저장하지 않은 프로젝트 변경사항이 있습니다. 닫을까요?")
+    ) {
+      return;
+    }
+    finishProjectSettings();
+  }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setTaskModalState(null);
-        setProjectSettingsModal(null);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeTaskModalState, projectSettingsModal]);
+  function closeTaskModal() {
+    setTaskModalState(null);
+    setTaskFormInteraction({ isDirty: false, isBusy: false });
+  }
 
   async function handleCreateProjectTask(input: TaskFormInput) {
     if (!selectedProject) {
@@ -636,11 +635,20 @@ export function ProjectsPage() {
       ...input,
       projectId: selectedProject.id,
     });
-    setTaskModalState(null);
+    closeTaskModal();
     setTaskFormSerial((prev) => prev + 1);
   }
 
   async function handleUpdateProjectTask(input: TaskFormInput) {
+    if (!editingTask) {
+      return;
+    }
+
+    await updateTask(editingTask.id, input);
+    closeTaskModal();
+  }
+
+  async function handleAutoSaveProjectTask(input: TaskFormInput) {
     if (!editingTask) {
       return;
     }
@@ -654,7 +662,7 @@ export function ProjectsPage() {
     }
 
     await removeTask(editingTask.id);
-    setTaskModalState(null);
+    closeTaskModal();
   }
 
   function changeTaskStatus(task: Task, status: TaskStatus) {
@@ -972,7 +980,38 @@ export function ProjectsPage() {
             </div>
 
             <div className="task-stack">
-              {projectTasks.length === 0 ? <p className="empty-text">조건에 맞는 프로젝트 일정이 없습니다.</p> : null}
+              {(projectStats[selectedProject.id]?.total ?? 0) === 0 ? (
+                <div className="empty-state project-task-empty-state">
+                  <h3>아직 프로젝트 일정이 없습니다.</h3>
+                  <p>첫 일정을 추가해 이 프로젝트의 다음 단계를 정해 보세요.</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      setTaskFormSerial((prev) => prev + 1);
+                      setTaskModalState({ mode: "create" });
+                    }}
+                  >
+                    첫 일정 추가
+                  </button>
+                </div>
+              ) : projectTasks.length === 0 ? (
+                <div className="empty-state project-task-filter-empty-state">
+                  <h3>현재 필터에 맞는 일정이 없습니다.</h3>
+                  <p>검색어나 상태·종류 필터를 바꾸면 다른 일정을 확인할 수 있어요.</p>
+                  <button
+                    type="button"
+                    className="btn btn-soft"
+                    onClick={() => {
+                      setTaskKeyword("");
+                      setSelectedTaskTypeIds([]);
+                      setOverviewFilter("all");
+                    }}
+                  >
+                    필터 초기화
+                  </button>
+                </div>
+              ) : null}
               {projectTasks.map((task) => (
                 <TaskItem
                   key={task.id}
@@ -999,7 +1038,7 @@ export function ProjectsPage() {
       </section>
 
       {projectSettingsModal ? (
-        <div className="modal-backdrop" onClick={() => setProjectSettingsModal(null)}>
+        <div ref={projectSettingsDialogRef} className="modal-backdrop" onClick={closeProjectSettings}>
           <div onClick={(event) => event.stopPropagation()}>
             <ProjectEditorPanel
               key={projectSettingsModal.mode === "create" ? "new-project" : editingProject?.id ?? "project"}
@@ -1017,57 +1056,51 @@ export function ProjectsPage() {
               }}
               onRenameSubcategory={renameSubcategory}
               onDeleteSubcategory={deleteSubcategory}
-              onClose={() => setProjectSettingsModal(null)}
+              onClose={closeProjectSettings}
+              onCommitClose={finishProjectSettings}
+              onStateChange={setProjectFormInteraction}
             />
           </div>
         </div>
       ) : null}
 
       {activeTaskModalState ? (
-        <div className="modal-backdrop" onClick={() => setTaskModalState(null)}>
-          <section
-            className="modal-card panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="프로젝트 일정 대화상자"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            <header className="panel-header">
-              <h2>{activeTaskModalState.mode === "create" ? "프로젝트 일정 추가" : "프로젝트 일정 수정"}</h2>
-              <button type="button" className="btn btn-soft" onClick={() => setTaskModalState(null)}>
-                닫기
-              </button>
-            </header>
+        <TaskModal
+          title={activeTaskModalState.mode === "create" ? "프로젝트 일정 추가" : "프로젝트 일정 수정"}
+          onCancel={closeTaskModal}
+          hasUnsavedChanges={taskFormInteraction.isDirty}
+          isBusy={taskFormInteraction.isBusy}
+        >
+          {activeTaskModalState.mode === "create" && selectedProject ? (
+            <TaskForm
+              key={`project-task-new-${selectedProject.id}-${taskFormSerial}`}
+              projects={projects}
+              taskTypes={taskTypes}
+              allTasks={tasks}
+              fixedProjectId={selectedProject.id}
+              timeFormat={setting.timeFormat}
+              onSubmit={handleCreateProjectTask}
+              onCancel={closeTaskModal}
+              onStateChange={setTaskFormInteraction}
+            />
+          ) : null}
 
-            {activeTaskModalState.mode === "create" && selectedProject ? (
-              <TaskForm
-                key={`project-task-new-${selectedProject.id}-${taskFormSerial}`}
-                projects={projects}
-                taskTypes={taskTypes}
-                allTasks={tasks}
-                fixedProjectId={selectedProject.id}
-                timeFormat={setting.timeFormat}
-                onSubmit={handleCreateProjectTask}
-              />
-            ) : null}
-
-            {activeTaskModalState.mode === "edit" && editingTask && selectedProject ? (
-              <TaskForm
-                key={`project-task-edit-${editingTask.id}`}
-                projects={projects}
-                taskTypes={taskTypes}
-                allTasks={tasks}
-                initialTask={editingTask}
-                timeFormat={setting.timeFormat}
-                onSubmit={handleUpdateProjectTask}
-                onDelete={handleDeleteProjectTask}
-                onCancel={() => setTaskModalState(null)}
-              />
-            ) : null}
-          </section>
-        </div>
+          {activeTaskModalState.mode === "edit" && editingTask && selectedProject ? (
+            <TaskForm
+              key={`project-task-edit-${editingTask.id}`}
+              projects={projects}
+              taskTypes={taskTypes}
+              allTasks={tasks}
+              initialTask={editingTask}
+              timeFormat={setting.timeFormat}
+              onSubmit={handleUpdateProjectTask}
+              onAutoSave={handleAutoSaveProjectTask}
+              onDelete={handleDeleteProjectTask}
+              onCancel={closeTaskModal}
+              onStateChange={setTaskFormInteraction}
+            />
+          ) : null}
+        </TaskModal>
       ) : null}
 
       {contextMenu ? (

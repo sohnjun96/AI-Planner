@@ -14,6 +14,7 @@ export function TaskViewSegmentedControl({ value, onChange, ariaLabel = "일정 
           key={mode.value}
           type="button"
           className={value === mode.value ? "active" : ""}
+          aria-pressed={value === mode.value}
           onClick={() => onChange(mode.value)}
         >
           {mode.label}

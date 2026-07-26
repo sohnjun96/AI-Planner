@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 interface NoteQuickAddModalProps {
   onCreate: (content: string) => Promise<void>;
@@ -9,16 +10,7 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
   const [content, setContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose });
 
   async function handleSubmit() {
     if (isSaving) {
@@ -41,10 +33,12 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="modal-card note-quick-add-card"
         role="dialog"
         aria-modal="true"
         aria-label="노트 추가"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="panel-header">
@@ -59,11 +53,11 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
 
         <textarea
           className="note-quick-content"
+          data-dialog-initial-focus
           value={content}
           onChange={(event) => setContent(event.target.value)}
           placeholder="내용을 입력하세요. 마크다운을 지원합니다. (Ctrl+Enter로 저장)"
           rows={8}
-          autoFocus
           onKeyDown={(event) => {
             if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
               event.preventDefault();
@@ -72,7 +66,7 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
           }}
         />
 
-        {error ? <p className="error-text">{error}</p> : null}
+        {error ? <p className="error-text" role="alert">{error}</p> : null}
 
         <div className="button-row">
           <button type="button" className="btn btn-primary" onClick={() => void handleSubmit()} disabled={isSaving}>

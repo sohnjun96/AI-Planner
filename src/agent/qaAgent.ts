@@ -19,6 +19,7 @@ import {
   pickToolCallsValue,
   requestJsonWithRetry,
   type LlmChatMessage,
+  type LlmGenerationOptions,
 } from "./agentUtils";
 
 type QaToolName = "search_notes" | "get_note" | "search_tasks" | "get_task";
@@ -50,6 +51,7 @@ export interface RunQaInput {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   onProgress?: (info: QaProgress) => void;
   signal?: AbortSignal;
 }
@@ -197,6 +199,7 @@ export async function runQaAgent(input: RunQaInput): Promise<QaResult> {
       endpoint: input.endpoint,
       apiKey: input.apiKey,
       model: input.model,
+      generationOptions: input.generationOptions,
       signal: input.signal,
       onToken: input.onProgress
         ? (delta) => {

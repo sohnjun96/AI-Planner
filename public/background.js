@@ -1,9 +1,6 @@
-﻿const ALARM_PAYLOAD_KEY = "schedule_alarm_payload_v1";
+const ALARM_PAYLOAD_KEY = "schedule_alarm_payload_v1";
 const TASK_ALARM_PREFIX = "task-reminder:";
 const MAX_SCHEDULED_ALARMS = 500;
-
-const NOTIFICATION_ICON =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAQAAAAAYLlVAAAA7ElEQVR4Ae3XQQrCMBAF0f3/p+uKkYwGQkWkiL0S8h0S2M8w0x4J5Xk5nB6r0s6m7hYJm8+9nKk5c4REREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREZ3YB8R3pT2s7+SQAAAABJRU5ErkJggg==";
 
 function readAlarmPayload(callback) {
   chrome.storage.local.get([ALARM_PAYLOAD_KEY], (items) => {
@@ -32,7 +29,7 @@ function normalizePayload(payload) {
   return {
     settings: {
       notificationsEnabled: Boolean(settings.notificationsEnabled),
-      notifyBeforeMinutes: Math.max(0, Math.min(1440, Math.floor(Number(settings.notifyBeforeMinutes ?? 30)))),
+      notifyBeforeMinutes: Math.max(0, Math.min(1440, Math.floor(Number(settings.notifyBeforeMinutes ?? 5)))),
     },
     tasks: taskList,
   };
@@ -99,6 +96,77 @@ function syncAlarmsFromStorage() {
   });
 }
 
+function getPlannerUrl(taskId) {
+  const taskQuery = taskId ? `?taskId=${encodeURIComponent(taskId)}&review=1` : "";
+  return chrome.runtime.getURL(`index.html#/dashboard${taskQuery}`);
+}
+
+function createPlannerWindow(taskId) {
+  chrome.windows.create({
+    url: getPlannerUrl(taskId),
+    type: "normal",
+    focused: true,
+  });
+}
+
+function focusPlannerTab(tab, taskId) {
+  if (typeof tab.id !== "number" || typeof tab.windowId !== "number") {
+    createPlannerWindow(taskId);
+    return;
+  }
+
+  chrome.tabs.update(tab.id, { active: true, url: getPlannerUrl(taskId) }, () => {
+    if (chrome.runtime.lastError) {
+      createPlannerWindow(taskId);
+      return;
+    }
+
+    chrome.windows.get(tab.windowId, (targetWindow) => {
+      if (chrome.runtime.lastError || !targetWindow) {
+        createPlannerWindow(taskId);
+        return;
+      }
+
+      const focusWindow = () => {
+        chrome.windows.update(tab.windowId, { focused: true });
+      };
+
+      if (targetWindow.state === "minimized") {
+        chrome.windows.update(tab.windowId, { state: "normal" }, () => {
+          if (chrome.runtime.lastError) {
+            createPlannerWindow(taskId);
+            return;
+          }
+          focusWindow();
+        });
+        return;
+      }
+
+      focusWindow();
+    });
+  });
+}
+
+function showPlannerWindow(taskId) {
+  chrome.tabs.query({ url: chrome.runtime.getURL("index.html*") }, (tabs) => {
+    if (chrome.runtime.lastError) {
+      createPlannerWindow(taskId);
+      return;
+    }
+
+    const targetTab = tabs
+      .filter((tab) => typeof tab.id === "number" && typeof tab.windowId === "number")
+      .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
+
+    if (!targetTab) {
+      createPlannerWindow(taskId);
+      return;
+    }
+
+    focusPlannerTab(targetTab, taskId);
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   syncAlarmsFromStorage();
 });
@@ -131,31 +199,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       return;
     }
 
-    const startAt = new Date(task.startAt);
-    const startLabel = Number.isFinite(startAt.getTime())
-      ? startAt.toLocaleString("ko-KR", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        })
-      : task.startAt;
-
-    chrome.notifications.create(`task-notification-${task.id}-${Date.now()}`, {
-      type: "basic",
-      iconUrl: NOTIFICATION_ICON,
-      title: "업무 일정 알림",
-      message: `${task.title}\n시작: ${startLabel}`,
-      priority: 2,
-    });
-  });
-});
-
-chrome.notifications.onClicked.addListener(() => {
-  chrome.tabs.create({
-    url: chrome.runtime.getURL("index.html#/dashboard"),
+    showPlannerWindow(task.id);
   });
 });
 

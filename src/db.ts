@@ -1,5 +1,15 @@
 import Dexie, { type Table } from "dexie";
-import { DEFAULT_PROJECTS, DEFAULT_SETTING, DEFAULT_TASK_TYPES, DEFAULT_USER_CONTEXT, SETTINGS_ID, USER_CONTEXT_ID } from "./constants";
+import {
+  clampLlmTemperature,
+  DEFAULT_PROJECTS,
+  DEFAULT_SETTING,
+  DEFAULT_TASK_TYPES,
+  DEFAULT_USER_CONTEXT,
+  normalizeLlmGemmaThinkingEnabled,
+  normalizeLlmReasoningEffort,
+  SETTINGS_ID,
+  USER_CONTEXT_ID,
+} from "./constants";
 import type {
   AppSetting,
   Memo,
@@ -75,6 +85,15 @@ export async function bootstrapDatabase(): Promise<void> {
   const now = toIsoNow();
 
   const existingTaskTypes = await db.taskTypes.toArray();
+  const legacyTripType = existingTaskTypes.find(
+    (type) => type.id === "type-trip" && type.color.toLowerCase() === "#7c3aed",
+  );
+  if (legacyTripType) {
+    await db.taskTypes.update(legacyTripType.id, {
+      color: "#1d4ed8",
+      updatedAt: now,
+    });
+  }
   const existingTaskTypeNames = new Set(existingTaskTypes.map((type) => type.name.trim().toLowerCase()));
   const existingTaskTypeIds = new Set(existingTaskTypes.map((type) => type.id));
   const missingTaskTypes = DEFAULT_TASK_TYPES.filter(
@@ -113,17 +132,26 @@ export async function bootstrapDatabase(): Promise<void> {
     });
   }
 
+  const normalizedLlmTemperature = clampLlmTemperature(setting?.llmTemperature);
+  const normalizedLlmReasoningEffort = normalizeLlmReasoningEffort(setting?.llmReasoningEffort);
+  const normalizedLlmGemmaThinkingEnabled = normalizeLlmGemmaThinkingEnabled(setting?.llmGemmaThinkingEnabled);
+
   if (
     setting &&
     (
       setting.llmEndpoint === undefined ||
       setting.llmApiKey === undefined ||
       setting.llmModel === undefined ||
+      setting.llmTemperature !== normalizedLlmTemperature ||
+      setting.llmReasoningEffort !== normalizedLlmReasoningEffort ||
+      setting.llmGemmaThinkingEnabled !== normalizedLlmGemmaThinkingEnabled ||
       setting.notificationsEnabled === undefined ||
       setting.notifyBeforeMinutes === undefined ||
       setting.autoBackupEnabled === undefined ||
       setting.autoBackupIntervalMinutes === undefined ||
-      setting.aiContextMaxLength === undefined
+      setting.aiContextMaxLength === undefined ||
+      setting.noteTaskSuggestionsEnabled === undefined ||
+      setting.relatedNoteSuggestionsEnabled === undefined
     )
   ) {
     await db.settings.put({
@@ -131,11 +159,16 @@ export async function bootstrapDatabase(): Promise<void> {
       llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
       llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
       llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
+      llmTemperature: normalizedLlmTemperature,
+      llmReasoningEffort: normalizedLlmReasoningEffort,
+      llmGemmaThinkingEnabled: normalizedLlmGemmaThinkingEnabled,
       notificationsEnabled: setting.notificationsEnabled ?? DEFAULT_SETTING.notificationsEnabled,
       notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_SETTING.notifyBeforeMinutes,
       autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
       autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_SETTING.autoBackupIntervalMinutes,
       aiContextMaxLength: setting.aiContextMaxLength ?? DEFAULT_SETTING.aiContextMaxLength,
+      noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
+      relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled,
       updatedAt: now,
     });
   }

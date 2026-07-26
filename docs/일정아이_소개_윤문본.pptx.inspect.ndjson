@@ -1,0 +1,130 @@
+{"kind":"deck","id":"pr/vjainu","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"DEFAULT"}
+{"kind":"slide","id":"sl/y90nupkv","slide":1,"title":"AI","textShapes":5}
+{"kind":"shape","id":"sh/547294r6","slide":1,"name":"Shape 0","bbox":[825.6,-211.2,768,768]}
+{"kind":"shape","id":"sh/k3yl0zql","slide":1,"name":"Shape 1","bbox":[979.2,326.4,576,576]}
+{"kind":"shape","id":"sh/7qp4be9c","slide":1,"name":"Shape 2","bbox":[96,134.4,82.56,82.56]}
+{"kind":"textbox","id":"sh/65g3298r","slide":1,"name":"Text 3","text":"AI","textPreview":"AI","textChars":2,"textLines":1,"bbox":[96,134.4,82.56,82.56]}
+{"kind":"textbox","id":"sh/ts7md4r2","slide":1,"name":"Text 4","text":"일정아이","textPreview":"일정아이","textChars":4,"textLines":1,"bbox":[91.2,249.6,864,124.8]}
+{"kind":"textbox","id":"sh/sryl4zqx","slide":1,"name":"Text 5","text":"흩어진 쪽지와 마감을 한곳에","textPreview":"흩어진 쪽지와 마감을 한곳에","textChars":15,"textLines":1,"bbox":[96,379.2,1056,67.2]}
+{"kind":"textbox","id":"sh/fu94fe98","slide":1,"name":"Text 6","text":"취합과 제출, 마감이 이어지는 하루를 자연어로 정리하는 업무 플래너.","textPreview":"취합과 제출, 마감이 이어지는 하루를 자연어로 정리하는 업무 플래너.","textChars":38,"textLines":1,"bbox":[96,460.8,960,57.6]}
+{"kind":"textbox","id":"sh/utg3698n","slide":1,"name":"Text 7","text":"쪽지 정리   ·   마감 관리   ·   자연어 입력   ·   내 컴퓨터에 저장","textPreview":"쪽지 정리   ·   마감 관리   ·   자연어 입력   ·   내 컴퓨터에 저장","textChars":46,"textLines":1,"bbox":[96,624,960,38.4]}
+{"kind":"notes","id":"nt/y90nupkv","slide":1,"text":"일정아이 — 취합·제출·마감이 많은 사람을 위한 업무 플래너. 흩어진 쪽지를 정리하고, 마감을 먼저 보여 주고, 자연어로 일정을 넣는다."}
+{"kind":"slide","id":"sl/hwbqtkby","slide":2,"title":"WHY","textShapes":12}
+{"kind":"textbox","id":"sh/9072xkry","slide":2,"name":"Text 0","text":"WHY","textPreview":"WHY","textChars":3,"textLines":1,"bbox":[86.4,72,576,28.8]}
+{"kind":"textbox","id":"sh/ozy1ofad","slide":2,"name":"Text 1","text":"이런 하루, 익숙하신가요","textPreview":"이런 하루, 익숙하신가요","textChars":13,"textLines":1,"bbox":[86.4,100.8,816,86.4]}
+{"kind":"shape","id":"sh/b29kza94","slide":2,"name":"Shape 2","bbox":[86.4,216,59.52,59.52]}
+{"kind":"textbox","id":"sh/x4r21kru","slide":2,"name":"Text 3","text":"쪽지가 여기저기 흩어진다","textPreview":"쪽지가 여기저기 흩어진다","textChars":13,"textLines":1,"bbox":[168,213.12,614.4,38.4]}
+{"kind":"textbox","id":"sh/w3i1sfa9","slide":2,"name":"Text 4","text":"회의 메모, 취합 요청, 제출 목록이 앱마다 따로 흩어져 있다.","textPreview":"회의 메모, 취합 요청, 제출 목록이 앱마다 따로 흩어져 있다.","textChars":35,"textLines":1,"bbox":[168,250.56,633.6,48]}
+{"kind":"shape","id":"sh/r65knqtk","slide":2,"name":"Shape 5","bbox":[86.4,323.52,59.52,59.52]}
+{"kind":"textbox","id":"sh/ove9o7yd","slide":2,"name":"Text 6","text":"마감이 코앞인데도 눈에 안 들어온다","textPreview":"마감이 코앞인데도 눈에 안 들어온다","textChars":19,"textLines":1,"bbox":[168,320.64,614.4,38.4]}
+{"kind":"textbox","id":"sh/9wnqhczy","slide":2,"name":"Text 7","text":"무엇이 더 급한지 한눈에 가늠하기 어렵다.","textPreview":"무엇이 더 급한지 한눈에 가늠하기 어렵다.","textChars":23,"textLines":1,"bbox":[168,358.08,633.6,48]}
+{"kind":"shape","id":"sh/mtwrmxg7","slide":2,"name":"Shape 8","bbox":[86.4,431.04,59.52,59.52]}
+{"kind":"textbox","id":"sh/wjy9sry9","slide":2,"name":"Text 9","text":"취합과 제출을 반복한다","textPreview":"취합과 제출을 반복한다","textChars":12,"textLines":1,"bbox":[168,428.16,614.4,38.4]}
+{"kind":"textbox","id":"sh/xk7qlczu","slide":2,"name":"Text 10","text":"여기저기서 받은 자료를 모아 정해진 기한에 제출한다.","textPreview":"여기저기서 받은 자료를 모아 정해진 기한에 제출한다.","textChars":29,"textLines":1,"bbox":[168,465.6,633.6,48]}
+{"kind":"shape","id":"sh/ahwrqhgj","slide":2,"name":"Shape 11","bbox":[86.4,538.56,59.52,59.52]}
+{"kind":"textbox","id":"sh/cnupgny5","slide":2,"name":"Text 12","text":"\"그거 어디 적었더라\"","textPreview":"\"그거 어디 적었더라\"","textChars":12,"textLines":1,"bbox":[168,535.68,614.4,38.4]}
+{"kind":"textbox","id":"sh/do3q9szq","slide":2,"name":"Text 13","text":"필요할 때마다 메모를 뒤져보느라 시간을 쓴다.","textPreview":"필요할 때마다 메모를 뒤져보느라 시간을 쓴다.","textChars":25,"textLines":1,"bbox":[168,573.12,633.6,48]}
+{"kind":"shape","id":"sh/t8byxkn2","slide":2,"name":"Shape 14","bbox":[849.6,206.4,350.4,374.4]}
+{"kind":"textbox","id":"sh/s72xofmh","slide":2,"name":"Text 15","text":"그래서,","textPreview":"그래서,","textChars":4,"textLines":1,"bbox":[883.2,244.8,297.6,38.4]}
+{"kind":"textbox","id":"sh/76twva5c","slide":2,"name":"Text 16","text":"쪽지는 정리되고,\n마감은 먼저 보이고,\n찾을 땐 물어본다.","textPreview":"쪽지는 정리되고, | 마감은 먼저 보이고, | 찾을 땐 물어본다.","textChars":32,"textLines":3,"bbox":[883.2,297.6,292.8,201.6]}
+{"kind":"image","id":"im/do3yp03u","slide":2,"name":"Image 0","bbox":[101.88,231.48,28.57,28.57]}
+{"kind":"image","id":"im/ypcfi5kf","slide":2,"name":"Image 1","bbox":[101.88,339,28.57,28.57]}
+{"kind":"image","id":"im/zqlgral0","slide":2,"name":"Image 2","bbox":[101.88,446.52,28.57,28.57]}
+{"kind":"image","id":"im/0ruxkv2l","slide":2,"name":"Image 3","bbox":[101.88,554.04,28.57,28.57]}
+{"kind":"notes","id":"nt/hwbqtkby","slide":2,"text":"대상 사용자의 하루 통증 4가지 → 해법 한 줄로 연결."}
+{"kind":"slide","id":"sl/ofy9wn61","slide":3,"title":"한눈에","textShapes":8}
+{"kind":"textbox","id":"sh/cza94vmx","slide":3,"name":"Text 0","text":"한눈에","textPreview":"한눈에","textChars":3,"textLines":1,"bbox":[86.4,67.2,576,28.8]}
+{"kind":"textbox","id":"sh/d0jax03i","slide":3,"name":"Text 1","text":"오늘 급한 일, 한눈에","textPreview":"오늘 급한 일, 한눈에","textChars":12,"textLines":1,"bbox":[86.4,96,864,76.8]}
+{"kind":"shape","id":"sh/298ryl4v","slide":3,"name":"Shape 2","bbox":[80.64,191.04,702.72,491.52]}
+{"kind":"shape","id":"sh/obq90bml","slide":3,"name":"Shape 3","bbox":[816,208.32,32.64,32.64]}
+{"kind":"textbox","id":"sh/m5cra54z","slide":3,"name":"Text 4","text":"마감과 제출이 달력에","textPreview":"마감과 제출이 달력에","textChars":11,"textLines":1,"bbox":[862.08,201.6,374.4,38.4]}
+{"kind":"textbox","id":"sh/n6ls3alk","slide":3,"name":"Text 5","text":"제출·중요 표시로 급한 날이 먼저 눈에 들어온다. 연가와 출장은 셀 색으로 구분한다.","textPreview":"제출·중요 표시로 급한 날이 먼저 눈에 들어온다. 연가와 출장은 셀 색으로 구분한다.","textChars":47,"textLines":1,"bbox":[862.08,240,379.2,86.4]}
+{"kind":"shape","id":"sh/n2l4fq98","slide":3,"name":"Shape 6","bbox":[816,352.32,32.64,32.64]}
+{"kind":"textbox","id":"sh/943mhgre","slide":3,"name":"Text 7","text":"날짜를 누르면","textPreview":"날짜를 누르면","textChars":7,"textLines":1,"bbox":[862.08,345.6,374.4,38.4]}
+{"kind":"textbox","id":"sh/83ulovat","slide":3,"name":"Text 8","text":"그날 해야 할 일만 목록으로 보여 준다. 남은 일은 위로 올라온다.","textPreview":"그날 해야 할 일만 목록으로 보여 준다. 남은 일은 위로 올라온다.","textChars":37,"textLines":1,"bbox":[862.08,384,379.2,86.4]}
+{"kind":"shape","id":"sh/v6l4jq94","slide":3,"name":"Shape 9","bbox":[816,496.32,32.64,32.64]}
+{"kind":"textbox","id":"sh/x8nml0ra","slide":3,"name":"Text 10","text":"끝낸 일은 흐리게","textPreview":"끝낸 일은 흐리게","textChars":9,"textLines":1,"bbox":[862.08,489.6,374.4,38.4]}
+{"kind":"textbox","id":"sh/w7ulsvqp","slide":3,"name":"Text 11","text":"완료·취소한 일은 흐려지고, 남은 일만 또렷하게 보인다.","textPreview":"완료·취소한 일은 흐려지고, 남은 일만 또렷하게 보인다.","textChars":31,"textLines":1,"bbox":[862.08,528,379.2,86.4]}
+{"kind":"image","id":"im/8ju58bep","slide":3,"name":"Image 0","bbox":[86.4,196.8,691.2,480]}
+{"kind":"image","id":"im/tk36hgva","slide":3,"name":"Image 1","bbox":[824.49,216.81,15.67,15.67]}
+{"kind":"image","id":"im/p4bu58jm","slide":3,"name":"Image 2","bbox":[824.49,360.81,15.67,15.67]}
+{"kind":"image","id":"im/o32dw321","slide":3,"name":"Image 3","bbox":[824.49,504.81,15.67,15.67]}
+{"kind":"notes","id":"nt/ofy9wn61","slide":3,"text":"대시보드: 마감·제출이 달력에 표식으로, 날짜 클릭 시 그날 할 일, 상태로 구분."}
+{"kind":"slide","id":"sl/jyx0ra1s","slide":4,"title":"쪽지","textShapes":8}
+{"kind":"textbox","id":"sh/1cj2d8b6","slide":4,"name":"Text 0","text":"쪽지","textPreview":"쪽지","textChars":2,"textLines":1,"bbox":[86.4,67.2,576,28.8]}
+{"kind":"textbox","id":"sh/0ba143al","slide":4,"name":"Text 1","text":"흩어진 쪽지를 쌓아 쓴다","textPreview":"흩어진 쪽지를 쌓아 쓴다","textChars":13,"textLines":1,"bbox":[86.4,96,864,76.8]}
+{"kind":"shape","id":"sh/rm1k7yt4","slide":4,"name":"Shape 2","bbox":[80.64,191.04,702.72,491.52]}
+{"kind":"shape","id":"sh/doj29oba","slide":4,"name":"Shape 3","bbox":[816,208.32,32.64,32.64]}
+{"kind":"textbox","id":"sh/3ihk3et8","slide":4,"name":"Text 4","text":"자동으로 분류된다","textPreview":"자동으로 분류된다","textChars":9,"textLines":1,"bbox":[862.08,201.6,374.4,38.4]}
+{"kind":"textbox","id":"sh/ih8ju9sn","slide":4,"name":"Text 5","text":"새 쪽지를 프로젝트와 주제별로 묶어, 찾기 쉬워진다.","textPreview":"새 쪽지를 프로젝트와 주제별로 묶어, 찾기 쉬워진다.","textChars":29,"textLines":1,"bbox":[862.08,240,379.2,86.4]}
+{"kind":"shape","id":"sh/kbm987y5","slide":4,"name":"Shape 6","bbox":[816,352.32,32.64,32.64]}
+{"kind":"textbox","id":"sh/i94r6xgz","slide":4,"name":"Text 7","text":"취합은 체크리스트로","textPreview":"취합은 체크리스트로","textChars":10,"textLines":1,"bbox":[862.08,345.6,374.4,38.4]}
+{"kind":"textbox","id":"sh/jadsz2xk","slide":4,"name":"Text 8","text":"받을 항목을 체크하며 관리하고, 남은 항목도 한곳에서 확인한다.","textPreview":"받을 항목을 체크하며 관리하고, 남은 항목도 한곳에서 확인한다.","textChars":35,"textLines":1,"bbox":[862.08,384,379.2,86.4]}
+{"kind":"shape","id":"sh/w72947yt","slide":4,"name":"Shape 9","bbox":[816,496.32,32.64,32.64]}
+{"kind":"textbox","id":"sh/a5kr2xg3","slide":4,"name":"Text 10","text":"빠짐없이 저장된다","textPreview":"빠짐없이 저장된다","textChars":9,"textLines":1,"bbox":[862.08,489.6,374.4,38.4]}
+{"kind":"textbox","id":"sh/v6tsv2xo","slide":4,"name":"Text 11","text":"다른 쪽지로 넘어가도 자동 저장되고, 순서도 끌어 바꿀 수 있다.","textPreview":"다른 쪽지로 넘어가도 자동 저장되고, 순서도 끌어 바꿀 수 있다.","textChars":36,"textLines":1,"bbox":[862.08,528,379.2,86.4]}
+{"kind":"image","id":"im/b6xofahg","slide":4,"name":"Image 0","bbox":[86.4,196.8,691.2,480]}
+{"kind":"image","id":"im/q5onm50v","slide":4,"name":"Image 1","bbox":[824.49,216.81,15.67,15.67]}
+{"kind":"image","id":"im/m1s7e9k3","slide":4,"name":"Image 2","bbox":[824.49,360.81,15.67,15.67]}
+{"kind":"image","id":"im/n2187e1o","slide":4,"name":"Image 3","bbox":[824.49,504.81,15.67,15.67]}
+{"kind":"notes","id":"nt/jyx0ra1s","slide":4,"text":"노트: 자동 분류, 취합 체크리스트(+전체 모아보기), 자동 저장, 이어 보기."}
+{"kind":"slide","id":"sl/i107q5of","slide":5,"title":"빠른 입력","textShapes":6}
+{"kind":"textbox","id":"sh/dgbulwnm","slide":5,"name":"Text 0","text":"빠른 입력","textPreview":"빠른 입력","textChars":5,"textLines":1,"bbox":[86.4,67.2,576,28.8]}
+{"kind":"textbox","id":"sh/cf2tcr61","slide":5,"name":"Text 1","text":"말하면, 일정이 된다","textPreview":"말하면, 일정이 된다","textChars":11,"textLines":1,"bbox":[86.4,96,816,76.8]}
+{"kind":"shape","id":"sh/z2tcnm5s","slide":5,"name":"Shape 2","bbox":[86.4,206.4,614.4,67.2]}
+{"kind":"textbox","id":"sh/yhkbe1o7","slide":5,"name":"Text 3","text":"“금요일까지 실적보고 제출 잡아줘”","textPreview":"“금요일까지 실적보고 제출 잡아줘”","textChars":19,"textLines":1,"bbox":[110.4,206.4,576,67.2]}
+{"kind":"textbox","id":"sh/l4bupwny","slide":5,"name":"Text 4","text":"날짜·마감·종류를 알아서 채운다.\n바로 저장하지 않고 초안을 먼저 보여 주니, 확인하고 넣으면 끝.","textPreview":"날짜·마감·종류를 알아서 채운다. | 바로 저장하지 않고 초안을 먼저 보여 주니, 확인하고 넣으면 끝.","textChars":55,"textLines":2,"bbox":[86.4,297.6,614.4,96]}
+{"kind":"shape","id":"sh/032tgr6d","slide":5,"name":"Shape 5","bbox":[86.4,417.6,614.4,187.2]}
+{"kind":"textbox","id":"sh/n6dcr65o","slide":5,"name":"Text 6","text":"반복되는 기준을 기억한다","textPreview":"반복되는 기준을 기억한다","textChars":13,"textLines":1,"bbox":[115.2,441.6,556.8,43.2]}
+{"kind":"textbox","id":"sh/m5kbi1oj","slide":5,"name":"Text 7","text":"\"제출은 오후 6시, 점심은 11시 반\"처럼 자주 쓰는 기준을 규칙으로 저장해 두면, 다음부터는 시간을 말하지 않아도 자동으로 채워 준다.","textPreview":"\"제출은 오후 6시, 점심은 11시 반\"처럼 자주 쓰는 기준을 규칙으로 저장해 두면, 다음부터는 시간을 말하지 않아도 자동으로 채워 준다.","textChars":77,"textLines":1,"bbox":[115.2,489.6,561.6,105.6]}
+{"kind":"shape","id":"sh/w32dkbuh","slide":5,"name":"Shape 8","bbox":[795.84,47.04,580.48,621.12]}
+{"kind":"image","id":"im/6p4fyl47","slide":5,"name":"Image 0","bbox":[801.6,52.8,568.96,609.6]}
+{"kind":"notes","id":"nt/i107q5of","slide":5,"text":"자연어로 일정 입력 → 초안 먼저 확인 → 적용. 반복되는 마감 기준은 규칙으로 학습."}
+{"kind":"slide","id":"sl/x8f69ofe","slide":6,"title":"찾기","textShapes":8}
+{"kind":"textbox","id":"sh/yhg7epsj","slide":6,"name":"Text 0","text":"찾기","textPreview":"찾기","textChars":2,"textLines":1,"bbox":[772.8,67.2,576,28.8]}
+{"kind":"textbox","id":"sh/zi98nu94","slide":6,"name":"Text 1","text":"\"어디 적었더라?\"\n물어보면 찾아준다","textPreview":"\"어디 적었더라?\" | 물어보면 찾아준다","textChars":20,"textLines":2,"bbox":[772.8,96,460.8,124.8]}
+{"kind":"shape","id":"sh/87ipkzal","slide":6,"name":"Shape 2","bbox":[80.64,138.24,647.42,453.12]}
+{"kind":"shape","id":"sh/ml07i9sv","slide":6,"name":"Shape 3","bbox":[772.8,261.12,32.64,32.64]}
+{"kind":"textbox","id":"sh/oryp8fah","slide":6,"name":"Text 4","text":"메모와 일정을 찾아 답한다","textPreview":"메모와 일정을 찾아 답한다","textChars":14,"textLines":1,"bbox":[818.88,254.4,422.4,38.4]}
+{"kind":"textbox","id":"sh/pc76hkr2","slide":6,"name":"Text 5","text":"\"표준특허 관련 정리한 거\"처럼 한 줄로 물으면 찾아 준다.","textPreview":"\"표준특허 관련 정리한 거\"처럼 한 줄로 물으면 찾아 준다.","textChars":33,"textLines":1,"bbox":[818.88,292.8,432,67.2]}
+{"kind":"shape","id":"sh/h4bupgn6","slide":6,"name":"Shape 6","bbox":[772.8,381.12,32.64,32.64]}
+{"kind":"textbox","id":"sh/v2tcn650","slide":6,"name":"Text 7","text":"바로 그 화면으로","textPreview":"바로 그 화면으로","textChars":9,"textLines":1,"bbox":[818.88,374.4,422.4,38.4]}
+{"kind":"textbox","id":"sh/u1kbu1ov","slide":6,"name":"Text 8","text":"찾은 메모나 일정을 누르면 바로 이동한다.","textPreview":"찾은 메모나 일정을 누르면 바로 이동한다.","textChars":23,"textLines":1,"bbox":[818.88,412.8,432,67.2]}
+{"kind":"shape","id":"sh/5svutgni","slide":6,"name":"Shape 9","bbox":[772.8,501.12,32.64,32.64]}
+{"kind":"textbox","id":"sh/j6dcr65c","slide":6,"name":"Text 10","text":"근거도 같이 보여 준다","textPreview":"근거도 같이 보여 준다","textChars":12,"textLines":1,"bbox":[818.88,494.4,422.4,38.4]}
+{"kind":"textbox","id":"sh/i54bylor","slide":6,"name":"Text 11","text":"어디서 찾았는지도 함께 확인할 수 있다.","textPreview":"어디서 찾았는지도 함께 확인할 수 있다.","textChars":22,"textLines":1,"bbox":[818.88,532.8,432,67.2]}
+{"kind":"image","id":"im/a5sbipcr","slide":6,"name":"Image 0","bbox":[86.4,144,635.9,441.6]}
+{"kind":"image","id":"im/b61sbutc","slide":6,"name":"Image 1","bbox":[781.29,269.61,15.67,15.67]}
+{"kind":"image","id":"im/zax8jq94","slide":6,"name":"Image 2","bbox":[781.29,389.61,15.67,15.67]}
+{"kind":"image","id":"im/e9orqlsj","slide":6,"name":"Image 3","bbox":[781.29,509.61,15.67,15.67]}
+{"kind":"notes","id":"nt/x8f69ofe","slide":6,"text":"질문 기능: 메모·일정을 검색해 답하고, 근거 항목으로 바로 이동."}
+{"kind":"slide","id":"sl/gnmp4jqx","slide":7,"title":"안심","textShapes":8}
+{"kind":"textbox","id":"sh/cb2tkvap","slide":7,"name":"Text 0","text":"안심","textPreview":"안심","textChars":2,"textLines":1,"bbox":[86.4,67.2,576,28.8]}
+{"kind":"textbox","id":"sh/dcbud0ra","slide":7,"name":"Text 1","text":"전부 내 컴퓨터에, 백업은 파일 하나","textPreview":"전부 내 컴퓨터에, 백업은 파일 하나","textChars":20,"textLines":1,"bbox":[86.4,96,864,76.8]}
+{"kind":"shape","id":"sh/ydkbm5sv","slide":7,"name":"Shape 2","bbox":[86.4,206.4,537.6,110.4]}
+{"kind":"shape","id":"sh/zedcfa9g","slide":7,"name":"Shape 3","bbox":[110.4,231.36,59.52,59.52]}
+{"kind":"textbox","id":"sh/l0vuh0rm","slide":7,"name":"Text 4","text":"내 브라우저에만 저장","textPreview":"내 브라우저에만 저장","textChars":11,"textLines":1,"bbox":[192,225.6,412.8,38.4]}
+{"kind":"textbox","id":"sh/eh0ba1sr","slide":7,"name":"Text 5","text":"계정도 서버도 없이 내 컴퓨터에 저장된다.","textPreview":"계정도 서버도 없이 내 컴퓨터에 저장된다.","textChars":23,"textLines":1,"bbox":[192,262.08,417.6,48]}
+{"kind":"shape","id":"sh/fi9c369c","slide":7,"name":"Shape 6","bbox":[86.4,336,537.6,110.4]}
+{"kind":"shape","id":"sh/baxkjqlk","slide":7,"name":"Shape 7","bbox":[110.4,360.96,59.52,59.52]}
+{"kind":"textbox","id":"sh/xcz2l03q","slide":7,"name":"Text 8","text":"파일 하나로 백업·복구","textPreview":"파일 하나로 백업·복구","textChars":12,"textLines":1,"bbox":[192,355.2,412.8,38.4]}
+{"kind":"textbox","id":"sh/cbq1sv25","slide":7,"name":"Text 9","text":"파일 하나로 옮기고, 필요하면 되돌린다.","textPreview":"파일 하나로 옮기고, 필요하면 되돌린다.","textChars":22,"textLines":1,"bbox":[192,391.68,417.6,48]}
+{"kind":"shape","id":"sh/n6x0fqlo","slide":7,"name":"Shape 10","bbox":[86.4,465.6,537.6,110.4]}
+{"kind":"shape","id":"sh/25ojml43","slide":7,"name":"Shape 11","bbox":[110.4,490.56,59.52,59.52]}
+{"kind":"textbox","id":"sh/o761ov2t","slide":7,"name":"Text 12","text":"쌓인 현황도 한눈에","textPreview":"쌓인 현황도 한눈에","textChars":10,"textLines":1,"bbox":[192,484.8,412.8,38.4]}
+{"kind":"textbox","id":"sh/f2d0b6lc","slide":7,"name":"Text 13","text":"일정, 메모, 사용량을 통계로 한눈에 확인한다.","textPreview":"일정, 메모, 사용량을 통계로 한눈에 확인한다.","textChars":26,"textLines":1,"bbox":[192,521.28,417.6,48]}
+{"kind":"shape","id":"sh/eh4jil4r","slide":7,"name":"Shape 14","bbox":[675.84,186.24,640.51,448.32]}
+{"kind":"image","id":"im/hcbmpone","slide":7,"name":"Image 0","bbox":[125.88,246.84,28.57,28.57]}
+{"kind":"image","id":"im/gb25wj6t","slide":7,"name":"Image 1","bbox":[125.88,376.44,28.57,28.57]}
+{"kind":"image","id":"im/vat4ne5o","slide":7,"name":"Image 2","bbox":[125.88,506.04,28.57,28.57]}
+{"kind":"image","id":"im/u9knu9o3","slide":7,"name":"Image 3","bbox":[681.6,192,628.99,436.8]}
+{"kind":"notes","id":"nt/gnmp4jqx","slide":7,"text":"내 브라우저 저장(로컬), JSON 백업·복구, 통계로 현황 확인."}
+{"kind":"slide","id":"sl/fu1gfa1s","slide":8,"title":"쪽지는 정리되고, 마감은 먼저 보이고,","textShapes":3}
+{"kind":"shape","id":"sh/18byd4zy","slide":8,"name":"Shape 0","bbox":[-230.4,307.2,768,768]}
+{"kind":"shape","id":"sh/g72x4zyd","slide":8,"name":"Shape 1","bbox":[902.4,-249.6,672,672]}
+{"kind":"textbox","id":"sh/ri9g7uhw","slide":8,"name":"Text 2","text":"쪽지는 정리되고, 마감은 먼저 보이고,\n찾을 땐 물어본다.","textPreview":"쪽지는 정리되고, 마감은 먼저 보이고, | 찾을 땐 물어본다.","textChars":32,"textLines":2,"bbox":[115.2,230.4,1094.4,192]}
+{"kind":"textbox","id":"sh/6h0fypgb","slide":8,"name":"Text 3","text":"일정아이","textPreview":"일정아이","textChars":4,"textLines":1,"bbox":[115.2,436.8,576,67.2]}
+{"kind":"textbox","id":"sh/tkby9kzm","slide":8,"name":"Text 4","text":"github.com/sohnjun96/AI-Planner","textPreview":"github.com/sohnjun96/AI-Planner","textChars":31,"textLines":1,"bbox":[115.2,508.8,864,38.4]}
+{"kind":"notes","id":"nt/fu1gfa1s","slide":8,"text":"클로징: 제품 가치 한 줄과 저장소 링크."}

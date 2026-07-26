@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { addDays, addMonths, getDateKey, getMonthGridStart, startOfMonth } from "../utils/date";
 
 export type CalendarMarkerTone = "default" | "lunch" | "leave" | "trip";
@@ -13,6 +13,13 @@ export interface CalendarDayMarker {
   priority?: number;
 }
 
+export interface CalendarDayEvent {
+  id: string;
+  title: string;
+  startAt: string;
+  isMajor: boolean;
+}
+
 export interface CalendarDaySummary {
   total: number;
   done: number;
@@ -23,7 +30,7 @@ export interface CalendarDaySummary {
   major: number;
   lunch: number;
   markers: CalendarDayMarker[];
-  titles: string[];
+  titles: CalendarDayEvent[];
 }
 
 interface MonthCalendarProps {
@@ -35,6 +42,12 @@ interface MonthCalendarProps {
   onCreateTaskAtDate?: (dateKey: string) => void;
   onDayContextMenu?: (event: MouseEvent<HTMLElement>, dateKey: string) => void;
   renderSelectedDateDetails?: (dateKey: string) => ReactNode;
+}
+
+interface CalendarNavigationState {
+  visibleMonth: Date;
+  focusedDateKey: string;
+  selectedKeyAtUpdate: string;
 }
 
 const EMPTY_SUMMARY: CalendarDaySummary = {
@@ -95,6 +108,21 @@ function sortCalendarMarkers(markers: CalendarDayMarker[]): CalendarDayMarker[] 
   });
 }
 
+function sortCalendarEvents(events: CalendarDayEvent[]): CalendarDayEvent[] {
+  return [...events].sort((a, b) => {
+    if (a.isMajor !== b.isMajor) {
+      return a.isMajor ? -1 : 1;
+    }
+
+    const startTimeDiff = a.startAt.localeCompare(b.startAt);
+    if (startTimeDiff !== 0) {
+      return startTimeDiff;
+    }
+
+    return a.title.localeCompare(b.title, "ko");
+  });
+}
+
 function formatMarkerCount(marker: CalendarDayMarker, useDetail = false): string {
   const label = useDetail ? marker.detailLabel ?? marker.label : marker.label;
   return `${label}${marker.count > 1 ? ` ${marker.count}` : ""}`;
@@ -110,17 +138,39 @@ export function MonthCalendar({
   onDayContextMenu,
   renderSelectedDateDetails,
 }: MonthCalendarProps) {
-  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date(selectedDate)));
+  const selectedKey = getDateKey(selectedDate);
+  const selectedMonth = useMemo(() => startOfMonth(new Date(`${selectedKey}T00:00:00`)), [selectedKey]);
+  const [navigation, setNavigation] = useState<CalendarNavigationState>(() => ({
+    visibleMonth: selectedMonth,
+    focusedDateKey: selectedKey,
+    selectedKeyAtUpdate: selectedKey,
+  }));
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
+  const dayButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingFocusKeyRef = useRef<string | null>(null);
 
-  const selectedKey = getDateKey(selectedDate);
+  const hasExternalSelection = navigation.selectedKeyAtUpdate !== selectedKey;
+  const visibleMonth = hasExternalSelection ? selectedMonth : navigation.visibleMonth;
+  const focusedDateKey = hasExternalSelection ? selectedKey : navigation.focusedDateKey;
   const todayKey = getDateKey(new Date());
 
   const days = useMemo(() => {
     const start = getMonthGridStart(visibleMonth, weekStartsOn);
     return Array.from({ length: 42 }, (_, index) => addDays(start, index));
   }, [visibleMonth, weekStartsOn]);
+
+  useLayoutEffect(() => {
+    const pendingKey = pendingFocusKeyRef.current;
+    if (!pendingKey) {
+      return;
+    }
+    const target = dayButtonRefs.current.get(pendingKey);
+    if (target) {
+      target.focus();
+      pendingFocusKeyRef.current = null;
+    }
+  }, [days, focusedDateKey]);
 
   const monthLabel = useMemo(
     () =>
@@ -154,19 +204,45 @@ export function MonthCalendar({
     return { total, pending, onHold, done, canceled, conflicts };
   }, [daySummaryByDate, visibleMonth]);
 
-  function moveSelectionByDays(daysToMove: number) {
-    const next = addDays(new Date(selectedDate), daysToMove);
-    setVisibleMonth(startOfMonth(next));
-    onSelectDate(getDateKey(next));
+  function selectAndFocusDate(date: Date) {
+    const nextKey = getDateKey(date);
+    const remainsInVisibleMonth =
+      date.getFullYear() === visibleMonth.getFullYear() && date.getMonth() === visibleMonth.getMonth();
+    pendingFocusKeyRef.current = nextKey;
+    setNavigation({
+      visibleMonth: startOfMonth(date),
+      focusedDateKey: nextKey,
+      selectedKeyAtUpdate: nextKey,
+    });
+    onSelectDate(nextKey);
+
+    if (remainsInVisibleMonth) {
+      dayButtonRefs.current.get(nextKey)?.focus();
+      pendingFocusKeyRef.current = null;
+    }
+  }
+
+  function moveSelectionByDays(date: Date, daysToMove: number) {
+    selectAndFocusDate(addDays(date, daysToMove));
   }
 
   function selectDate(date: Date) {
-    setVisibleMonth(startOfMonth(date));
-    onSelectDate(getDateKey(date));
+    const nextKey = getDateKey(date);
+    setNavigation({
+      visibleMonth: startOfMonth(date),
+      focusedDateKey: nextKey,
+      selectedKeyAtUpdate: nextKey,
+    });
+    onSelectDate(nextKey);
   }
 
   function moveVisibleMonth(amount: number) {
-    setVisibleMonth((prev) => addMonths(prev, amount));
+    const nextMonth = addMonths(visibleMonth, amount);
+    setNavigation({
+      visibleMonth: nextMonth,
+      focusedDateKey: getDateKey(nextMonth),
+      selectedKeyAtUpdate: selectedKey,
+    });
     setIsMonthPickerOpen(false);
   }
 
@@ -175,15 +251,19 @@ export function MonthCalendar({
     if (!parsed) {
       return;
     }
-    setVisibleMonth(parsed);
-    onSelectDate(getDateKey(parsed));
+    const parsedKey = getDateKey(parsed);
+    setNavigation({
+      visibleMonth: parsed,
+      focusedDateKey: parsedKey,
+      selectedKeyAtUpdate: parsedKey,
+    });
+    onSelectDate(parsedKey);
     setIsMonthPickerOpen(false);
   }
 
   function handleSelectToday() {
     const today = new Date();
-    setVisibleMonth(startOfMonth(today));
-    onSelectDate(getDateKey(today));
+    selectAndFocusDate(today);
     setIsMonthPickerOpen(false);
   }
 
@@ -254,12 +334,13 @@ export function MonthCalendar({
         ))}
       </div>
 
-      <div className="calendar-grid">
+      <div className="calendar-grid" role="group" aria-label={`${monthLabel} 달력 날짜`}>
         {days.map((date) => {
           const key = getDateKey(date);
           const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
           const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
           const markers = sortCalendarMarkers(summary.markers ?? []);
+          const events = sortCalendarEvents(summary.titles);
           const topMarkers = markers.filter((marker) => marker.tone !== "lunch");
           const lunchMarkers = markers.filter((marker) => marker.tone === "lunch");
           const markerClassName = markers.map((marker) => marker.cellClass).filter(Boolean).join(" ");
@@ -267,7 +348,7 @@ export function MonthCalendar({
           const completionBase = Math.max(0, summary.total - summary.canceled);
           const completionRatio = completionBase > 0 ? Math.round((summary.done / completionBase) * 100) : 0;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-          const visibleTitleCount = summary.titles.length;
+          const visibleTitleCount = events.length;
           const hiddenTitleCount = Math.max(0, visibleTitleCount - 3);
 
           const ariaLabel = [
@@ -285,21 +366,47 @@ export function MonthCalendar({
             .join(", ");
 
           return (
-            <div key={key} className={`calendar-day-slot ${selectedKey === key ? "selected" : ""}`}>
+            <div
+              key={key}
+              className={`calendar-day-slot ${selectedKey === key ? "selected" : ""}`}
+            >
               <button
+                ref={(node) => {
+                  if (node) {
+                    dayButtonRefs.current.set(key, node);
+                  } else {
+                    dayButtonRefs.current.delete(key);
+                  }
+                }}
                 type="button"
+                data-calendar-date={key}
                 className={`calendar-day density-${density} ${selectedKey === key ? "selected" : ""} ${
                   todayKey === key ? "today" : ""
                 } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
                   dragOverDateKey === key ? "drag-target" : ""
                 } ${markerClassName}`}
-                onClick={() => selectDate(date)}
+                tabIndex={focusedDateKey === key ? 0 : -1}
+                aria-pressed={selectedKey === key}
+                aria-current={todayKey === key ? "date" : undefined}
+                onClick={() => {
+                  const changesMonth = date.getFullYear() !== visibleMonth.getFullYear() || date.getMonth() !== visibleMonth.getMonth();
+                  if (changesMonth) {
+                    pendingFocusKeyRef.current = key;
+                  }
+                  selectDate(date);
+                }}
                 onContextMenu={(event) => {
                   if (!onDayContextMenu) {
                     return;
                   }
                   event.preventDefault();
                   event.stopPropagation();
+                  event.currentTarget.focus();
+                  const changesMonth =
+                    date.getFullYear() !== visibleMonth.getFullYear() || date.getMonth() !== visibleMonth.getMonth();
+                  if (changesMonth) {
+                    pendingFocusKeyRef.current = key;
+                  }
                   selectDate(date);
                   onDayContextMenu(event, key);
                 }}
@@ -309,16 +416,16 @@ export function MonthCalendar({
                 onKeyDown={(event) => {
                   if (event.key === "ArrowLeft") {
                     event.preventDefault();
-                    moveSelectionByDays(-1);
+                    moveSelectionByDays(date, -1);
                   } else if (event.key === "ArrowRight") {
                     event.preventDefault();
-                    moveSelectionByDays(1);
+                    moveSelectionByDays(date, 1);
                   } else if (event.key === "ArrowUp") {
                     event.preventDefault();
-                    moveSelectionByDays(-7);
+                    moveSelectionByDays(date, -7);
                   } else if (event.key === "ArrowDown") {
                     event.preventDefault();
-                    moveSelectionByDays(7);
+                    moveSelectionByDays(date, 7);
                   } else if (event.key === "Home") {
                     event.preventDefault();
                     handleSelectToday();
@@ -355,7 +462,11 @@ export function MonthCalendar({
                   }
                   event.preventDefault();
                   setDragOverDateKey(null);
-                  setVisibleMonth(startOfMonth(date));
+                  setNavigation({
+                    visibleMonth: startOfMonth(date),
+                    focusedDateKey: key,
+                    selectedKeyAtUpdate: selectedKey,
+                  });
                   void onDropTaskToDate(taskId, key);
                 }}
                 aria-label={ariaLabel}
@@ -368,7 +479,11 @@ export function MonthCalendar({
                         {formatMarkerCount(marker)}
                       </span>
                     ))}
-                    {summary.total > 0 ? <span className="calendar-day-count">{summary.total}건</span> : null}
+                    {summary.total > 0 ? (
+                      <span className="calendar-day-count" aria-label={`${summary.total}건`}>
+                        {summary.total}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 
@@ -377,9 +492,9 @@ export function MonthCalendar({
                 </div>
 
                 <div className="calendar-event-stack">
-                  {summary.titles.slice(0, 3).map((title, index) => (
-                    <span key={`${key}-title-${index}`} className="calendar-event-line" title={title}>
-                      {title}
+                  {events.slice(0, 3).map((event) => (
+                    <span key={event.id} className="calendar-event-line" title={event.title}>
+                      {event.title}
                     </span>
                   ))}
                   {hiddenTitleCount > 0 ? <span className="calendar-event-more">+{hiddenTitleCount}</span> : null}

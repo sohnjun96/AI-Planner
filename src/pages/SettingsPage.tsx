@@ -1,19 +1,30 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorSelector } from "../components/ColorSelector";
+import { useSearchParams } from "react-router-dom";
 import {
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
+  DEFAULT_LLM_GEMMA_THINKING_ENABLED,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  DEFAULT_LLM_REASONING_EFFORT,
+  DEFAULT_LLM_TEMPERATURE,
   DEFAULT_NOTE_AI_ACTIONS,
+  DEFAULT_NOTIFY_BEFORE_MINUTES,
   LLM_DEFAULT_MODEL,
   MAX_AI_CONTEXT_MAX_LENGTH,
+  MAX_LLM_TEMPERATURE,
   MIN_AI_CONTEXT_MAX_LENGTH,
+  MIN_LLM_TEMPERATURE,
   pickRandomPresetColor,
 } from "../constants";
 import { useAppData } from "../context/AppDataContext";
-import { requestLlmResponse } from "../agent/llmClient";
-import type { NoteAiAction } from "../models";
+import type { ImportDataPreview } from "../context/AppDataContext";
+import { useDialogFocus } from "../hooks/useDialogFocus";
+import { useJsonBackupStatus } from "../hooks/useJsonBackupStatus";
+import { generationOptionsFromSetting, isGemma4ThinkingModel, requestLlmResponse } from "../agent/llmClient";
+import type { AppSetting, NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
 import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
+import { downloadJsonBackup } from "../utils/jsonBackup";
 
 function makeActionId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -97,6 +108,14 @@ function createEmptyTypeForm(): TypeFormState {
 
 const TYPE_FORM_AUTOSAVE_DELAY_MS = 700;
 type AiConnectionStatus = "idle" | "checking" | "ok" | "error";
+type LlmReasoningEffortOption = NonNullable<AppSetting["llmReasoningEffort"]>;
+type AiSettingsDialog = "actions" | "context";
+
+interface PendingImport {
+  fileName: string;
+  raw: string;
+  preview: ImportDataPreview;
+}
 
 interface TaskTypeInputPayload {
   id?: string;
@@ -130,18 +149,25 @@ function serializeTaskTypeInput(input: TaskTypeInputPayload): string {
   });
 }
 
-type SettingsSection = "overview" | "stats" | "general" | "ai" | "noteAi" | "context" | "notify" | "types";
+type SettingsSection = "overview" | "general" | "ai" | "notify" | "stats";
 
 const SETTINGS_TABS: Array<{ id: SettingsSection; label: string }> = [
   { id: "overview", label: "개요" },
+  { id: "general", label: "기본·일정" },
+  { id: "ai", label: "AI 설정" },
+  { id: "notify", label: "일정 호출·백업" },
   { id: "stats", label: "통계" },
-  { id: "general", label: "기본" },
-  { id: "ai", label: "AI 연결" },
-  { id: "noteAi", label: "노트 AI" },
-  { id: "context", label: "user.md" },
-  { id: "notify", label: "알림·백업" },
-  { id: "types", label: "일정 종류" },
 ];
+
+function resolveSettingsSection(value: string | null): SettingsSection {
+  if (value === "types") {
+    return "general";
+  }
+  if (value === "noteAi" || value === "context") {
+    return "ai";
+  }
+  return SETTINGS_TABS.some((tab) => tab.id === value) ? (value as SettingsSection) : "overview";
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -167,10 +193,12 @@ function formatTokens(tokens: number): string {
 }
 
 export function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     setting,
     updateSetting,
     exportData,
+    inspectImportData,
     importData,
     userContext,
     updateUserContextMarkdown,
@@ -192,19 +220,26 @@ export function SettingsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [pendingImport, setPendingImport] = useState<PendingImport>();
+  const [isImporting, setIsImporting] = useState(false);
   const [backupMessage, setBackupMessage] = useState("");
   const [backupError, setBackupError] = useState("");
   const [isBackupListOpen, setIsBackupListOpen] = useState(false);
+  const [activeAiSettingsDialog, setActiveAiSettingsDialog] = useState<AiSettingsDialog | null>(null);
   const [userContextDraft, setUserContextDraft] = useState("");
   const [userContextMessage, setUserContextMessage] = useState("");
   const [userContextError, setUserContextError] = useState("");
   const [aiConnectionStatus, setAiConnectionStatus] = useState<AiConnectionStatus>("idle");
-  const [aiConnectionMessage, setAiConnectionMessage] = useState("");
+  const [aiConnectionMessage, setAiConnectionMessage] = useState("연결 상태를 아직 확인하지 않았습니다.");
   const [noteAiActionsDraft, setNoteAiActionsDraft] = useState<NoteAiAction[]>(
     () => setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS,
   );
   const [aiActionMessage, setAiActionMessage] = useState("");
-  const [activeSection, setActiveSection] = useState<SettingsSection>("overview");
+  const [activeSection, setActiveSection] = useState<SettingsSection>(() => {
+    return resolveSettingsSection(searchParams.get("section"));
+  });
+  const { isReady: isJsonBackupStatusReady, status: jsonBackupStatus } = useJsonBackupStatus();
 
   const [typeForm, setTypeForm] = useState<TypeFormState>(() => createEmptyTypeForm());
   const [typeMessage, setTypeMessage] = useState("");
@@ -212,9 +247,76 @@ export function SettingsPage() {
   const typeAutoSaveSnapshotRef = useRef("");
   const lastTypeIdRef = useRef<string | undefined>(undefined);
 
+  function closePendingImport() {
+    if (!isImporting) {
+      setPendingImport(undefined);
+      setMessage("");
+    }
+  }
+
+  const importDialogRef = useDialogFocus<HTMLElement>({
+    isOpen: Boolean(pendingImport),
+    onClose: closePendingImport,
+  });
+  const backupListDialogRef = useDialogFocus<HTMLElement>({
+    isOpen: isBackupListOpen,
+    onClose: () => setIsBackupListOpen(false),
+  });
+  const aiSettingsDialogRef = useDialogFocus<HTMLElement>({
+    isOpen: activeSection === "ai" && activeAiSettingsDialog !== null,
+    onClose: () => setActiveAiSettingsDialog(null),
+  });
+
   const sortedTypes = useMemo(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
   const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
   const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
+  const savedUserContextLength = Math.min(userContext.markdown.length, aiContextMaxLength);
+  const isGemma4ThinkingAvailable = isGemma4ThinkingModel(setting.llmModel ?? LLM_DEFAULT_MODEL);
+  const savedNoteAiActions = setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS;
+  const savedActionPreview = savedNoteAiActions
+    .slice(0, 3)
+    .map((action) => action.label)
+    .join(" · ");
+  const activeAiDialogTitle =
+    activeAiSettingsDialog === "actions"
+      ? "노트 AI 편집 기능"
+      : "AI 맞춤 규칙";
+  const activeAiDialogEyebrow =
+    activeAiSettingsDialog === "actions"
+      ? "NOTE AI"
+      : "USER CONTEXT";
+  const activeAiDialogDescription =
+    activeAiSettingsDialog === "actions"
+      ? "노트 편집 화면과 우클릭 메뉴에 표시할 AI 기능과 프롬프트를 관리합니다."
+      : "AI가 일정 요청을 해석할 때 시스템 지침으로 적용할 개인 규칙을 관리합니다.";
+
+  useEffect(() => {
+    setActiveSection(resolveSettingsSection(searchParams.get("section")));
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (activeSection !== "ai") {
+      setActiveAiSettingsDialog(null);
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    setAiConnectionStatus("idle");
+    setAiConnectionMessage("연결 상태를 아직 확인하지 않았습니다. '연결 확인'을 눌러 실제 요청을 테스트하세요.");
+  }, [
+    setting.llmApiKey,
+    setting.llmEndpoint,
+    setting.llmGemmaThinkingEnabled,
+    setting.llmModel,
+    setting.llmReasoningEffort,
+    setting.llmTemperature,
+  ]);
+
+  function selectSection(section: SettingsSection) {
+    setActiveAiSettingsDialog(null);
+    setActiveSection(section);
+    setSearchParams({ section });
+  }
 
   // ===== 통계 탭 데이터 =====
   const taskStats = useMemo(() => {
@@ -373,24 +475,25 @@ export function SettingsPage() {
   }, [typeForm, upsertTaskType]);
 
   async function handleExport() {
+    if (isExporting) {
+      return;
+    }
     setError("");
     setMessage("");
+    setIsExporting(true);
     try {
       const content = await exportData();
-      const blob = new Blob([content], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `일정관리-백업-${new Date().toISOString().slice(0, 10)}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await downloadJsonBackup(content);
       setMessage("백업 파일을 내보냈습니다.");
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : "백업 파일 내보내기에 실패했습니다.");
+    } finally {
+      setIsExporting(false);
     }
   }
 
   async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
     const file = event.target.files?.[0];
     if (!file) {
       return;
@@ -401,11 +504,41 @@ export function SettingsPage() {
 
     try {
       const content = await file.text();
-      await importData(content);
-      setMessage("백업 파일을 가져왔습니다.");
-      event.target.value = "";
+      const preview = inspectImportData(content);
+      setPendingImport({ fileName: file.name, raw: content, preview });
+      setMessage("백업 파일을 확인했습니다. 가져올 항목과 교체 범위를 검토해 주세요.");
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "백업 파일 가져오기에 실패했습니다.");
+      setPendingImport(undefined);
+      setError(importError instanceof Error ? importError.message : "백업 파일을 확인하지 못했습니다.");
+    } finally {
+      input.value = "";
+    }
+  }
+
+  async function handleConfirmImport() {
+    if (!pendingImport || isImporting) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setIsImporting(true);
+    let backupCreated = false;
+    try {
+      await createAutoBackup("JSON 가져오기 직전");
+      backupCreated = true;
+      await importData(pendingImport.raw);
+      setPendingImport(undefined);
+      setMessage("백업 파일을 가져왔습니다. 교체 전 데이터는 자동 백업 목록에 보관했습니다.");
+    } catch (importError) {
+      const detail = importError instanceof Error ? importError.message : "알 수 없는 오류";
+      setError(
+        backupCreated
+          ? `가져오기를 완료하지 못했습니다. 교체 전 데이터는 자동 백업 목록에 보관했습니다. ${detail}`
+          : `안전 백업을 만들지 못해 가져오기를 시작하지 않았습니다. 기존 데이터는 그대로입니다. ${detail}`,
+      );
+    } finally {
+      setIsImporting(false);
     }
   }
 
@@ -456,14 +589,14 @@ export function SettingsPage() {
 
     try {
       await updateUserContextMarkdown(userContextDraft.slice(0, aiContextMaxLength));
-      setUserContextMessage("user.md를 저장했습니다.");
+      setUserContextMessage("AI 맞춤 규칙을 저장했습니다.");
     } catch (contextSaveError) {
-      setUserContextError(contextSaveError instanceof Error ? contextSaveError.message : "user.md 저장에 실패했습니다.");
+      setUserContextError(contextSaveError instanceof Error ? contextSaveError.message : "AI 맞춤 규칙 저장에 실패했습니다.");
     }
   }
 
   async function handleResetUserContext() {
-    const shouldReset = window.confirm("user.md를 기본값으로 되돌릴까요?");
+    const shouldReset = window.confirm("AI 맞춤 규칙을 기본값으로 되돌릴까요?");
     if (!shouldReset) {
       return;
     }
@@ -473,9 +606,9 @@ export function SettingsPage() {
 
     try {
       await resetUserContext();
-      setUserContextMessage("user.md 기본값을 복원했습니다.");
+      setUserContextMessage("AI 맞춤 규칙 기본값을 복원했습니다.");
     } catch (contextResetError) {
-      setUserContextError(contextResetError instanceof Error ? contextResetError.message : "user.md 초기화에 실패했습니다.");
+      setUserContextError(contextResetError instanceof Error ? contextResetError.message : "AI 맞춤 규칙 초기화에 실패했습니다.");
     }
   }
 
@@ -489,6 +622,7 @@ export function SettingsPage() {
         endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
         model: setting.llmModel ?? LLM_DEFAULT_MODEL,
         apiKey: setting.llmApiKey ?? "",
+        generationOptions: generationOptionsFromSetting(setting),
         messages: [
           {
             role: "system",
@@ -592,18 +726,39 @@ export function SettingsPage() {
         <div>
           <p className="eyebrow">SETTINGS</p>
           <h2>설정</h2>
-          <p className="description-text">캘린더 표시, 알림, 백업, AI 연결과 일정 종류를 한 화면에서 조정합니다.</p>
+          <p className="description-text">기본 환경과 일정 종류, AI, 일정 호출·백업을 성격별로 모아 관리합니다.</p>
         </div>
         <div className="settings-hero-actions">
-          <button className="btn btn-primary" type="button" onClick={() => void handleExport()}>
-            JSON 내보내기
-          </button>
+          <div className="settings-json-export-control">
+            <button className="btn btn-primary" type="button" onClick={() => void handleExport()} disabled={isExporting}>
+              {isExporting ? "내보내는 중…" : "JSON 내보내기"}
+            </button>
+            <small className="settings-json-export-status">
+              마지막 내보내기:{" "}
+              {isJsonBackupStatusReady
+                ? jsonBackupStatus.lastExportedAt
+                  ? formatDateTime(jsonBackupStatus.lastExportedAt, setting.timeFormat)
+                  : "아직 없음"
+                : "확인 중…"}
+            </small>
+          </div>
           <label className="btn btn-soft file-upload">
             JSON 가져오기
             <input type="file" accept=".json,application/json" onChange={handleImport} />
           </label>
         </div>
       </section>
+
+      {message ? (
+        <p className="success-text" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="error-text" role="alert" aria-live="assertive">
+          {error}
+        </p>
+      ) : null}
 
       <nav className="settings-tabs" aria-label="설정 분류">
         {SETTINGS_TABS.map((tab) => (
@@ -612,7 +767,7 @@ export function SettingsPage() {
             type="button"
             className={`settings-tab ${activeSection === tab.id ? "active" : ""}`}
             aria-pressed={activeSection === tab.id}
-            onClick={() => setActiveSection(tab.id)}
+            onClick={() => selectSection(tab.id)}
           >
             {tab.label}
           </button>
@@ -621,43 +776,37 @@ export function SettingsPage() {
 
       {activeSection === "overview" ? (
         <section className="settings-overview-grid" aria-label="설정 요약">
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("general")}>
-            <span>기본 환경</span>
+          <button type="button" className="settings-summary-card" onClick={() => selectSection("general")}>
+            <span>기본·일정</span>
             <strong>
               {setting.weekStartsOn === "mon" ? "월" : "일"} 시작 · {setting.timeFormat === "24h" ? "24시간제" : "12시간제"}
             </strong>
+            <small>일정 종류 {sortedTypes.length}개</small>
           </button>
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("ai")}>
-            <span>AI 연결</span>
-            <strong>{(setting.llmEndpoint ?? "").trim() ? "설정됨" : "미설정"}</strong>
-          </button>
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("noteAi")}>
-            <span>노트 AI 기능</span>
-            <strong>{noteAiActionsDraft.length}개</strong>
-          </button>
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("context")}>
-            <span>AI 컨텍스트</span>
+          <button type="button" className="settings-summary-card" onClick={() => selectSection("ai")}>
+            <span>AI 설정</span>
             <strong>
-              {userContextUsedLength} / {aiContextMaxLength}자
+              {aiConnectionStatus === "checking"
+                ? "확인 중"
+                : aiConnectionStatus === "ok"
+                  ? "정상"
+                  : aiConnectionStatus === "error"
+                    ? "실패"
+                    : "미확인"}
             </strong>
+            <small>노트 기능 {noteAiActionsDraft.length}개 · 맞춤 규칙 {userContextUsedLength}자</small>
           </button>
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("notify")}>
-            <span>알림</span>
-            <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? 30}분 전` : "꺼짐"}</strong>
+          <button type="button" className="settings-summary-card" onClick={() => selectSection("notify")}>
+            <span>일정 호출·백업</span>
+            <strong>{setting.notificationsEnabled ? `${setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES}분 전` : "꺼짐"}</strong>
+            <small>{setting.autoBackupEnabled ? `자동 백업 ${autoBackups.length}개 보관` : "수동 백업"}</small>
           </button>
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("notify")}>
-            <span>백업</span>
-            <strong>{setting.autoBackupEnabled ? `${autoBackups.length}개 보관` : "수동"}</strong>
-          </button>
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("types")}>
-            <span>일정 종류</span>
-            <strong>{sortedTypes.length}개</strong>
-          </button>
-          <button type="button" className="settings-summary-card" onClick={() => setActiveSection("stats")}>
-            <span>통계</span>
+          <button type="button" className="settings-summary-card" onClick={() => selectSection("stats")}>
+            <span>사용 통계</span>
             <strong>
               일정 {taskStats.total} · 노트 {noteStats.total}
             </strong>
+            <small>프로젝트 {projects.length}개</small>
           </button>
         </section>
       ) : null}
@@ -945,96 +1094,195 @@ export function SettingsPage() {
           </div>
 
           <p className="description-text">Endpoint, 모델명, API Key는 입력 즉시 저장됩니다.</p>
-          {aiConnectionMessage ? (
-            <p className={`endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`} role="status" aria-live="polite">
-              {aiConnectionMessage}
-            </p>
-          ) : null}
+          <p
+            className={`endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`}
+            role={aiConnectionStatus === "error" ? "alert" : "status"}
+            aria-live={aiConnectionStatus === "error" ? "assertive" : "polite"}
+          >
+            {aiConnectionStatus === "idle" ? "미확인 · " : aiConnectionStatus === "ok" ? "정상 · " : aiConnectionStatus === "error" ? "실패 · " : ""}
+            {aiConnectionMessage}
+          </p>
         </section>
         ) : null}
 
-        {activeSection === "noteAi" ? (
-        <section className="settings-card settings-ai-actions-card">
+        {activeSection === "ai" ? (
+        <section className="settings-card settings-generation-options-card">
           <header className="settings-card-header">
             <div>
-              <p className="eyebrow">NOTE AI</p>
-              <h3>노트 AI 편집 기능</h3>
+              <p className="eyebrow">MODEL OPTIONS</p>
+              <h3>응답 생성 옵션</h3>
             </div>
-            <button type="button" className="btn btn-primary" onClick={() => void handleSaveAiActions()}>
-              저장
-            </button>
           </header>
 
           <p className="description-text">
-            노트 편집 화면의 AI 버튼과 우클릭 메뉴에 나타납니다. 각 기능의 이름과 프롬프트를 자유롭게 수정하거나 추가하세요.
+            일정 생성, 노트 편집 등 모든 AI 기능에 공통으로 적용됩니다. 값은 변경 즉시 저장됩니다.
           </p>
 
-          <NoteAiActionManager actions={noteAiActionsDraft} onChange={setNoteAiActionsDraft} />
+          <div className="form-grid two-col settings-generation-options-grid">
+            <label>
+              Temperature
+              <input
+                type="number"
+                min={MIN_LLM_TEMPERATURE}
+                max={MAX_LLM_TEMPERATURE}
+                step={0.1}
+                value={setting.llmTemperature ?? DEFAULT_LLM_TEMPERATURE}
+                aria-describedby="llm-temperature-help"
+                onChange={(event) => {
+                  const next = event.currentTarget.valueAsNumber;
+                  if (Number.isFinite(next)) {
+                    void updateSetting({
+                      llmTemperature: Math.max(MIN_LLM_TEMPERATURE, Math.min(MAX_LLM_TEMPERATURE, next)),
+                    });
+                  }
+                }}
+              />
+              <small id="llm-temperature-help" className="settings-field-help">
+                0에 가까울수록 일관되고, 높을수록 다양한 답변을 만듭니다. 범위 {MIN_LLM_TEMPERATURE}–{MAX_LLM_TEMPERATURE}
+              </small>
+            </label>
 
-          {aiActionMessage ? <p className="success-text">{aiActionMessage}</p> : null}
+            <label>
+              추론 강도 (Reasoning effort)
+              <select
+                value={setting.llmReasoningEffort ?? DEFAULT_LLM_REASONING_EFFORT}
+                aria-describedby="llm-reasoning-help"
+                onChange={(event) => {
+                  void updateSetting({ llmReasoningEffort: event.currentTarget.value as LlmReasoningEffortOption });
+                }}
+              >
+                <option value="default">서버 기본값 (전송하지 않음)</option>
+                <option value="none">사용 안 함 (none)</option>
+                <option value="low">낮음 (low)</option>
+                <option value="medium">중간 (medium)</option>
+                <option value="high">높음 (high)</option>
+              </select>
+              <small id="llm-reasoning-help" className="settings-field-help">
+                지원 모델과 서버에서만 적용되며, 단계별 동작은 서버 구현에 따라 다를 수 있습니다.
+              </small>
+            </label>
+          </div>
+
+          {isGemma4ThinkingAvailable ? (
+            <label className="checkbox-inline settings-toggle-row settings-thinking-toggle">
+              <input
+                type="checkbox"
+                checked={setting.llmGemmaThinkingEnabled ?? DEFAULT_LLM_GEMMA_THINKING_ENABLED}
+                aria-describedby="gemma-thinking-help"
+                onChange={(event) => {
+                  void updateSetting({ llmGemmaThinkingEnabled: event.currentTarget.checked });
+                }}
+              />
+              <span className="settings-toggle-copy">
+                <span className="settings-toggle-title">
+                  Thinking 모드
+                  <small className="settings-option-badge">Gemma4 26B A4B/MoE 전용</small>
+                </span>
+                <small id="gemma-thinking-help" className="settings-field-help">
+                  켜면 enable_thinking: true와 skip_special_tokens: false를 함께 보냅니다. Gemma4에서는 이 토글이 위 추론 강도보다 우선합니다.
+                </small>
+              </span>
+            </label>
+          ) : (
+            <div className="settings-inline-note">
+              <span>현재 모델에는 공통 옵션만 적용됩니다. Gemma4 26B A4B/MoE 모델이 감지되면 Thinking 모드가 나타납니다.</span>
+            </div>
+          )}
+
+          <p className="description-text">
+            일부 서버나 모델은 이 옵션을 지원하지 않을 수 있습니다. 변경 후 위의 연결 확인으로 호환성을 확인하세요.
+          </p>
         </section>
         ) : null}
 
-        {activeSection === "context" ? (
-        <section className="settings-card settings-context-card">
+        {activeSection === "ai" ? (
+        <section className="settings-card settings-ai-management-card">
           <header className="settings-card-header">
             <div>
-              <p className="eyebrow">USER CONTEXT</p>
-              <h3>user.md</h3>
+              <p className="eyebrow">AI FEATURES</p>
+              <h3>기능별 세부 설정</h3>
             </div>
-            <small>{userContextUsedLength} / {aiContextMaxLength}자</small>
           </header>
 
-          <div className="form-grid two-col">
-            <label>
-              AI 컨텍스트 최대 길이
-              <input
-                type="text"
-                inputMode="numeric"
-                value={String(aiContextMaxLength)}
-                onChange={(event) => {
-                  const next = Number(event.target.value.replace(/[^0-9]/g, ""));
-                  void updateSetting({ aiContextMaxLength: Number.isFinite(next) ? next : DEFAULT_AI_CONTEXT_MAX_LENGTH });
+          <p className="description-text">
+            자주 바꾸지 않는 긴 설정은 목적별 편집창에서 관리합니다.
+          </p>
+
+          <div className="settings-ai-management-list">
+            <div className="settings-ai-management-row">
+              <div>
+                <strong>노트 AI 편집 기능</strong>
+                <p>
+                  {savedNoteAiActions.length}개 기능
+                  {savedActionPreview ? ` · ${savedActionPreview}${savedNoteAiActions.length > 3 ? " 외" : ""}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-soft"
+                aria-label="노트 AI 편집 기능 편집"
+                onClick={() => {
+                  setAiActionMessage("");
+                  setActiveAiSettingsDialog("actions");
                 }}
-              />
-            </label>
+              >
+                편집
+              </button>
+            </div>
 
-            <label>
-              권장 범위
-              <input
-                type="text"
-                value={`${MIN_AI_CONTEXT_MAX_LENGTH} - ${MAX_AI_CONTEXT_MAX_LENGTH}자`}
-                readOnly
-              />
-            </label>
+            <div className="settings-ai-management-row">
+              <div>
+                <strong>AI 맞춤 규칙</strong>
+                <p>{savedUserContextLength} / {aiContextMaxLength}자 · 일정 AI 시스템 지침에 적용</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-soft"
+                aria-label="AI 맞춤 규칙 편집"
+                onClick={() => {
+                  setUserContextMessage("");
+                  setUserContextError("");
+                  setActiveAiSettingsDialog("context");
+                }}
+              >
+                편집
+              </button>
+            </div>
+
+            <div className="settings-ai-management-row">
+              <div>
+                <strong>관련 일정 자동 추천</strong>
+                <p>노트의 내용, 프로젝트, 작성일을 기준으로 연결할 일정을 추천합니다.</p>
+              </div>
+              <label className="checkbox-inline settings-toggle-row settings-ai-feature-toggle">
+                <input
+                  type="checkbox"
+                  checked={setting.noteTaskSuggestionsEnabled ?? true}
+                  onChange={(event) => {
+                    void updateSetting({ noteTaskSuggestionsEnabled: event.currentTarget.checked });
+                  }}
+                />
+                사용
+              </label>
+            </div>
+
+            <div className="settings-ai-management-row">
+              <div>
+                <strong>관련 노트 자동 추천</strong>
+                <p>제목, 내용, 프로젝트, 태그가 비슷한 다른 노트를 추천합니다.</p>
+              </div>
+              <label className="checkbox-inline settings-toggle-row settings-ai-feature-toggle">
+                <input
+                  type="checkbox"
+                  checked={setting.relatedNoteSuggestionsEnabled ?? true}
+                  onChange={(event) => {
+                    void updateSetting({ relatedNoteSuggestionsEnabled: event.currentTarget.checked });
+                  }}
+                />
+                사용
+              </label>
+            </div>
           </div>
-
-          <label className="user-context-editor">
-            사용자 컨텍스트
-            <textarea
-              value={userContextDraft}
-              maxLength={aiContextMaxLength}
-              onChange={(event) => setUserContextDraft(event.target.value)}
-              rows={12}
-              spellCheck={false}
-            />
-          </label>
-
-          <div className="settings-inline-note">
-            <span>AI 일정 추가 시 이 내용이 개인 규칙으로 전달됩니다. 현재 입력이 더 구체적이면 현재 입력을 우선합니다.</span>
-          </div>
-
-          <div className="button-row">
-            <button className="btn btn-primary" type="button" onClick={() => void handleSaveUserContext()}>
-              user.md 저장
-            </button>
-            <button className="btn btn-soft" type="button" onClick={() => void handleResetUserContext()}>
-              기본값 복원
-            </button>
-          </div>
-
-          {userContextMessage ? <p className="success-text">{userContextMessage}</p> : null}
-          {userContextError ? <p className="error-text">{userContextError}</p> : null}
         </section>
         ) : null}
 
@@ -1043,7 +1291,7 @@ export function SettingsPage() {
           <header className="settings-card-header">
             <div>
               <p className="eyebrow">NOTIFY & BACKUP</p>
-              <h3>알림과 백업</h3>
+              <h3>일정 호출과 백업</h3>
             </div>
           </header>
 
@@ -1056,15 +1304,15 @@ export function SettingsPage() {
                   void updateSetting({ notificationsEnabled: event.target.checked });
                 }}
               />
-              일정 알림 사용
+              일정 시작 전 플래나이 창 표시
             </label>
 
             <label>
-              알림 사전 시간(분)
+              플래나이 표시 시간(분 전)
               <input
                 type="text"
                 inputMode="numeric"
-                value={String(setting.notifyBeforeMinutes ?? 30)}
+                value={String(setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES)}
                 onChange={(event) => {
                   const next = Number(event.target.value.replace(/[^0-9]/g, ""));
                   void updateSetting({ notifyBeforeMinutes: Number.isFinite(next) ? next : 0 });
@@ -1097,19 +1345,23 @@ export function SettingsPage() {
             </label>
           </div>
 
+          <div className="settings-inline-note">
+            <span>
+              자동 백업은 이 브라우저 안에 보관됩니다. 컴퓨터에 별도 파일을 남기려면 화면 위의 JSON 내보내기를 사용하세요.
+            </span>
+          </div>
+
           <div className="settings-backup-actions">
             <button className="btn btn-primary" type="button" onClick={() => void handleCreateManualBackup()}>
-              지금 백업 생성
+              앱 내부 백업 생성
             </button>
             <button className="btn btn-soft" type="button" onClick={openBackupList}>
               자동 백업 목록 보기
             </button>
           </div>
 
-          {backupMessage ? <p className="success-text">{backupMessage}</p> : null}
-          {backupError ? <p className="error-text">{backupError}</p> : null}
-          {message ? <p className="success-text">{message}</p> : null}
-          {error ? <p className="error-text">{error}</p> : null}
+          {backupMessage ? <p className="success-text" role="status" aria-live="polite">{backupMessage}</p> : null}
+          {backupError ? <p className="error-text" role="alert">{backupError}</p> : null}
 
           <div className="settings-backup-list-summary">
             <div>
@@ -1127,7 +1379,7 @@ export function SettingsPage() {
         </section>
         ) : null}
 
-        {activeSection === "types" ? (
+        {activeSection === "general" ? (
         <section className="settings-card settings-type-card">
           <header className="settings-card-header">
             <div>
@@ -1226,21 +1478,225 @@ export function SettingsPage() {
                 </button>
               </div>
 
-              {typeMessage ? <p className="success-text">{typeMessage}</p> : null}
-              {typeError ? <p className="error-text">{typeError}</p> : null}
+              {typeMessage ? <p className="success-text" role="status" aria-live="polite">{typeMessage}</p> : null}
+              {typeError ? <p className="error-text" role="alert">{typeError}</p> : null}
             </form>
           </div>
         </section>
         ) : null}
       </div>
 
+      {activeSection === "ai" && activeAiSettingsDialog ? (
+        <div className="modal-backdrop" onClick={() => setActiveAiSettingsDialog(null)}>
+          <section
+            ref={aiSettingsDialogRef}
+            className={`modal-card panel settings-ai-modal-card ${activeAiSettingsDialog === "actions" ? "wide" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-settings-dialog-title"
+            aria-describedby="ai-settings-dialog-description"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header settings-ai-modal-header">
+              <div>
+                <p className="eyebrow">{activeAiDialogEyebrow}</p>
+                <h2 id="ai-settings-dialog-title">{activeAiDialogTitle}</h2>
+                <small id="ai-settings-dialog-description">{activeAiDialogDescription}</small>
+              </div>
+              <button
+                type="button"
+                className="btn btn-soft"
+                data-dialog-initial-focus
+                aria-label={`${activeAiDialogTitle} 닫기`}
+                onClick={() => setActiveAiSettingsDialog(null)}
+              >
+                닫기
+              </button>
+            </header>
+
+            <div
+              className={`settings-ai-modal-body ${activeAiSettingsDialog === "context" ? "settings-context-card" : ""}`}
+            >
+              {activeAiSettingsDialog === "actions" ? (
+                <>
+                  <NoteAiActionManager actions={noteAiActionsDraft} onChange={setNoteAiActionsDraft} />
+                  {aiActionMessage ? (
+                    <p className="success-text" role="status" aria-live="polite">
+                      {aiActionMessage}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+
+              {activeAiSettingsDialog === "context" ? (
+                <>
+                  <div className="form-grid two-col">
+                    <label>
+                      AI 컨텍스트 최대 길이
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={String(aiContextMaxLength)}
+                        onChange={(event) => {
+                          const next = Number(event.target.value.replace(/[^0-9]/g, ""));
+                          void updateSetting({
+                            aiContextMaxLength: Number.isFinite(next) ? next : DEFAULT_AI_CONTEXT_MAX_LENGTH,
+                          });
+                        }}
+                      />
+                    </label>
+
+                    <label>
+                      권장 범위
+                      <input
+                        type="text"
+                        value={`${MIN_AI_CONTEXT_MAX_LENGTH} - ${MAX_AI_CONTEXT_MAX_LENGTH}자`}
+                        readOnly
+                      />
+                    </label>
+                  </div>
+
+                  <label className="user-context-editor">
+                    AI 일정 추가에 사용할 맞춤 규칙
+                    <textarea
+                      value={userContextDraft}
+                      maxLength={aiContextMaxLength}
+                      onChange={(event) => setUserContextDraft(event.target.value)}
+                      rows={12}
+                      spellCheck={false}
+                    />
+                  </label>
+
+                  <div className="settings-inline-note">
+                    <span>
+                      AI 일정 추가의 첫 요청부터 시스템 지침으로 전달됩니다. 현재 입력이 더 구체적이면 현재 입력을 우선합니다.
+                    </span>
+                  </div>
+
+                  {userContextMessage ? (
+                    <p className="success-text" role="status" aria-live="polite">
+                      {userContextMessage}
+                    </p>
+                  ) : null}
+                  {userContextError ? (
+                    <p className="error-text" role="alert">
+                      {userContextError}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+
+            <footer className="settings-ai-modal-footer">
+              {activeAiSettingsDialog === "context" ? (
+                <button className="btn btn-soft" type="button" onClick={() => void handleResetUserContext()}>
+                  기본값 복원
+                </button>
+              ) : null}
+
+              <span className="settings-ai-modal-footer-spacer" />
+
+              <button type="button" className="btn btn-outline" onClick={() => setActiveAiSettingsDialog(null)}>
+                닫기
+              </button>
+              {activeAiSettingsDialog === "actions" ? (
+                <button type="button" className="btn btn-primary" onClick={() => void handleSaveAiActions()}>
+                  저장
+                </button>
+              ) : null}
+              {activeAiSettingsDialog === "context" ? (
+                <button className="btn btn-primary" type="button" onClick={() => void handleSaveUserContext()}>
+                  맞춤 규칙 저장
+                </button>
+              ) : null}
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingImport ? (
+        <div className="modal-backdrop" onClick={closePendingImport}>
+          <section
+            ref={importDialogRef}
+            className="modal-card panel settings-backup-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-preview-title"
+            aria-describedby="import-preview-description"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header">
+              <div>
+                <p className="eyebrow">IMPORT PREVIEW</p>
+                <h2 id="import-preview-title">백업 파일 가져오기</h2>
+                <small>{pendingImport.fileName}</small>
+              </div>
+              <button className="btn btn-soft" type="button" disabled={isImporting} onClick={closePendingImport}>
+                닫기
+              </button>
+            </header>
+
+            <p id="import-preview-description" className="description-text">
+              아래 데이터로 현재 내용을 모두 교체합니다. 교체 직전에 현재 데이터를 자동 백업한 뒤 가져옵니다.
+            </p>
+            <div className="stats-grid" aria-label="가져올 데이터 건수">
+              <div className="stat-item">
+                <span className="stat-label">일정</span>
+                <strong className="stat-value">{pendingImport.preview.tasks}건</strong>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">노트</span>
+                <strong className="stat-value">{pendingImport.preview.notes}건</strong>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">프로젝트</span>
+                <strong className="stat-value">{pendingImport.preview.projects}건</strong>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">일정 종류</span>
+                <strong className="stat-value">{pendingImport.preview.taskTypes}건</strong>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">메모</span>
+                <strong className="stat-value">{pendingImport.preview.memos}건</strong>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">노트 버전</span>
+                <strong className="stat-value">{pendingImport.preview.noteVersions}건</strong>
+              </div>
+            </div>
+            <p className="error-text" role="alert">
+              현재 일정 {tasks.length}건과 노트 {notes.length}건을 포함한 앱 데이터가 교체됩니다.
+            </p>
+            <div className="button-row">
+              <button className="btn btn-danger" type="button" disabled={isImporting} onClick={() => void handleConfirmImport()}>
+                {isImporting ? "백업 후 가져오는 중…" : "자동 백업 후 모두 교체"}
+              </button>
+              <button
+                className="btn btn-outline"
+                type="button"
+                disabled={isImporting}
+                data-dialog-initial-focus
+                onClick={closePendingImport}
+              >
+                취소
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {isBackupListOpen ? (
         <div className="modal-backdrop" onClick={() => setIsBackupListOpen(false)}>
           <section
+            ref={backupListDialogRef}
             className="modal-card panel settings-backup-modal-card"
             role="dialog"
             aria-modal="true"
             aria-label="자동 백업 목록"
+            tabIndex={-1}
             onClick={(event) => {
               event.stopPropagation();
             }}

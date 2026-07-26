@@ -1,4 +1,4 @@
-import { requestLlmResponse } from "./agentUtils";
+import { requestLlmResponse, type LlmGenerationOptions } from "./agentUtils";
 
 export interface BriefingTask {
   id: string;
@@ -29,6 +29,7 @@ export interface RunBriefingInput {
   endpoint?: string;
   apiKey: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   onToken?: (delta: string) => void;
   signal?: AbortSignal;
 }
@@ -74,6 +75,7 @@ export async function runBriefing(input: RunBriefingInput): Promise<string> {
     endpoint: input.endpoint,
     apiKey: input.apiKey,
     model: input.model,
+    generationOptions: input.generationOptions,
     onToken: input.onToken,
     signal: input.signal,
   });

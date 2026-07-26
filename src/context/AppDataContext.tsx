@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
+  clampLlmTemperature,
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
   DEFAULT_NOTE_AI_ACTIONS,
@@ -13,6 +14,8 @@ import {
   MAX_AUTOSAVE_NOTE_VERSIONS,
   MAX_MANUAL_NOTE_VERSIONS,
   MIN_AI_CONTEXT_MAX_LENGTH,
+  normalizeLlmGemmaThinkingEnabled,
+  normalizeLlmReasoningEffort,
   SETTINGS_ID,
   USER_CONTEXT_ID,
 } from "../constants";
@@ -61,6 +64,21 @@ interface AutoBackupSummary {
   size: number;
 }
 
+export interface ImportDataPreview {
+  version?: number;
+  exportedAt?: string;
+  tasks: number;
+  projects: number;
+  taskTypes: number;
+  memos: number;
+  settings: number;
+  userContexts: number;
+  notes: number;
+  noteVersions: number;
+  noteTaskLinks: number;
+  projectSubcategories: number;
+}
+
 interface AppDataContextValue {
   tasks: Task[];
   projects: Project[];
@@ -73,6 +91,8 @@ interface AppDataContextValue {
   setting: AppSetting;
   userContext: UserContext;
   isReady: boolean;
+  bootstrapError?: string;
+  retryBootstrap: () => Promise<void>;
   canUndo: boolean;
   undoDescription?: string;
   autoBackups: AutoBackupSummary[];
@@ -107,12 +127,17 @@ interface AppDataContextValue {
         | "llmEndpoint"
         | "llmApiKey"
         | "llmModel"
+        | "llmTemperature"
+        | "llmReasoningEffort"
+        | "llmGemmaThinkingEnabled"
         | "notificationsEnabled"
         | "notifyBeforeMinutes"
         | "autoBackupEnabled"
         | "autoBackupIntervalMinutes"
         | "aiContextMaxLength"
         | "noteAiActions"
+        | "noteTaskSuggestionsEnabled"
+        | "relatedNoteSuggestionsEnabled"
       >
     >,
   ) => Promise<void>;
@@ -120,6 +145,7 @@ interface AppDataContextValue {
   resetUserContext: () => Promise<void>;
   acceptUserContextSuggestion: (suggestion: UserContextSuggestion) => Promise<void>;
   exportData: () => Promise<string>;
+  inspectImportData: (raw: string) => ImportDataPreview;
   importData: (raw: string) => Promise<void>;
   createAutoBackup: (reason?: string) => Promise<void>;
   restoreAutoBackup: (id: string) => Promise<void>;
@@ -229,7 +255,7 @@ function serializeTaskForEquality(task: Task): string {
   });
 }
 
-function validateImportPayload(payload: unknown): payload is {
+interface ImportPayload {
   tasks: Task[];
   projects: Project[];
   taskTypes: TaskType[];
@@ -240,7 +266,11 @@ function validateImportPayload(payload: unknown): payload is {
   noteVersions?: NoteVersion[];
   noteTaskLinks?: NoteTaskLink[];
   projectSubcategories?: ProjectSubcategory[];
-} {
+  version?: number;
+  exportedAt?: string;
+}
+
+function validateImportPayload(payload: unknown): payload is ImportPayload {
   if (!payload || typeof payload !== "object") {
     return false;
   }
@@ -257,6 +287,38 @@ function validateImportPayload(payload: unknown): payload is {
     (candidate.noteTaskLinks === undefined || Array.isArray(candidate.noteTaskLinks)) &&
     (candidate.projectSubcategories === undefined || Array.isArray(candidate.projectSubcategories))
   );
+}
+
+function parseImportPayload(raw: string): ImportPayload {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("JSON 형식이 올바르지 않습니다.");
+  }
+
+  if (!validateImportPayload(parsed)) {
+    throw new Error("가져오기 데이터 형식이 맞지 않습니다. 이 앱에서 내보낸 JSON 백업 파일인지 확인해 주세요.");
+  }
+
+  return parsed;
+}
+
+function toImportDataPreview(payload: ImportPayload): ImportDataPreview {
+  return {
+    version: typeof payload.version === "number" ? payload.version : undefined,
+    exportedAt: typeof payload.exportedAt === "string" ? payload.exportedAt : undefined,
+    tasks: payload.tasks.length,
+    projects: payload.projects.length,
+    taskTypes: payload.taskTypes.length,
+    memos: payload.memos.length,
+    settings: payload.settings.length,
+    userContexts: payload.userContexts?.length ?? 0,
+    notes: payload.notes?.length ?? 0,
+    noteVersions: payload.noteVersions?.length ?? 0,
+    noteTaskLinks: payload.noteTaskLinks?.length ?? 0,
+    projectSubcategories: payload.projectSubcategories?.length ?? 0,
+  };
 }
 
 function clampAiContextMaxLength(value: number | undefined): number {
@@ -276,11 +338,16 @@ function normalizeSetting(setting: AppSetting): AppSetting {
     llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
     llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
     llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
+    llmTemperature: clampLlmTemperature(setting.llmTemperature),
+    llmReasoningEffort: normalizeLlmReasoningEffort(setting.llmReasoningEffort),
+    llmGemmaThinkingEnabled: normalizeLlmGemmaThinkingEnabled(setting.llmGemmaThinkingEnabled),
     aiContextMaxLength: clampAiContextMaxLength(setting.aiContextMaxLength),
     noteAiActions:
       Array.isArray(setting.noteAiActions) && setting.noteAiActions.length > 0
         ? setting.noteAiActions
         : DEFAULT_NOTE_AI_ACTIONS,
+    noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
+    relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled,
   };
 }
 
@@ -574,9 +641,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // 동기 미러를 유지한다. (업데이터 안에서 top을 캡처하면 pop만 되고 복원이 누락될 수 있음)
   const undoStackRef = useRef<UndoEntry[]>([]);
   const [autoBackups, setAutoBackups] = useState<AutoBackupSummary[]>([]);
+  const [bootstrapError, setBootstrapError] = useState<string>();
+
+  const retryBootstrap = useCallback(async () => {
+    try {
+      await bootstrapDatabase();
+      setBootstrapError(undefined);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "알 수 없는 저장소 오류";
+      setBootstrapError(`초기 데이터를 준비하지 못했습니다. ${detail}`);
+    }
+  }, []);
 
   useEffect(() => {
-    void bootstrapDatabase();
+    let isMounted = true;
+    void bootstrapDatabase().catch((error: unknown) => {
+      if (!isMounted) {
+        return;
+      }
+      const detail = error instanceof Error ? error.message : "알 수 없는 저장소 오류";
+      setBootstrapError(`초기 데이터를 준비하지 못했습니다. ${detail}`);
+    });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const tasks = useLiveQuery(() => db.tasks.toArray(), [], []);
@@ -1150,11 +1238,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           | "llmEndpoint"
           | "llmApiKey"
           | "llmModel"
+          | "llmTemperature"
+          | "llmReasoningEffort"
+          | "llmGemmaThinkingEnabled"
           | "notificationsEnabled"
           | "notifyBeforeMinutes"
           | "autoBackupEnabled"
           | "autoBackupIntervalMinutes"
           | "aiContextMaxLength"
+          | "noteAiActions"
+          | "noteTaskSuggestionsEnabled"
+          | "relatedNoteSuggestionsEnabled"
         >
       >,
     ) => {
@@ -1162,6 +1256,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       await db.settings.put({
         ...current,
         ...patch,
+        llmTemperature: clampLlmTemperature(patch.llmTemperature ?? current.llmTemperature),
+        llmReasoningEffort: normalizeLlmReasoningEffort(
+          patch.llmReasoningEffort ?? current.llmReasoningEffort,
+        ),
+        llmGemmaThinkingEnabled:
+          patch.llmGemmaThinkingEnabled === undefined
+            ? normalizeLlmGemmaThinkingEnabled(current.llmGemmaThinkingEnabled)
+            : normalizeLlmGemmaThinkingEnabled(patch.llmGemmaThinkingEnabled),
         notifyBeforeMinutes:
           patch.notifyBeforeMinutes !== undefined
             ? Math.max(0, Math.min(24 * 60, Math.floor(patch.notifyBeforeMinutes)))
@@ -1266,17 +1368,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return JSON.stringify(data, null, 2);
   }, []);
 
-  const importData = useCallback(async (raw: string) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error("JSON 형식이 올바르지 않습니다.");
-    }
+  const inspectImportData = useCallback((raw: string) => {
+    return toImportDataPreview(parseImportPayload(raw));
+  }, []);
 
-    if (!validateImportPayload(parsed)) {
-      throw new Error("가져오기 데이터 형식이 맞지 않습니다.");
-    }
+  const importData = useCallback(async (raw: string) => {
+    const parsed = parseImportPayload(raw);
 
     await db.transaction(
       "rw",
@@ -1442,6 +1539,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setting,
       userContext,
       isReady,
+      bootstrapError,
+      retryBootstrap,
       canUndo: undoStack.length > 0,
       undoDescription: undoStack[undoStack.length - 1]?.description,
       autoBackups,
@@ -1471,6 +1570,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       resetUserContext,
       acceptUserContextSuggestion,
       exportData,
+      inspectImportData,
       importData,
       createAutoBackup,
       restoreAutoBackup,
@@ -1489,6 +1589,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setting,
       userContext,
       isReady,
+      bootstrapError,
+      retryBootstrap,
       undoStack,
       autoBackups,
       createTask,
@@ -1517,6 +1619,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       resetUserContext,
       acceptUserContextSuggestion,
       exportData,
+      inspectImportData,
       importData,
       createAutoBackup,
       restoreAutoBackup,

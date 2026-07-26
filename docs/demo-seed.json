@@ -1,0 +1,397 @@
+{
+  "exportedAt": "2026-07-25T13:52:32.995Z",
+  "version": 3,
+  "tasks": [
+    {
+      "id": "demo-task-01",
+      "title": "전월 이월 분류 정리",
+      "content": "",
+      "taskTypeId": "type-write",
+      "projectId": "project-general",
+      "status": "DONE",
+      "startAt": "2026-07-01T01:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z",
+      "completedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-02",
+      "title": "A출원 분류 검토",
+      "content": "",
+      "taskTypeId": "type-write",
+      "projectId": "project-general",
+      "status": "DONE",
+      "startAt": "2026-07-02T00:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z",
+      "completedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-03",
+      "title": "IPC 재분류 작업",
+      "content": "",
+      "taskTypeId": "type-write",
+      "projectId": "project-general",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-06T06:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-04",
+      "title": "분류 품질 점검 회의",
+      "content": "",
+      "taskTypeId": "type-meeting",
+      "projectId": "project-general",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-20T05:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-05",
+      "title": "선행기술조사 착수 회의",
+      "content": "",
+      "taskTypeId": "type-meeting",
+      "projectId": "project-prior-art",
+      "status": "DONE",
+      "startAt": "2026-07-03T05:00:00.000Z",
+      "isMajor": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z",
+      "completedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-06",
+      "title": "B출원 선행문헌 검토",
+      "content": "",
+      "taskTypeId": "type-write",
+      "projectId": "project-prior-art",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-06T07:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-07",
+      "title": "C출원 조사 검토",
+      "content": "",
+      "taskTypeId": "type-write",
+      "projectId": "project-prior-art",
+      "status": "ON_HOLD",
+      "startAt": "2026-07-06T08:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-08",
+      "title": "선행기술조사 결과 제출",
+      "content": "",
+      "taskTypeId": "type-submit",
+      "projectId": "project-prior-art",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-15T05:00:00.000Z",
+      "isMajor": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-09",
+      "title": "심사관 협의",
+      "content": "",
+      "taskTypeId": "type-meeting",
+      "projectId": "project-ai",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-06T01:00:00.000Z",
+      "isMajor": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-10",
+      "title": "특허심사 AI 세미나",
+      "content": "",
+      "taskTypeId": "type-event",
+      "projectId": "project-ai",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-09T06:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-11",
+      "title": "대전 출장 · AI 실증",
+      "content": "",
+      "taskTypeId": "type-trip",
+      "projectId": "project-ai",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-17T04:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-12",
+      "title": "주간 자료 취합",
+      "content": "",
+      "taskTypeId": "type-write",
+      "projectId": "project-report",
+      "status": "DONE",
+      "startAt": "2026-07-06T00:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z",
+      "completedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-13",
+      "title": "월간 실적 보고",
+      "content": "",
+      "taskTypeId": "type-report",
+      "projectId": "project-report",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-08T00:30:00.000Z",
+      "isMajor": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-14",
+      "title": "분기 리뷰 자료 제출",
+      "content": "",
+      "taskTypeId": "type-submit",
+      "projectId": "project-report",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-22T07:00:00.000Z",
+      "isMajor": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-15",
+      "title": "OOO 심사관과 점심",
+      "content": "",
+      "taskTypeId": "type-meal",
+      "projectId": "project-lunch",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-06T03:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-16",
+      "title": "팀 저녁 회식",
+      "content": "",
+      "taskTypeId": "type-meal",
+      "projectId": "project-lunch",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-10T09:30:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-17",
+      "title": "심사실무 교육 이수",
+      "content": "",
+      "taskTypeId": "type-event",
+      "projectId": "project-general",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-07T01:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-18",
+      "title": "AI 활용 교육 이수",
+      "content": "",
+      "taskTypeId": "type-event",
+      "projectId": "project-ai",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-13T05:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-19",
+      "title": "청렴 교육 이수",
+      "content": "",
+      "taskTypeId": "type-event",
+      "projectId": "project-general",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-24T00:00:00.000Z",
+      "isMajor": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-20",
+      "title": "연가",
+      "content": "",
+      "taskTypeId": "type-leave",
+      "projectId": "project-general",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-14T00:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-21",
+      "title": "연가 (하계휴가)",
+      "content": "",
+      "taskTypeId": "type-leave",
+      "projectId": "project-general",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-27T00:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "demo-task-22",
+      "title": "연가 (하계휴가)",
+      "content": "",
+      "taskTypeId": "type-leave",
+      "projectId": "project-general",
+      "status": "NOT_DONE",
+      "startAt": "2026-07-28T00:00:00.000Z",
+      "isMajor": false,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    }
+  ],
+  "projects": [
+    {
+      "id": "project-general",
+      "name": "분류",
+      "color": "#3b82f6",
+      "description": "출원 분류와 IPC 재분류",
+      "order": 0,
+      "isActive": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "project-prior-art",
+      "name": "선행기술조사",
+      "color": "#8b5cf6",
+      "description": "선행문헌 조사와 대응 논리",
+      "order": 1,
+      "isActive": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "project-ai",
+      "name": "특허심사 AI",
+      "color": "#0ea5e9",
+      "description": "심사 지원 AI 도입과 실증",
+      "order": 2,
+      "isActive": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "project-report",
+      "name": "보고",
+      "color": "#f59e0b",
+      "description": "실적 취합과 정기 보고",
+      "order": 3,
+      "isActive": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    },
+    {
+      "id": "project-lunch",
+      "name": "저녁 약속",
+      "color": "#14b8a6",
+      "description": "식사·회식 약속",
+      "order": 4,
+      "isActive": true,
+      "createdAt": "2026-07-25T13:52:32.995Z",
+      "updatedAt": "2026-07-25T13:52:32.995Z"
+    }
+  ],
+  "taskTypes": [],
+  "memos": [],
+  "settings": [],
+  "userContexts": [],
+  "notes": [
+    {
+      "id": "demo-note-prior-art",
+      "title": "선행기술조사 정리",
+      "projectId": "project-prior-art",
+      "tags": [
+        "선행조사",
+        "대응논리"
+      ],
+      "isPinned": true,
+      "content": "# 선행기술조사 정리\n\n## 대상\n- ETSI TS 138 관련 출원 3건\n\n## 진행 상황\n- [x] 표준 문서 확보\n- [x] 청구항 대조표 작성\n- [ ] 대응논리 초안\n- [ ] 협의 안건 정리\n\n> **핵심**: 표준 필수성 판단이 쟁점. 15일 제출 마감 준수 필요.",
+      "status": "active",
+      "linkedTaskIds": [],
+      "sortOrder": 0,
+      "createdAt": "2026-07-25T12:52:32.997Z",
+      "updatedAt": "2026-07-25T12:52:32.997Z"
+    },
+    {
+      "id": "demo-note-consult",
+      "title": "심사관 협의 준비 메모",
+      "projectId": "project-ai",
+      "tags": [
+        "협의",
+        "심사"
+      ],
+      "isPinned": false,
+      "content": "# 심사관 협의 준비\n\n## 안건\n1. A출원 진보성 판단 기준\n2. B출원 명세서 기재불비\n\n## 준비물\n- [ ] 인용문헌 요약본\n- [ ] 비교표 출력\n- [x] 회의실 예약",
+      "status": "active",
+      "linkedTaskIds": [],
+      "sortOrder": 1,
+      "createdAt": "2026-07-25T11:52:32.997Z",
+      "updatedAt": "2026-07-25T11:52:32.997Z"
+    },
+    {
+      "id": "demo-note-training",
+      "title": "교육 이수 계획",
+      "projectId": "project-general",
+      "tags": [
+        "교육"
+      ],
+      "isPinned": false,
+      "content": "# 올해 교육 이수 계획\n\n- [x] 심사실무 기본 (3월)\n- [ ] 심사실무 교육 — 7일\n- [ ] AI 활용 교육 — 13일\n- [ ] 청렴 교육 — 24일\n\n> 연말까지 총 40시간 이수 필요. 현재 22시간.",
+      "status": "active",
+      "linkedTaskIds": [],
+      "sortOrder": 2,
+      "createdAt": "2026-07-25T10:52:32.997Z",
+      "updatedAt": "2026-07-25T10:52:32.997Z"
+    },
+    {
+      "id": "demo-note-report",
+      "title": "월간 실적 보고 초안",
+      "projectId": "project-report",
+      "tags": [
+        "보고"
+      ],
+      "isPinned": false,
+      "content": "# 실적 보고 초안\n\n## 처리 현황\n- 분류 처리 **32건**\n- 선행기술조사 **12건**\n- 의견제출통지 **8건**\n\n## 특이사항\n특허심사 AI 실증 참여로 조사 소요시간 단축.",
+      "status": "active",
+      "linkedTaskIds": [],
+      "sortOrder": 3,
+      "createdAt": "2026-07-25T09:52:32.997Z",
+      "updatedAt": "2026-07-25T09:52:32.997Z"
+    }
+  ],
+  "noteVersions": [],
+  "noteTaskLinks": [],
+  "projectSubcategories": []
+}

@@ -1,4 +1,8 @@
-import { requestLlmResponse, type LlmChatMessage } from "./llmClient";
+import {
+  requestLlmResponse,
+  type LlmChatMessage,
+  type LlmGenerationOptions,
+} from "./llmClient";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -198,6 +202,7 @@ export async function requestJsonWithRetry(params: {
   apiKey: string;
   endpoint?: string;
   model?: string;
+  generationOptions?: LlmGenerationOptions;
   signal?: AbortSignal;
   onToken?: (delta: string) => void;
 }): Promise<{ payload?: Record<string, unknown>; raw: string }> {
@@ -217,5 +222,5 @@ export async function requestJsonWithRetry(params: {
   return { payload: parseJsonObject(retryRaw), raw: retryRaw };
 }
 
-export type { LlmChatMessage };
+export type { LlmChatMessage, LlmGenerationOptions };
 export { requestLlmResponse };
