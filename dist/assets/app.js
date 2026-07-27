@@ -30636,6 +30636,10 @@ var DEFAULT_PROJECTS = [
   }
 ];
 var DEFAULT_PROJECT_IDS = DEFAULT_PROJECTS.map((project) => project.id);
+var DEFAULT_USER_CONTEXT_PREFERENCE_RULES = [
+  "일정 수정 요청에 시간 언급이 따로 없으면 기존 일정의 시작·종료 시간을 그대로 유지한다.",
+  "시간 없이 특정 날짜까지 일정을 생성해 달라고 요청하면 해당 일정의 시간을 18:00으로 설정한다."
+];
 var DEFAULT_USER_CONTEXT_MARKDOWN = `# AI 일정 관리 개인 규칙
 
 ## 적용 원칙
@@ -30660,6 +30664,9 @@ var DEFAULT_USER_CONTEXT_MARKDOWN = `# AI 일정 관리 개인 규칙
 - 요청에 ‘중요’, ‘필수’, ‘긴급’, ‘반드시’ 등의 표현이 있으면 중요 일정으로 표시한다.
 - 처장님, 차장님과 관련된 일정은 중요 일정으로 표시한다.
 - 단순 참고·선택·보류 성격의 내용은 일정으로 단정하지 말고, 등록이 필요한지 먼저 확인한다.
+
+## 선호 규칙
+${DEFAULT_USER_CONTEXT_PREFERENCE_RULES.map((rule) => `- ${rule}`).join("\n")}
 
 ## 결과 품질
 - 하나의 요청에 서로 독립된 일정이 여러 개 있으면 각각 분리해 제안한다.
@@ -31402,6 +31409,27 @@ var ScheduleDB = class extends import_wrapper_default {
   }
 };
 var db = new ScheduleDB();
+function mergeRequiredUserContextPreferences(markdown) {
+  const missingRules = DEFAULT_USER_CONTEXT_PREFERENCE_RULES.filter((rule) => !markdown.includes(rule));
+  if (missingRules.length === 0) {
+    return markdown;
+  }
+  const lines = markdown.trimEnd().split(/\r?\n/);
+  const heading = "## 선호 규칙";
+  const headingIndex = lines.findIndex((line) => line.trim() === heading);
+  if (headingIndex >= 0) {
+    const nextHeadingIndex = lines.findIndex((line, index) => index > headingIndex && line.startsWith("## "));
+    const insertAt = nextHeadingIndex >= 0 ? nextHeadingIndex : lines.length;
+    lines.splice(insertAt, 0, ...missingRules.map((rule) => `- ${rule}`), "");
+    return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}
+`;
+  }
+  return `${markdown.trimEnd()}
+
+${heading}
+${missingRules.map((rule) => `- ${rule}`).join("\n")}
+`;
+}
 async function bootstrapDatabase() {
   const now = toIsoNow();
   const existingTaskTypes = await db.taskTypes.toArray();
@@ -31482,6 +31510,15 @@ async function bootstrapDatabase() {
       })),
       updatedAt: now
     });
+  } else {
+    const markdown = mergeRequiredUserContextPreferences(userContext.markdown);
+    if (markdown !== userContext.markdown) {
+      await db.userContexts.put({
+        ...userContext,
+        markdown,
+        updatedAt: now
+      });
+    }
   }
 }
 
@@ -34025,14 +34062,45 @@ function ProposalDateTime({ startAt, endAt }) {
   if (isSameDay) {
     return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-date-time same-day", children: [
       formatProposalTime(start),
-      " → ",
+      " ⮕ ",
       formatProposalTime(end)
     ] });
   }
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-date-time different-day", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: formatProposalDate(start) }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "proposal-date-time-arrow", "aria-hidden": "true", children: "→" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "proposal-date-time-arrow", "aria-hidden": "true", children: "⬇" }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: formatProposalDate(end) })
+  ] });
+}
+function ProposalUpdateDateTime({
+  previousStartAt,
+  previousEndAt,
+  nextStartAt,
+  nextEndAt
+}) {
+  if (nextEndAt) {
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ProposalDateTime, { startAt: nextStartAt, endAt: nextEndAt });
+  }
+  if (!previousStartAt || previousEndAt) {
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ProposalDateTime, { startAt: nextStartAt });
+  }
+  const previous = new Date(previousStartAt);
+  const next = new Date(nextStartAt);
+  if (Number.isNaN(previous.getTime()) || Number.isNaN(next.getTime()) || previous.getTime() === next.getTime()) {
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ProposalDateTime, { startAt: nextStartAt });
+  }
+  const isSameDay = previous.getFullYear() === next.getFullYear() && previous.getMonth() === next.getMonth() && previous.getDate() === next.getDate();
+  if (isSameDay) {
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-date-time same-day", children: [
+      formatProposalTime(previous),
+      " ⮕ ",
+      formatProposalTime(next)
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "proposal-date-time different-day", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: formatProposalDate(previous) }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "proposal-date-time-arrow", "aria-hidden": "true", children: "⬇" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: formatProposalDate(next) })
   ] });
 }
 function focusTextareaAtEnd(textarea, value) {
@@ -34550,7 +34618,15 @@ ${failedLogs.join("\n")}`);
             ] }),
             nextContent ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: nextContent }) : null
           ] }),
-          nextStartAt ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ProposalDateTime, { startAt: nextStartAt, endAt: nextEndAt }) : null
+          nextStartAt ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            ProposalUpdateDateTime,
+            {
+              previousStartAt: target?.startAt,
+              previousEndAt: target?.endAt,
+              nextStartAt,
+              nextEndAt
+            }
+          ) : null
         ] })
       ] }) }, `proposal-${index}`);
     }

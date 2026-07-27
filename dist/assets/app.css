@@ -2638,11 +2638,21 @@ textarea:focus-visible,
   white-space: nowrap;
 }
 .ai-add-workspace .proposal-date-time.different-day {
-  gap: 2px;
+  gap: 3px;
+  max-height: 80px;
+  font-size: clamp(20px, 2.2vw, 24px);
+  line-height: 1.1;
 }
 .ai-add-workspace .proposal-date-time-arrow {
+  display: block;
   justify-self: center;
-  line-height: 1;
+  width: 26px;
+  height: 20px;
+  margin: 0;
+  color: #2563eb;
+  font-size: 20px;
+  line-height: 20px;
+  text-align: center;
 }
 .ai-add-workspace .proposal-card-topline,
 .ai-add-workspace .proposal-meta-grid {
@@ -2733,7 +2743,7 @@ textarea:focus-visible,
     text-align: left;
   }
   .ai-add-workspace .proposal-date-time-arrow {
-    justify-self: start;
+    justify-self: center;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -6884,6 +6894,23 @@ textarea:focus-visible,
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   background: var(--surface-pearl);
+}
+.briefing-body .markdown-renderer {
+  gap: 8px;
+}
+.briefing-body .markdown-renderer h1 {
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.briefing-body .markdown-renderer h2 {
+  font-size: 18px;
+  line-height: 1.35;
+}
+.briefing-body .markdown-renderer p,
+.briefing-body .markdown-renderer li {
+  font-size: 17px;
+  line-height: 1.52;
 }
 .note-ai-chip.action {
   border-color: var(--primary);

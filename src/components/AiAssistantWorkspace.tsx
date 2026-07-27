@@ -164,14 +164,63 @@ function ProposalDateTime({ startAt, endAt }: { startAt: string; endAt?: string 
   }
   const isSameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
   if (isSameDay) {
-    return <span className="proposal-date-time same-day">{formatProposalTime(start)} → {formatProposalTime(end)}</span>;
+    return <span className="proposal-date-time same-day">{formatProposalTime(start)} ⮕ {formatProposalTime(end)}</span>;
   }
 
   return (
     <span className="proposal-date-time different-day">
       <span>{formatProposalDate(start)}</span>
-      <span className="proposal-date-time-arrow" aria-hidden="true">→</span>
+      <span className="proposal-date-time-arrow" aria-hidden="true">⬇</span>
       <span>{formatProposalDate(end)}</span>
+    </span>
+  );
+}
+
+function ProposalUpdateDateTime({
+  previousStartAt,
+  previousEndAt,
+  nextStartAt,
+  nextEndAt,
+}: {
+  previousStartAt?: string;
+  previousEndAt?: string;
+  nextStartAt: string;
+  nextEndAt?: string;
+}) {
+  // A ranged schedule is shown as the final revised range only.
+  if (nextEndAt) {
+    return <ProposalDateTime startAt={nextStartAt} endAt={nextEndAt} />;
+  }
+
+  // The arrow represents before/after only for point-in-time schedules.
+  if (!previousStartAt || previousEndAt) {
+    return <ProposalDateTime startAt={nextStartAt} />;
+  }
+
+  const previous = new Date(previousStartAt);
+  const next = new Date(nextStartAt);
+  if (Number.isNaN(previous.getTime()) || Number.isNaN(next.getTime()) || previous.getTime() === next.getTime()) {
+    return <ProposalDateTime startAt={nextStartAt} />;
+  }
+
+  const isSameDay =
+    previous.getFullYear() === next.getFullYear() &&
+    previous.getMonth() === next.getMonth() &&
+    previous.getDate() === next.getDate();
+
+  if (isSameDay) {
+    return (
+      <span className="proposal-date-time same-day">
+        {formatProposalTime(previous)} ⮕ {formatProposalTime(next)}
+      </span>
+    );
+  }
+
+  return (
+    <span className="proposal-date-time different-day">
+      <span>{formatProposalDate(previous)}</span>
+      <span className="proposal-date-time-arrow" aria-hidden="true">⬇</span>
+      <span>{formatProposalDate(next)}</span>
     </span>
   );
 }
@@ -770,7 +819,14 @@ export function AiAssistantWorkspace({
                 </span>
                 {nextContent ? <small>{nextContent}</small> : null}
               </span>
-              {nextStartAt ? <ProposalDateTime startAt={nextStartAt} endAt={nextEndAt} /> : null}
+              {nextStartAt ? (
+                <ProposalUpdateDateTime
+                  previousStartAt={target?.startAt}
+                  previousEndAt={target?.endAt}
+                  nextStartAt={nextStartAt}
+                  nextEndAt={nextEndAt}
+                />
+              ) : null}
             </span>
           </label>
         </li>
