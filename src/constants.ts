@@ -248,6 +248,11 @@ export const DEFAULT_PROJECTS: Project[] = [
 
 export const DEFAULT_PROJECT_IDS = DEFAULT_PROJECTS.map((project) => project.id);
 
+export const DEFAULT_USER_CONTEXT_PREFERENCE_RULES = [
+  "일정 수정 요청에 시간 언급이 따로 없으면 기존 일정의 시작·종료 시간을 그대로 유지한다.",
+  "시간 없이 특정 날짜까지 일정을 생성해 달라고 요청하면 해당 일정의 시간을 18:00으로 설정한다.",
+] as const;
+
 export const DEFAULT_USER_CONTEXT_MARKDOWN = `# AI 일정 관리 개인 규칙
 
 ## 적용 원칙
@@ -272,6 +277,9 @@ export const DEFAULT_USER_CONTEXT_MARKDOWN = `# AI 일정 관리 개인 규칙
 - 요청에 ‘중요’, ‘필수’, ‘긴급’, ‘반드시’ 등의 표현이 있으면 중요 일정으로 표시한다.
 - 처장님, 차장님과 관련된 일정은 중요 일정으로 표시한다.
 - 단순 참고·선택·보류 성격의 내용은 일정으로 단정하지 말고, 등록이 필요한지 먼저 확인한다.
+
+## 선호 규칙
+${DEFAULT_USER_CONTEXT_PREFERENCE_RULES.map((rule) => `- ${rule}`).join("\n")}
 
 ## 결과 품질
 - 하나의 요청에 서로 독립된 일정이 여러 개 있으면 각각 분리해 제안한다.

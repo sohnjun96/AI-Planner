@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTING,
   DEFAULT_TASK_TYPES,
   DEFAULT_USER_CONTEXT,
+  DEFAULT_USER_CONTEXT_PREFERENCE_RULES,
   normalizeLlmGemmaThinkingEnabled,
   normalizeLlmReasoningEffort,
   SETTINGS_ID,
@@ -80,6 +81,25 @@ class ScheduleDB extends Dexie {
 }
 
 export const db = new ScheduleDB();
+
+function mergeRequiredUserContextPreferences(markdown: string): string {
+  const missingRules = DEFAULT_USER_CONTEXT_PREFERENCE_RULES.filter((rule) => !markdown.includes(rule));
+  if (missingRules.length === 0) {
+    return markdown;
+  }
+
+  const lines = markdown.trimEnd().split(/\r?\n/);
+  const heading = "## 선호 규칙";
+  const headingIndex = lines.findIndex((line) => line.trim() === heading);
+  if (headingIndex >= 0) {
+    const nextHeadingIndex = lines.findIndex((line, index) => index > headingIndex && line.startsWith("## "));
+    const insertAt = nextHeadingIndex >= 0 ? nextHeadingIndex : lines.length;
+    lines.splice(insertAt, 0, ...missingRules.map((rule) => `- ${rule}`), "");
+    return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+  }
+
+  return `${markdown.trimEnd()}\n\n${heading}\n${missingRules.map((rule) => `- ${rule}`).join("\n")}\n`;
+}
 
 export async function bootstrapDatabase(): Promise<void> {
   const now = toIsoNow();
@@ -184,5 +204,14 @@ export async function bootstrapDatabase(): Promise<void> {
       })),
       updatedAt: now,
     });
+  } else {
+    const markdown = mergeRequiredUserContextPreferences(userContext.markdown);
+    if (markdown !== userContext.markdown) {
+      await db.userContexts.put({
+        ...userContext,
+        markdown,
+        updatedAt: now,
+      });
+    }
   }
 }
