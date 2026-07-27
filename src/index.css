@@ -8118,24 +8118,28 @@ textarea:focus-visible,
 }
 
 .day-complete-banner strong {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
   font-size: clamp(17px, 2vw, 20px);
-  line-height: 1.45;
+  line-height: 1.32;
 }
 
 .day-complete-icon {
   display: inline-grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: linear-gradient(135deg, #60a5fa, #2563eb);
   color: #fff;
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 800;
+  align-self: center;
   box-shadow:
-    0 8px 18px -8px rgba(30, 64, 175, 0.9),
-    0 0 0 4px rgba(59, 130, 246, 0.12);
+    0 5px 12px -7px rgba(30, 64, 175, 0.78),
+    0 0 0 3px rgba(59, 130, 246, 0.12);
   animation: day-complete-icon-pop 700ms 120ms ease-out both;
 }
 
@@ -8216,13 +8220,14 @@ textarea:focus-visible,
   }
 
   .day-complete-banner strong {
+    min-height: 26px;
     font-size: 16px;
   }
 
   .day-complete-icon {
-    width: 40px;
-    height: 40px;
-    font-size: 19px;
+    width: 26px;
+    height: 26px;
+    font-size: 16px;
   }
 }
 
