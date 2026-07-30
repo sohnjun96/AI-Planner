@@ -26,6 +26,12 @@
   <img src="docs/images/demo-ai-schedule-lunch.gif" alt="AI 일정 추가 — 점심 약속" width="660">
 </p>
 
+**여러 날에 걸친 일정도** — "다음주 월화수 서울 출장"은 기간 하나로 묶여, 달력에서 사흘에 걸쳐 표시됩니다.
+
+<p align="center">
+  <img src="docs/images/demo-ai-schedule-trip.gif" alt="AI 일정 추가 — 여러 날 출장" width="700">
+</p>
+
 **물어보면 찾아준다** — 노트와 일정을 검색해 답하고, 근거가 된 항목을 눌러 바로 이동합니다.
 
 <p align="center">
