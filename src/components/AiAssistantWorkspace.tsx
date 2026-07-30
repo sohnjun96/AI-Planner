@@ -145,6 +145,11 @@ function formatProposalDate(date: Date): string {
   return `${date.getMonth() + 1}/${date.getDate()}(${weekday}) ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatProposalDay(date: Date): string {
+  const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
+  return `${date.getMonth() + 1}/${date.getDate()}(${weekday})`;
+}
+
 function formatProposalTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
@@ -164,14 +169,16 @@ function ProposalDateTime({ startAt, endAt }: { startAt: string; endAt?: string 
   }
   const isSameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
   if (isSameDay) {
-    return <span className="proposal-date-time same-day">{formatProposalTime(start)} ⮕ {formatProposalTime(end)}</span>;
+    return (
+      <span className="proposal-date-time same-day">
+        {formatProposalDay(start)} {formatProposalTime(start)} ~ {formatProposalTime(end)}
+      </span>
+    );
   }
 
   return (
-    <span className="proposal-date-time different-day">
-      <span>{formatProposalDate(start)}</span>
-      <span className="proposal-date-time-arrow" aria-hidden="true">⬇</span>
-      <span>{formatProposalDate(end)}</span>
+    <span className="proposal-date-time date-range">
+      <span>{formatProposalDay(start)} ~ {formatProposalDay(end)}</span>
     </span>
   );
 }

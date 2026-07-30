@@ -2645,6 +2645,10 @@ textarea:focus-visible,
   font-size: clamp(20px, 2.2vw, 24px);
   line-height: 1.1;
 }
+.ai-add-workspace .proposal-date-time.date-range {
+  font-size: clamp(22px, 2.5vw, 27px);
+  line-height: 1.2;
+}
 .ai-add-workspace .proposal-date-time-arrow {
   display: block;
   justify-self: center;
