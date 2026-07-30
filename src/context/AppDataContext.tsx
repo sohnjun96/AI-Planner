@@ -40,6 +40,7 @@ import type {
   UserContextSuggestion,
 } from "../models";
 import { toIsoNow } from "../utils/date";
+import { getLunchAutoCompleteAt, isLunchTask } from "../utils/lunchTasks";
 import { isTaskActive, isTaskCanceled, isTaskDone } from "../utils/taskStatus";
 
 interface ProjectInput {
@@ -680,6 +681,73 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const setting = useMemo(() => normalizeSetting(rawSetting ?? DEFAULT_SETTING), [rawSetting]);
   const userContext = useMemo(() => normalizeUserContext(rawUserContext), [rawUserContext]);
+  const lunchProjectMap = useMemo<Record<string, Project | undefined>>(
+    () => Object.fromEntries(projects.map((project) => [project.id, project])),
+    [projects],
+  );
+  const lunchTypeMap = useMemo<Record<string, TaskType | undefined>>(
+    () => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])),
+    [taskTypes],
+  );
+
+  useEffect(() => {
+    const activeLunchTasks = tasks
+      .filter((task) => isTaskActive(task.status) && isLunchTask(task, lunchTypeMap, lunchProjectMap))
+      .map((task) => ({ task, completeAt: getLunchAutoCompleteAt(task) }))
+      .filter((entry): entry is { task: Task; completeAt: number } => entry.completeAt !== null);
+
+    if (activeLunchTasks.length === 0) {
+      return;
+    }
+
+    const completeDueLunchTasks = async () => {
+      await db.transaction("rw", db.tasks, async () => {
+        const currentTasks = await db.tasks.toArray();
+        const checkAt = Date.now();
+        const completedAt = toIsoNow();
+        const dueTasks = currentTasks.filter((task) => {
+          if (!isTaskActive(task.status) || !isLunchTask(task, lunchTypeMap, lunchProjectMap)) {
+            return false;
+          }
+          const completeAt = getLunchAutoCompleteAt(task);
+          return completeAt !== null && completeAt <= checkAt;
+        });
+
+        if (dueTasks.length === 0) {
+          return;
+        }
+
+        await db.tasks.bulkPut(
+          dueTasks.map((task) => ({
+            ...task,
+            status: "DONE",
+            completedAt,
+            canceledAt: undefined,
+            updatedAt: completedAt,
+          })),
+        );
+      });
+    };
+
+    const now = Date.now();
+    const hasDueTask = activeLunchTasks.some(({ completeAt }) => completeAt <= now);
+    if (hasDueTask) {
+      void completeDueLunchTasks().catch((error: unknown) => {
+        console.error("점심 일정을 자동 완료하지 못했습니다.", error);
+      });
+      return;
+    }
+
+    const nextCompleteAt = Math.min(...activeLunchTasks.map(({ completeAt }) => completeAt));
+    const timeoutMs = Math.min(Math.max(nextCompleteAt - now + 100, 100), 2_147_000_000);
+    const timeoutId = window.setTimeout(() => {
+      void completeDueLunchTasks().catch((error: unknown) => {
+        console.error("점심 일정을 자동 완료하지 못했습니다.", error);
+      });
+    }, timeoutMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [lunchProjectMap, lunchTypeMap, tasks]);
 
   const pushUndo = useCallback((entry: UndoEntry) => {
     const prev = undoStackRef.current;

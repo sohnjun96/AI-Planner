@@ -908,7 +908,7 @@ function buildPromptMessages(input: RunScheduleAgentInput, toolResults: ToolExec
     : "";
   const userPayload = {
     now: toIsoNow(),
-    conversation: input.conversation.filter((message) => message.content.trim() !== input.userMessage.trim()).slice(-6),
+    conversation: input.conversation.filter((message) => message.content.trim() !== input.userMessage.trim()),
     userRequest: input.userMessage,
     knownChoices: {
       status: ["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"],

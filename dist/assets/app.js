@@ -31522,6 +31522,24 @@ async function bootstrapDatabase() {
   }
 }
 
+// src/utils/lunchTasks.ts
+var LUNCH_TASK_KEYWORDS = ["점심", "중식", "lunch"];
+var DEFAULT_LUNCH_DURATION_MS = 60 * 60 * 1e3;
+function isLunchTask(task, typeMap, projectMap) {
+  const taskTypeName = typeMap[task.taskTypeId]?.name ?? "";
+  const projectName = projectMap[task.projectId]?.name ?? "";
+  const source = `${task.title} ${task.content} ${taskTypeName} ${projectName}`.toLowerCase();
+  return task.projectId === LUNCH_PROJECT_ID || LUNCH_TASK_KEYWORDS.some((keyword) => source.includes(keyword));
+}
+function getLunchAutoCompleteAt(task) {
+  const startAt = new Date(task.startAt).getTime();
+  if (!Number.isFinite(startAt)) {
+    return null;
+  }
+  const endAt = task.endAt ? new Date(task.endAt).getTime() : Number.NaN;
+  return Number.isFinite(endAt) && endAt > startAt ? endAt : startAt + DEFAULT_LUNCH_DURATION_MS;
+}
+
 // src/context/AppDataContext.tsx
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 var AppDataContext = (0, import_react2.createContext)(void 0);
@@ -31890,6 +31908,62 @@ function AppDataProvider({ children }) {
   const rawUserContext = useLiveQuery(() => db.userContexts.get(USER_CONTEXT_ID), [], void 0);
   const setting = (0, import_react2.useMemo)(() => normalizeSetting(rawSetting ?? DEFAULT_SETTING), [rawSetting]);
   const userContext = (0, import_react2.useMemo)(() => normalizeUserContext(rawUserContext), [rawUserContext]);
+  const lunchProjectMap = (0, import_react2.useMemo)(
+    () => Object.fromEntries(projects.map((project) => [project.id, project])),
+    [projects]
+  );
+  const lunchTypeMap = (0, import_react2.useMemo)(
+    () => Object.fromEntries(taskTypes.map((taskType) => [taskType.id, taskType])),
+    [taskTypes]
+  );
+  (0, import_react2.useEffect)(() => {
+    const activeLunchTasks = tasks.filter((task) => isTaskActive(task.status) && isLunchTask(task, lunchTypeMap, lunchProjectMap)).map((task) => ({ task, completeAt: getLunchAutoCompleteAt(task) })).filter((entry) => entry.completeAt !== null);
+    if (activeLunchTasks.length === 0) {
+      return;
+    }
+    const completeDueLunchTasks = async () => {
+      await db.transaction("rw", db.tasks, async () => {
+        const currentTasks = await db.tasks.toArray();
+        const checkAt = Date.now();
+        const completedAt = toIsoNow();
+        const dueTasks = currentTasks.filter((task) => {
+          if (!isTaskActive(task.status) || !isLunchTask(task, lunchTypeMap, lunchProjectMap)) {
+            return false;
+          }
+          const completeAt = getLunchAutoCompleteAt(task);
+          return completeAt !== null && completeAt <= checkAt;
+        });
+        if (dueTasks.length === 0) {
+          return;
+        }
+        await db.tasks.bulkPut(
+          dueTasks.map((task) => ({
+            ...task,
+            status: "DONE",
+            completedAt,
+            canceledAt: void 0,
+            updatedAt: completedAt
+          }))
+        );
+      });
+    };
+    const now = Date.now();
+    const hasDueTask = activeLunchTasks.some(({ completeAt }) => completeAt <= now);
+    if (hasDueTask) {
+      void completeDueLunchTasks().catch((error) => {
+        console.error("점심 일정을 자동 완료하지 못했습니다.", error);
+      });
+      return;
+    }
+    const nextCompleteAt = Math.min(...activeLunchTasks.map(({ completeAt }) => completeAt));
+    const timeoutMs = Math.min(Math.max(nextCompleteAt - now + 100, 100), 2147e6);
+    const timeoutId = window.setTimeout(() => {
+      void completeDueLunchTasks().catch((error) => {
+        console.error("점심 일정을 자동 완료하지 못했습니다.", error);
+      });
+    }, timeoutMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [lunchProjectMap, lunchTypeMap, tasks]);
   const pushUndo = (0, import_react2.useCallback)((entry) => {
     const prev = undoStackRef.current;
     if (entry.kind === "upsert_tasks" && entry.tasks.length === 1) {
@@ -33855,7 +33929,7 @@ ${JSON.stringify(activeRules, null, 2)}` : ""
   ].join("\n\n") : "";
   const userPayload = {
     now: toIsoNow(),
-    conversation: input.conversation.filter((message) => message.content.trim() !== input.userMessage.trim()).slice(-6),
+    conversation: input.conversation.filter((message) => message.content.trim() !== input.userMessage.trim()),
     userRequest: input.userMessage,
     knownChoices: {
       status: ["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"],
@@ -34139,7 +34213,7 @@ function AiAssistantWorkspace({
   const onDraftPreservedRef = (0, import_react4.useRef)(onDraftPreserved);
   const [draft, setDraft] = (0, import_react4.useState)(initialDraft);
   const [retryMessage, setRetryMessage] = (0, import_react4.useState)(initialDraft.trim());
-  const [lastUserMessage, setLastUserMessage] = (0, import_react4.useState)("");
+  const [conversationContext, setConversationContext] = (0, import_react4.useState)([]);
   const [lastAssistantMessage, setLastAssistantMessage] = (0, import_react4.useState)(
     "일정 요청을 입력하면 AI가 필요한 질문과 초안, 변경안을 정리해서 보여줍니다."
   );
@@ -34171,15 +34245,6 @@ function AiAssistantWorkspace({
   const canApplyProposalWithEnter = Boolean(
     pendingProposal && hasOperations && selectedOperationIndexes.length > 0 && !isApplying
   );
-  const conversationContext = (0, import_react4.useMemo)(() => {
-    if (!lastUserMessage || !lastAssistantMessage) {
-      return [];
-    }
-    return [
-      { role: "user", content: lastUserMessage },
-      { role: "assistant", content: lastAssistantMessage }
-    ];
-  }, [lastAssistantMessage, lastUserMessage]);
   (0, import_react4.useEffect)(() => {
     if (!pendingProposal) {
       setSelectedOperationIndexes([]);
@@ -34302,8 +34367,12 @@ function AiAssistantWorkspace({
         onProgress: handleProgress,
         signal: controller.signal
       });
-      setLastUserMessage(userMessage);
       setLastAssistantMessage(result.assistantMessage);
+      setConversationContext((previous) => [
+        ...previous,
+        { role: "user", content: userMessage },
+        { role: "assistant", content: result.assistantMessage }
+      ]);
       setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
       setPendingContextSuggestions(result.contextSuggestions);
@@ -35880,12 +35949,20 @@ function AppShell() {
   const quickActionsRef = (0, import_react10.useRef)(null);
   const aiDialogRef = useDialogFocus({
     isOpen: isAiAddOpen,
-    onClose: () => setIsAiAddOpen(false)
+    onClose: closeAiScheduleSession
   });
   const activeProjectId = (0, import_react10.useMemo)(
     () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
     [projects]
   );
+  function openAiScheduleSession(initialDraft = "") {
+    setAiInitialDraft(initialDraft);
+    setAiSessionRevision((revision) => revision + 1);
+    setIsAiAddOpen(true);
+  }
+  function closeAiScheduleSession() {
+    setIsAiAddOpen(false);
+  }
   async function handleQuickCreateNote(content) {
     const fallbackTitle = deriveNoteTitle(content) || "새 노트";
     let title = fallbackTitle;
@@ -35969,11 +36046,11 @@ function AppShell() {
       }
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
-        setIsAiAddOpen(true);
+        openAiScheduleSession();
       }
       if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
-        setIsAiAddOpen(true);
+        openAiScheduleSession();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -35984,11 +36061,7 @@ function AppShell() {
   (0, import_react10.useEffect)(() => {
     const handleOpenAiSchedule = (event) => {
       const detail = event.detail;
-      if (detail?.initialDraft !== void 0) {
-        setAiInitialDraft(detail.initialDraft);
-        setAiSessionRevision((revision) => revision + 1);
-      }
-      setIsAiAddOpen(true);
+      openAiScheduleSession(detail?.initialDraft ?? "");
     };
     window.addEventListener("ai-planner:open-ai-schedule", handleOpenAiSchedule);
     return () => {
@@ -36047,7 +36120,7 @@ function AppShell() {
           ),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setIsAskOpen(true), "aria-label": "내 데이터에 질문", children: "질문" }),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: "btn btn-soft", onClick: () => setIsNoteAddOpen(true), "aria-label": "노트 추가", children: "노트 추가" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => setIsAiAddOpen(true), "aria-label": "AI 일정 추가, 단축키 A 또는 Ctrl+Shift+N", children: "AI 일정 추가" })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: "btn btn-primary", onClick: () => openAiScheduleSession(), "aria-label": "AI 일정 추가, 단축키 A 또는 Ctrl+Shift+N", children: "AI 일정 추가" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { ref: quickActionsRef, className: "top-nav-mobile-actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
@@ -36071,7 +36144,7 @@ function AppShell() {
                 onClick: () => {
                   rememberMobileQuickActionsTrigger();
                   setIsQuickActionsOpen(false);
-                  setIsAiAddOpen(true);
+                  openAiScheduleSession();
                 },
                 children: "일정 AI 추가"
               }
@@ -36126,9 +36199,7 @@ function AppShell() {
       {
         className: "modal-backdrop",
         hidden: !isAiAddOpen,
-        onClick: () => {
-          setIsAiAddOpen(false);
-        },
+        onClick: closeAiScheduleSession,
         children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
           "section",
           {
@@ -36161,9 +36232,7 @@ function AppShell() {
                     type: "button",
                     className: "btn ai-add-modal-close",
                     "aria-label": "AI 일정 추가 닫기",
-                    onClick: () => {
-                      setIsAiAddOpen(false);
-                    },
+                    onClick: closeAiScheduleSession,
                     children: "닫기"
                   }
                 )
@@ -36184,12 +36253,11 @@ function AppShell() {
                   initialDraft: aiInitialDraft,
                   onApplied: () => {
                     setAiInitialDraft("");
-                    setIsAiAddOpen(false);
+                    closeAiScheduleSession();
                   },
-                  onRequestClose: () => setIsAiAddOpen(false),
-                  onDraftPreserved: setAiInitialDraft,
+                  onRequestClose: closeAiScheduleSession,
                   onOpenAiSettings: () => {
-                    setIsAiAddOpen(false);
+                    closeAiScheduleSession();
                     navigate("/settings?section=ai");
                   }
                 },
@@ -38809,13 +38877,6 @@ function isSubmissionTaskType(task, typeMap) {
   }
   return taskType.name.trim().toLowerCase() === "제출";
 }
-var LUNCH_TASK_KEYWORDS = ["점심", "중식", "lunch"];
-function isLunchTask(task, typeMap, projectMap) {
-  const taskTypeName = typeMap[task.taskTypeId]?.name ?? "";
-  const projectName = projectMap[task.projectId]?.name ?? "";
-  const source = `${task.title} ${task.content} ${taskTypeName} ${projectName}`.toLowerCase();
-  return LUNCH_TASK_KEYWORDS.some((keyword) => source.includes(keyword));
-}
 function isLunchProjectTask(task, projectMap) {
   const projectName = projectMap[task.projectId]?.name.trim().toLowerCase() ?? "";
   return task.projectId === LUNCH_PROJECT_ID || projectName === "점심 약속";
@@ -38874,11 +38935,11 @@ function applyCalendarMarkerRules(summary, task, maps) {
     }
   }
 }
-function getSchedulePriorityTasks(tasks, mode) {
+function getFilteredScheduleTasks(tasks, mode) {
   if (mode === "all") {
     return tasks;
   }
-  return tasks.filter(isTaskVisibleOnBoard);
+  return tasks.filter((task) => task.status === mode);
 }
 function summarizeTasks(tasks, conflictMap) {
   return tasks.reduce(
@@ -38910,11 +38971,47 @@ function getWeekStart(dateKey, weekStartsOn) {
   const diff = (currentDay - startIndex + 7) % 7;
   return addDays(source, -diff);
 }
+function getTaskDateKeys(task) {
+  const startKey = getDateKey(task.startAt);
+  if (!task.endAt) {
+    return [startKey];
+  }
+  const startAt = new Date(task.startAt).getTime();
+  const endAt = new Date(task.endAt).getTime();
+  const endKey = getDateKey(task.endAt);
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt < startAt || endKey <= startKey) {
+    return [startKey];
+  }
+  const keys = [];
+  for (let date = /* @__PURE__ */ new Date(`${startKey}T12:00:00`); getDateKey(date) <= endKey; date = addDays(date, 1)) {
+    keys.push(getDateKey(date));
+  }
+  return keys;
+}
+function isTaskDisplayedOnDate(task, dateKey) {
+  const startKey = getDateKey(task.startAt);
+  if (dateKey < startKey) {
+    return false;
+  }
+  if (!task.endAt) {
+    return dateKey === startKey;
+  }
+  const startAt = new Date(task.startAt).getTime();
+  const endAt = new Date(task.endAt).getTime();
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt < startAt) {
+    return dateKey === startKey;
+  }
+  return dateKey <= getDateKey(task.endAt);
+}
+function getUniqueTasks(tasks) {
+  return [...new Map(tasks.map((task) => [task.id, task])).values()];
+}
 function groupTasksByDate(tasks) {
   const groups = /* @__PURE__ */ new Map();
   for (const task of tasks) {
-    const key = getDateKey(task.startAt);
-    groups.set(key, [...groups.get(key) ?? [], task]);
+    for (const key of getTaskDateKeys(task)) {
+      groups.set(key, [...groups.get(key) ?? [], task]);
+    }
   }
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([dateKey, items]) => ({
     dateKey,
@@ -39014,7 +39111,7 @@ function DashboardPage() {
   const [datePopoverKey, setDatePopoverKey] = (0, import_react19.useState)(null);
   const [calendarViewMode, setCalendarViewMode] = (0, import_react19.useState)(getInitialCalendarViewMode);
   const [isTopbarExpanded, setIsTopbarExpanded] = (0, import_react19.useState)(false);
-  const [scheduleViewMode, setScheduleViewMode] = (0, import_react19.useState)("priority");
+  const [scheduleViewMode, setScheduleViewMode] = (0, import_react19.useState)("NOT_DONE");
   const [contextMenu, setContextMenu] = (0, import_react19.useState)(null);
   const [celebrationRevision, setCelebrationRevision] = (0, import_react19.useState)(0);
   const previousTasksRef = (0, import_react19.useRef)(null);
@@ -39110,7 +39207,7 @@ function DashboardPage() {
   const conflictMap = (0, import_react19.useMemo)(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
   const calendarConflictMap = (0, import_react19.useMemo)(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
   const todayTasks = (0, import_react19.useMemo)(
-    () => tasks.filter((task) => getDateKey(task.startAt) === todayKey2 && isTaskVisibleOnBoard(task)).sort(compareByStatusThenStartAt),
+    () => tasks.filter((task) => isTaskDisplayedOnDate(task, todayKey2) && isTaskVisibleOnBoard(task)).sort(compareByStatusThenStartAt),
     [tasks, todayKey2]
   );
   const submissionTasks = (0, import_react19.useMemo)(
@@ -39130,67 +39227,68 @@ function DashboardPage() {
       return {
         date,
         key,
-        tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key).sort(compareByStartAtAsc)
+        tasks: calendarTasks.filter((task) => isTaskDisplayedOnDate(task, key)).sort(compareByStartAtAsc)
       };
     }),
     [calendarTasks, weekStart]
   );
+  const weekViewSourceTasks = (0, import_react19.useMemo)(() => getUniqueTasks(weekDays.flatMap((day) => day.tasks)), [weekDays]);
+  const listViewSourceTasks = (0, import_react19.useMemo)(
+    () => getUniqueTasks(upcomingCalendarListGroups.flatMap((group) => group.tasks)),
+    [upcomingCalendarListGroups]
+  );
   const weekVisibleTaskCount = (0, import_react19.useMemo)(
-    () => weekDays.reduce((sum, day) => sum + getSchedulePriorityTasks(day.tasks, scheduleViewMode).length, 0),
-    [scheduleViewMode, weekDays]
+    () => getFilteredScheduleTasks(weekViewSourceTasks, scheduleViewMode).length,
+    [scheduleViewMode, weekViewSourceTasks]
   );
   const listVisibleTaskCount = (0, import_react19.useMemo)(
-    () => upcomingCalendarListGroups.reduce((sum, group) => sum + getSchedulePriorityTasks(group.tasks, scheduleViewMode).length, 0),
-    [scheduleViewMode, upcomingCalendarListGroups]
+    () => getFilteredScheduleTasks(listViewSourceTasks, scheduleViewMode).length,
+    [listViewSourceTasks, scheduleViewMode]
   );
   const visibleCalendarListGroups = (0, import_react19.useMemo)(
     () => upcomingCalendarListGroups.filter((group) => {
       if (scheduleViewMode === "all") {
         return true;
       }
-      return getSchedulePriorityTasks(group.tasks, scheduleViewMode).length > 0;
+      return getFilteredScheduleTasks(group.tasks, scheduleViewMode).length > 0;
     }),
     [scheduleViewMode, upcomingCalendarListGroups]
   );
-  const listViewSourceTasks = (0, import_react19.useMemo)(
-    () => upcomingCalendarListGroups.flatMap((group) => group.tasks),
-    [upcomingCalendarListGroups]
-  );
   const daySummaryByDate = (0, import_react19.useMemo)(() => {
     return calendarTasks.reduce((summaryMap, task) => {
-      const key = getDateKey(task.startAt);
-      const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
-      current.total += 1;
-      current.done += isTaskDone(task.status) ? 1 : 0;
-      current.canceled += isTaskCanceled(task.status) ? 1 : 0;
-      current.pending += task.status === "NOT_DONE" ? 1 : 0;
-      current.onHold += task.status === "ON_HOLD" ? 1 : 0;
-      current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
-      const isCanceled = isTaskCanceled(task.status);
-      current.major += task.isMajor && !isCanceled ? 1 : 0;
-      current.lunch += !isCanceled && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
-      if (!isCanceled) {
-        applyCalendarMarkerRules(current, task, { projectMap, typeMap });
+      for (const key of getTaskDateKeys(task)) {
+        const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
+        current.total += 1;
+        current.done += isTaskDone(task.status) ? 1 : 0;
+        current.canceled += isTaskCanceled(task.status) ? 1 : 0;
+        current.pending += task.status === "NOT_DONE" ? 1 : 0;
+        current.onHold += task.status === "ON_HOLD" ? 1 : 0;
+        current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
+        const isCanceled = isTaskCanceled(task.status);
+        current.major += task.isMajor && !isCanceled ? 1 : 0;
+        current.lunch += !isCanceled && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+        if (!isCanceled) {
+          applyCalendarMarkerRules(current, task, { projectMap, typeMap });
+        }
+        if (isTaskVisibleOnBoard(task) || setting.showPastCompleted && isTaskDone(task.status)) {
+          current.titles.push({
+            id: task.id,
+            title: task.title,
+            startAt: task.startAt,
+            isMajor: task.isMajor
+          });
+        }
+        summaryMap[key] = current;
       }
-      if (isTaskVisibleOnBoard(task) || setting.showPastCompleted && isTaskDone(task.status)) {
-        current.titles.push({
-          id: task.id,
-          title: task.title,
-          startAt: task.startAt,
-          isMajor: task.isMajor
-        });
-      }
-      summaryMap[key] = current;
       return summaryMap;
     }, {});
   }, [calendarConflictMap, calendarTasks, projectMap, typeMap, setting.showPastCompleted]);
-  const weekViewSourceTasks = (0, import_react19.useMemo)(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = (0, import_react19.useMemo)(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
   const listViewSummary = (0, import_react19.useMemo)(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
   const [selectedDayFilterState, setSelectedDayFilterState] = (0, import_react19.useState)({ date: selectedDate, value: "all" });
   const selectedDayFilter = selectedDayFilterState.date === selectedDate ? selectedDayFilterState.value : "all";
   const selectedDayTasks = (0, import_react19.useMemo)(
-    () => calendarTasks.filter((task) => getDateKey(task.startAt) === selectedDate).sort(compareByStatusThenStartAt),
+    () => calendarTasks.filter((task) => isTaskDisplayedOnDate(task, selectedDate)).sort(compareByStatusThenStartAt),
     [calendarTasks, selectedDate]
   );
   const selectedDaySummary = (0, import_react19.useMemo)(
@@ -39365,15 +39463,17 @@ function DashboardPage() {
     if (!task) {
       return;
     }
+    const dateSpan = getTaskDateKeys(task).length - 1;
+    const shiftedEndDate = getDateKey(addDays(/* @__PURE__ */ new Date(`${dateKey}T12:00:00`), dateSpan));
     await updateTask(task.id, {
       ...toTaskInput2(task),
       startAt: shiftIsoToDateKey(task.startAt, dateKey),
-      endAt: task.endAt ? shiftIsoToDateKey(task.endAt, dateKey) : void 0
+      endAt: task.endAt ? shiftIsoToDateKey(task.endAt, shiftedEndDate) : void 0
     });
   }
   function getLeaveTasksForDate(dateKey) {
     return tasks.filter(
-      (task) => getDateKey(task.startAt) === dateKey && isTaskActive(task.status) && isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"])
+      (task) => isTaskDisplayedOnDate(task, dateKey) && isTaskActive(task.status) && isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"])
     );
   }
   function handleCalendarDateSelect(dateKey) {
@@ -39620,13 +39720,13 @@ function DashboardPage() {
     )) });
   }
   function renderScheduleStatGrid(summary) {
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "agenda-stat-grid", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "agenda-stat-grid", role: "group", "aria-label": "상태별 필터", children: [
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
         "button",
         {
           type: "button",
           className: `all ${scheduleViewMode === "all" ? "active" : ""}`,
-          onClick: () => setScheduleViewMode((prev) => prev === "all" ? "priority" : "all"),
+          onClick: () => setScheduleViewMode("all"),
           "aria-pressed": scheduleViewMode === "all",
           children: [
             "전체 ",
@@ -39634,22 +39734,58 @@ function DashboardPage() {
           ]
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: "not_done", children: [
-        "미완료 ",
-        summary.pending
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: "on_hold", children: [
-        "보류 ",
-        summary.onHold
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: "done", children: [
-        "완료 ",
-        summary.done
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: "canceled", children: [
-        "취소 ",
-        summary.canceled
-      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: `not_done ${scheduleViewMode === "NOT_DONE" ? "active" : ""}`,
+          onClick: () => setScheduleViewMode("NOT_DONE"),
+          "aria-pressed": scheduleViewMode === "NOT_DONE",
+          children: [
+            "미완료 ",
+            summary.pending
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: `on_hold ${scheduleViewMode === "ON_HOLD" ? "active" : ""}`,
+          onClick: () => setScheduleViewMode("ON_HOLD"),
+          "aria-pressed": scheduleViewMode === "ON_HOLD",
+          children: [
+            "보류 ",
+            summary.onHold
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: `done ${scheduleViewMode === "DONE" ? "active" : ""}`,
+          onClick: () => setScheduleViewMode("DONE"),
+          "aria-pressed": scheduleViewMode === "DONE",
+          children: [
+            "완료 ",
+            summary.done
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: `canceled ${scheduleViewMode === "CANCELED" ? "active" : ""}`,
+          onClick: () => setScheduleViewMode("CANCELED"),
+          "aria-pressed": scheduleViewMode === "CANCELED",
+          children: [
+            "취소 ",
+            summary.canceled
+          ]
+        }
+      ),
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: "conflict", children: [
         "충돌 ",
         summary.conflicts
@@ -39657,7 +39793,7 @@ function DashboardPage() {
     ] });
   }
   function renderSelectedDatePopover(dateKey) {
-    const dayTasks = calendarTasks.filter((task) => getDateKey(task.startAt) === dateKey).sort(compareByStatusGroupThenStartAt);
+    const dayTasks = calendarTasks.filter((task) => isTaskDisplayedOnDate(task, dateKey)).sort(compareByStatusGroupThenStartAt);
     if (dayTasks.length === 0) {
       return null;
     }
@@ -39820,7 +39956,7 @@ function DashboardPage() {
           ] }),
           renderScheduleStatGrid(weekViewSummary),
           /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "week-agenda", children: weekDays.map((day) => {
-            const visibleDayTasks = getSchedulePriorityTasks(day.tasks, scheduleViewMode);
+            const visibleDayTasks = getFilteredScheduleTasks(day.tasks, scheduleViewMode);
             const isToday = day.key === todayKey2;
             const isEmpty = visibleDayTasks.length === 0;
             return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: `week-day-row ${isToday ? "today" : ""} ${isEmpty ? "empty" : ""}`, children: [
@@ -39862,9 +39998,9 @@ function DashboardPage() {
             ] })
           ] }),
           renderScheduleStatGrid(listViewSummary),
-          visibleCalendarListGroups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "empty-state compact", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { children: "등록된 일정이 없습니다." }) }) : null,
+          visibleCalendarListGroups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "empty-state compact", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { children: listViewSourceTasks.length === 0 || scheduleViewMode === "all" ? "등록된 일정이 없습니다." : `${STATUS_LABELS[scheduleViewMode]} 상태의 일정이 없습니다.` }) }) : null,
           visibleCalendarListGroups.map((group) => {
-            const visibleGroupTasks = getSchedulePriorityTasks(group.tasks, scheduleViewMode);
+            const visibleGroupTasks = getFilteredScheduleTasks(group.tasks, scheduleViewMode);
             return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: "task-date-group dashboard-list-date-group", children: [
               /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("header", { children: [
                 /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("h3", { children: group.title }),

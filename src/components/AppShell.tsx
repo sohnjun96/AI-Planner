@@ -41,13 +41,23 @@ export function AppShell() {
   const quickActionsRef = useRef<HTMLDivElement | null>(null);
   const aiDialogRef = useDialogFocus<HTMLElement>({
     isOpen: isAiAddOpen,
-    onClose: () => setIsAiAddOpen(false),
+    onClose: closeAiScheduleSession,
   });
 
   const activeProjectId = useMemo(
     () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
     [projects],
   );
+
+  function openAiScheduleSession(initialDraft = "") {
+    setAiInitialDraft(initialDraft);
+    setAiSessionRevision((revision) => revision + 1);
+    setIsAiAddOpen(true);
+  }
+
+  function closeAiScheduleSession() {
+    setIsAiAddOpen(false);
+  }
 
   async function handleQuickCreateNote(content: string) {
     const fallbackTitle = deriveNoteTitle(content) || "새 노트";
@@ -148,11 +158,11 @@ export function AppShell() {
 
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
-        setIsAiAddOpen(true);
+        openAiScheduleSession();
       }
       if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
-        setIsAiAddOpen(true);
+        openAiScheduleSession();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -164,11 +174,7 @@ export function AppShell() {
   useEffect(() => {
     const handleOpenAiSchedule = (event: Event) => {
       const detail = (event as CustomEvent<AiScheduleOpenDetail>).detail;
-      if (detail?.initialDraft !== undefined) {
-        setAiInitialDraft(detail.initialDraft);
-        setAiSessionRevision((revision) => revision + 1);
-      }
-      setIsAiAddOpen(true);
+      openAiScheduleSession(detail?.initialDraft ?? "");
     };
 
     window.addEventListener("ai-planner:open-ai-schedule", handleOpenAiSchedule);
@@ -244,7 +250,7 @@ export function AppShell() {
               노트 추가
             </button>
 
-            <button type="button" className="btn btn-primary" onClick={() => setIsAiAddOpen(true)} aria-label="AI 일정 추가, 단축키 A 또는 Ctrl+Shift+N">
+            <button type="button" className="btn btn-primary" onClick={() => openAiScheduleSession()} aria-label="AI 일정 추가, 단축키 A 또는 Ctrl+Shift+N">
               AI 일정 추가
             </button>
           </div>
@@ -268,7 +274,7 @@ export function AppShell() {
                   onClick={() => {
                     rememberMobileQuickActionsTrigger();
                     setIsQuickActionsOpen(false);
-                    setIsAiAddOpen(true);
+                    openAiScheduleSession();
                   }}
                 >
                   일정 AI 추가
@@ -323,9 +329,7 @@ export function AppShell() {
       <div
         className="modal-backdrop"
         hidden={!isAiAddOpen}
-        onClick={() => {
-          setIsAiAddOpen(false);
-        }}
+        onClick={closeAiScheduleSession}
       >
           <section
             ref={aiDialogRef}
@@ -355,9 +359,7 @@ export function AppShell() {
                 type="button"
                 className="btn ai-add-modal-close"
                 aria-label="AI 일정 추가 닫기"
-                onClick={() => {
-                  setIsAiAddOpen(false);
-                }}
+                onClick={closeAiScheduleSession}
               >
                 닫기
               </button>
@@ -378,12 +380,11 @@ export function AppShell() {
               initialDraft={aiInitialDraft}
               onApplied={() => {
                 setAiInitialDraft("");
-                setIsAiAddOpen(false);
+                closeAiScheduleSession();
               }}
-              onRequestClose={() => setIsAiAddOpen(false)}
-              onDraftPreserved={setAiInitialDraft}
+              onRequestClose={closeAiScheduleSession}
               onOpenAiSettings={() => {
-                setIsAiAddOpen(false);
+                closeAiScheduleSession();
                 navigate("/settings?section=ai");
               }}
             />

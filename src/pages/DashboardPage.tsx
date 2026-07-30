@@ -32,6 +32,7 @@ import {
   isTaskDone,
   isTaskVisibleOnBoard,
 } from "../utils/taskStatus";
+import { isLunchTask } from "../utils/lunchTasks";
 
 const GLOBAL_MEMO_KEY = "global";
 const DASHBOARD_VIEW_MODE_STORAGE_KEY = "ai-planner:dashboard-view-mode";
@@ -68,7 +69,7 @@ type TaskModalState =
     }
   | null;
 
-type AgendaViewMode = "priority" | "all";
+type AgendaViewMode = TaskStatus | "all";
 
 type DashboardContextMenu =
   | {
@@ -227,19 +228,6 @@ function isSubmissionTaskType(task: Task, typeMap: Record<string, TaskType | und
   return taskType.name.trim().toLowerCase() === "제출";
 }
 
-const LUNCH_TASK_KEYWORDS = ["점심", "중식", "lunch"];
-
-function isLunchTask(
-  task: Task,
-  typeMap: Record<string, TaskType | undefined>,
-  projectMap: Record<string, Project | undefined>,
-): boolean {
-  const taskTypeName = typeMap[task.taskTypeId]?.name ?? "";
-  const projectName = projectMap[task.projectId]?.name ?? "";
-  const source = `${task.title} ${task.content} ${taskTypeName} ${projectName}`.toLowerCase();
-  return LUNCH_TASK_KEYWORDS.some((keyword) => source.includes(keyword));
-}
-
 function isLunchProjectTask(task: Task, projectMap: Record<string, Project | undefined>): boolean {
   const projectName = projectMap[task.projectId]?.name.trim().toLowerCase() ?? "";
   return task.projectId === LUNCH_PROJECT_ID || projectName === "점심 약속";
@@ -326,12 +314,12 @@ function applyCalendarMarkerRules(
   }
 }
 
-function getSchedulePriorityTasks(tasks: Task[], mode: AgendaViewMode): Task[] {
+function getFilteredScheduleTasks(tasks: Task[], mode: AgendaViewMode): Task[] {
   if (mode === "all") {
     return tasks;
   }
 
-  return tasks.filter(isTaskVisibleOnBoard);
+  return tasks.filter((task) => task.status === mode);
 }
 
 function summarizeTasks(tasks: Task[], conflictMap: Record<string, string[]>): CalendarDaySummary {
@@ -366,12 +354,58 @@ function getWeekStart(dateKey: string, weekStartsOn: "sun" | "mon"): Date {
   return addDays(source, -diff);
 }
 
+function getTaskDateKeys(task: Task): string[] {
+  const startKey = getDateKey(task.startAt);
+  if (!task.endAt) {
+    return [startKey];
+  }
+
+  const startAt = new Date(task.startAt).getTime();
+  const endAt = new Date(task.endAt).getTime();
+  const endKey = getDateKey(task.endAt);
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt < startAt || endKey <= startKey) {
+    return [startKey];
+  }
+
+  const keys: string[] = [];
+  for (
+    let date = new Date(`${startKey}T12:00:00`);
+    getDateKey(date) <= endKey;
+    date = addDays(date, 1)
+  ) {
+    keys.push(getDateKey(date));
+  }
+  return keys;
+}
+
+function isTaskDisplayedOnDate(task: Task, dateKey: string): boolean {
+  const startKey = getDateKey(task.startAt);
+  if (dateKey < startKey) {
+    return false;
+  }
+  if (!task.endAt) {
+    return dateKey === startKey;
+  }
+
+  const startAt = new Date(task.startAt).getTime();
+  const endAt = new Date(task.endAt).getTime();
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt < startAt) {
+    return dateKey === startKey;
+  }
+  return dateKey <= getDateKey(task.endAt);
+}
+
+function getUniqueTasks(tasks: Task[]): Task[] {
+  return [...new Map(tasks.map((task) => [task.id, task])).values()];
+}
+
 function groupTasksByDate(tasks: Task[]) {
   const groups = new Map<string, Task[]>();
 
   for (const task of tasks) {
-    const key = getDateKey(task.startAt);
-    groups.set(key, [...(groups.get(key) ?? []), task]);
+    for (const key of getTaskDateKeys(task)) {
+      groups.set(key, [...(groups.get(key) ?? []), task]);
+    }
   }
 
   return [...groups.entries()]
@@ -492,7 +526,7 @@ export function DashboardPage() {
   const [datePopoverKey, setDatePopoverKey] = useState<string | null>(null);
   const [calendarViewMode, setCalendarViewMode] = useState<TaskViewMode>(getInitialCalendarViewMode);
   const [isTopbarExpanded, setIsTopbarExpanded] = useState(false);
-  const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("priority");
+  const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("NOT_DONE");
   const [contextMenu, setContextMenu] = useState<DashboardContextMenu | null>(null);
   const [celebrationRevision, setCelebrationRevision] = useState(0);
   const previousTasksRef = useRef<Task[] | null>(null);
@@ -601,7 +635,7 @@ export function DashboardPage() {
   const calendarConflictMap = useMemo(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
 
   const todayTasks = useMemo(
-    () => tasks.filter((task) => getDateKey(task.startAt) === todayKey && isTaskVisibleOnBoard(task)).sort(compareByStatusThenStartAt),
+    () => tasks.filter((task) => isTaskDisplayedOnDate(task, todayKey) && isTaskVisibleOnBoard(task)).sort(compareByStatusThenStartAt),
     [tasks, todayKey],
   );
 
@@ -628,18 +662,23 @@ export function DashboardPage() {
         return {
           date,
           key,
-          tasks: calendarTasks.filter((task) => getDateKey(task.startAt) === key).sort(compareByStartAtAsc),
+          tasks: calendarTasks.filter((task) => isTaskDisplayedOnDate(task, key)).sort(compareByStartAtAsc),
         };
       }),
     [calendarTasks, weekStart],
   );
+  const weekViewSourceTasks = useMemo(() => getUniqueTasks(weekDays.flatMap((day) => day.tasks)), [weekDays]);
+  const listViewSourceTasks = useMemo(
+    () => getUniqueTasks(upcomingCalendarListGroups.flatMap((group) => group.tasks)),
+    [upcomingCalendarListGroups],
+  );
   const weekVisibleTaskCount = useMemo(
-    () => weekDays.reduce((sum, day) => sum + getSchedulePriorityTasks(day.tasks, scheduleViewMode).length, 0),
-    [scheduleViewMode, weekDays],
+    () => getFilteredScheduleTasks(weekViewSourceTasks, scheduleViewMode).length,
+    [scheduleViewMode, weekViewSourceTasks],
   );
   const listVisibleTaskCount = useMemo(
-    () => upcomingCalendarListGroups.reduce((sum, group) => sum + getSchedulePriorityTasks(group.tasks, scheduleViewMode).length, 0),
-    [scheduleViewMode, upcomingCalendarListGroups],
+    () => getFilteredScheduleTasks(listViewSourceTasks, scheduleViewMode).length,
+    [listViewSourceTasks, scheduleViewMode],
   );
   const visibleCalendarListGroups = useMemo(
     () =>
@@ -647,46 +686,41 @@ export function DashboardPage() {
         if (scheduleViewMode === "all") {
           return true;
         }
-        return getSchedulePriorityTasks(group.tasks, scheduleViewMode).length > 0;
+        return getFilteredScheduleTasks(group.tasks, scheduleViewMode).length > 0;
       }),
     [scheduleViewMode, upcomingCalendarListGroups],
   );
-  const listViewSourceTasks = useMemo(
-    () => upcomingCalendarListGroups.flatMap((group) => group.tasks),
-    [upcomingCalendarListGroups],
-  );
-
   const daySummaryByDate = useMemo(() => {
     return calendarTasks.reduce<Record<string, CalendarDaySummary>>((summaryMap, task) => {
-      const key = getDateKey(task.startAt);
-      const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
-      current.total += 1;
-      current.done += isTaskDone(task.status) ? 1 : 0;
-      current.canceled += isTaskCanceled(task.status) ? 1 : 0;
-      current.pending += task.status === "NOT_DONE" ? 1 : 0;
-      current.onHold += task.status === "ON_HOLD" ? 1 : 0;
-      current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
-      const isCanceled = isTaskCanceled(task.status);
-      current.major += task.isMajor && !isCanceled ? 1 : 0;
-      current.lunch += !isCanceled && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
-      if (!isCanceled) {
-        applyCalendarMarkerRules(current, task, { projectMap, typeMap });
+      for (const key of getTaskDateKeys(task)) {
+        const current = summaryMap[key] ?? { ...EMPTY_DAY_SUMMARY, markers: [], titles: [] };
+        current.total += 1;
+        current.done += isTaskDone(task.status) ? 1 : 0;
+        current.canceled += isTaskCanceled(task.status) ? 1 : 0;
+        current.pending += task.status === "NOT_DONE" ? 1 : 0;
+        current.onHold += task.status === "ON_HOLD" ? 1 : 0;
+        current.conflicts += (calendarConflictMap[task.id]?.length ?? 0) > 0 ? 1 : 0;
+        const isCanceled = isTaskCanceled(task.status);
+        current.major += task.isMajor && !isCanceled ? 1 : 0;
+        current.lunch += !isCanceled && isLunchTask(task, typeMap, projectMap) ? 1 : 0;
+        if (!isCanceled) {
+          applyCalendarMarkerRules(current, task, { projectMap, typeMap });
+        }
+        // 월간 셀에는 미완료만 보이는 게 기본. "지난 완료 업무를 기본으로 표시"가 켜지면 완료도 보여준다
+        if (isTaskVisibleOnBoard(task) || (setting.showPastCompleted && isTaskDone(task.status))) {
+          current.titles.push({
+            id: task.id,
+            title: task.title,
+            startAt: task.startAt,
+            isMajor: task.isMajor,
+          });
+        }
+        summaryMap[key] = current;
       }
-      // 월간 셀에는 미완료만 보이는 게 기본. "지난 완료 업무를 기본으로 표시"가 켜지면 완료도 보여준다
-      if (isTaskVisibleOnBoard(task) || (setting.showPastCompleted && isTaskDone(task.status))) {
-        current.titles.push({
-          id: task.id,
-          title: task.title,
-          startAt: task.startAt,
-          isMajor: task.isMajor,
-        });
-      }
-      summaryMap[key] = current;
       return summaryMap;
     }, {});
   }, [calendarConflictMap, calendarTasks, projectMap, typeMap, setting.showPastCompleted]);
 
-  const weekViewSourceTasks = useMemo(() => weekDays.flatMap((day) => day.tasks), [weekDays]);
   const weekViewSummary = useMemo(() => summarizeTasks(weekViewSourceTasks, calendarConflictMap), [calendarConflictMap, weekViewSourceTasks]);
   const listViewSummary = useMemo(() => summarizeTasks(listViewSourceTasks, calendarConflictMap), [calendarConflictMap, listViewSourceTasks]);
 
@@ -700,7 +734,7 @@ export function DashboardPage() {
   const selectedDayTasks = useMemo(
     () =>
       calendarTasks
-        .filter((task) => getDateKey(task.startAt) === selectedDate)
+        .filter((task) => isTaskDisplayedOnDate(task, selectedDate))
         .sort(compareByStatusThenStartAt),
     [calendarTasks, selectedDate],
   );
@@ -890,17 +924,19 @@ export function DashboardPage() {
       return;
     }
 
+    const dateSpan = getTaskDateKeys(task).length - 1;
+    const shiftedEndDate = getDateKey(addDays(new Date(`${dateKey}T12:00:00`), dateSpan));
     await updateTask(task.id, {
       ...toTaskInput(task),
       startAt: shiftIsoToDateKey(task.startAt, dateKey),
-      endAt: task.endAt ? shiftIsoToDateKey(task.endAt, dateKey) : undefined,
+      endAt: task.endAt ? shiftIsoToDateKey(task.endAt, shiftedEndDate) : undefined,
     });
   }
 
   function getLeaveTasksForDate(dateKey: string) {
     return tasks.filter(
       (task) =>
-        getDateKey(task.startAt) === dateKey &&
+        isTaskDisplayedOnDate(task, dateKey) &&
         isTaskActive(task.status) &&
         isCalendarTypeTask(task, typeMap, ["type-leave"], ["연가"]),
     );
@@ -1193,19 +1229,47 @@ export function DashboardPage() {
 
   function renderScheduleStatGrid(summary: CalendarDaySummary) {
     return (
-      <div className="agenda-stat-grid">
+      <div className="agenda-stat-grid" role="group" aria-label="상태별 필터">
         <button
           type="button"
           className={`all ${scheduleViewMode === "all" ? "active" : ""}`}
-          onClick={() => setScheduleViewMode((prev) => (prev === "all" ? "priority" : "all"))}
+          onClick={() => setScheduleViewMode("all")}
           aria-pressed={scheduleViewMode === "all"}
         >
           전체 {summary.total}
         </button>
-        <span className="not_done">미완료 {summary.pending}</span>
-        <span className="on_hold">보류 {summary.onHold}</span>
-        <span className="done">완료 {summary.done}</span>
-        <span className="canceled">취소 {summary.canceled}</span>
+        <button
+          type="button"
+          className={`not_done ${scheduleViewMode === "NOT_DONE" ? "active" : ""}`}
+          onClick={() => setScheduleViewMode("NOT_DONE")}
+          aria-pressed={scheduleViewMode === "NOT_DONE"}
+        >
+          미완료 {summary.pending}
+        </button>
+        <button
+          type="button"
+          className={`on_hold ${scheduleViewMode === "ON_HOLD" ? "active" : ""}`}
+          onClick={() => setScheduleViewMode("ON_HOLD")}
+          aria-pressed={scheduleViewMode === "ON_HOLD"}
+        >
+          보류 {summary.onHold}
+        </button>
+        <button
+          type="button"
+          className={`done ${scheduleViewMode === "DONE" ? "active" : ""}`}
+          onClick={() => setScheduleViewMode("DONE")}
+          aria-pressed={scheduleViewMode === "DONE"}
+        >
+          완료 {summary.done}
+        </button>
+        <button
+          type="button"
+          className={`canceled ${scheduleViewMode === "CANCELED" ? "active" : ""}`}
+          onClick={() => setScheduleViewMode("CANCELED")}
+          aria-pressed={scheduleViewMode === "CANCELED"}
+        >
+          취소 {summary.canceled}
+        </button>
         <span className="conflict">충돌 {summary.conflicts}</span>
       </div>
     );
@@ -1213,7 +1277,7 @@ export function DashboardPage() {
 
   function renderSelectedDatePopover(dateKey: string) {
     const dayTasks = calendarTasks
-      .filter((task) => getDateKey(task.startAt) === dateKey)
+      .filter((task) => isTaskDisplayedOnDate(task, dateKey))
       .sort(compareByStatusGroupThenStartAt);
 
     if (dayTasks.length === 0) {
@@ -1391,7 +1455,7 @@ export function DashboardPage() {
               {renderScheduleStatGrid(weekViewSummary)}
               <div className="week-agenda">
                 {weekDays.map((day) => {
-                  const visibleDayTasks = getSchedulePriorityTasks(day.tasks, scheduleViewMode);
+                  const visibleDayTasks = getFilteredScheduleTasks(day.tasks, scheduleViewMode);
                   const isToday = day.key === todayKey;
                   const isEmpty = visibleDayTasks.length === 0;
                   return (
@@ -1442,11 +1506,15 @@ export function DashboardPage() {
               {renderScheduleStatGrid(listViewSummary)}
               {visibleCalendarListGroups.length === 0 ? (
                 <div className="empty-state compact">
-                  <p>등록된 일정이 없습니다.</p>
+                  <p>
+                    {listViewSourceTasks.length === 0 || scheduleViewMode === "all"
+                      ? "등록된 일정이 없습니다."
+                      : `${STATUS_LABELS[scheduleViewMode]} 상태의 일정이 없습니다.`}
+                  </p>
                 </div>
               ) : null}
               {visibleCalendarListGroups.map((group) => {
-                const visibleGroupTasks = getSchedulePriorityTasks(group.tasks, scheduleViewMode);
+                const visibleGroupTasks = getFilteredScheduleTasks(group.tasks, scheduleViewMode);
                 return (
                   <section key={group.dateKey} className="task-date-group dashboard-list-date-group">
                     <header>
