@@ -145,6 +145,11 @@ function formatProposalDate(date: Date): string {
   return `${date.getMonth() + 1}/${date.getDate()}(${weekday}) ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatProposalDay(date: Date): string {
+  const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
+  return `${date.getMonth() + 1}/${date.getDate()}(${weekday})`;
+}
+
 function formatProposalTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
@@ -164,14 +169,16 @@ function ProposalDateTime({ startAt, endAt }: { startAt: string; endAt?: string 
   }
   const isSameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
   if (isSameDay) {
-    return <span className="proposal-date-time same-day">{formatProposalTime(start)} ⮕ {formatProposalTime(end)}</span>;
+    return (
+      <span className="proposal-date-time same-day">
+        {formatProposalDay(start)} {formatProposalTime(start)} ~ {formatProposalTime(end)}
+      </span>
+    );
   }
 
   return (
-    <span className="proposal-date-time different-day">
-      <span>{formatProposalDate(start)}</span>
-      <span className="proposal-date-time-arrow" aria-hidden="true">⬇</span>
-      <span>{formatProposalDate(end)}</span>
+    <span className="proposal-date-time date-range">
+      <span>{formatProposalDay(start)} ~ {formatProposalDay(end)}</span>
     </span>
   );
 }
@@ -263,7 +270,7 @@ export function AiAssistantWorkspace({
   const onDraftPreservedRef = useRef(onDraftPreserved);
   const [draft, setDraft] = useState(initialDraft);
   const [retryMessage, setRetryMessage] = useState(initialDraft.trim());
-  const [lastUserMessage, setLastUserMessage] = useState("");
+  const [conversationContext, setConversationContext] = useState<AgentConversationMessage[]>([]);
   const [lastAssistantMessage, setLastAssistantMessage] = useState(
     "일정 요청을 입력하면 AI가 필요한 질문과 초안, 변경안을 정리해서 보여줍니다.",
   );
@@ -296,16 +303,6 @@ export function AiAssistantWorkspace({
   const canApplyProposalWithEnter = Boolean(
     pendingProposal && hasOperations && selectedOperationIndexes.length > 0 && !isApplying,
   );
-
-  const conversationContext = useMemo<AgentConversationMessage[]>(() => {
-    if (!lastUserMessage || !lastAssistantMessage) {
-      return [];
-    }
-    return [
-      { role: "user", content: lastUserMessage },
-      { role: "assistant", content: lastAssistantMessage },
-    ];
-  }, [lastAssistantMessage, lastUserMessage]);
 
   useEffect(() => {
     if (!pendingProposal) {
@@ -453,8 +450,12 @@ export function AiAssistantWorkspace({
         signal: controller.signal,
       });
 
-      setLastUserMessage(userMessage);
       setLastAssistantMessage(result.assistantMessage);
+      setConversationContext((previous) => [
+        ...previous,
+        { role: "user", content: userMessage },
+        { role: "assistant", content: result.assistantMessage },
+      ]);
       setLastQuestion(result.needsUserInput ? result.question ?? "추가 정보가 필요합니다." : "");
       setPendingProposal(result.proposal);
       setPendingContextSuggestions(result.contextSuggestions);
