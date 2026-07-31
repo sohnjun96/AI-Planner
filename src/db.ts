@@ -13,6 +13,7 @@ import {
 } from "./constants";
 import type {
   AppSetting,
+  ArchiveInsightCache,
   Memo,
   Note,
   NoteTaskLink,
@@ -36,6 +37,7 @@ class ScheduleDB extends Dexie {
   noteVersions!: Table<NoteVersion, string>;
   noteTaskLinks!: Table<NoteTaskLink, string>;
   projectSubcategories!: Table<ProjectSubcategory, string>;
+  archiveInsightCaches!: Table<ArchiveInsightCache, string>;
 
   constructor() {
     super("schedule-manager-db");
@@ -76,6 +78,19 @@ class ScheduleDB extends Dexie {
       noteVersions: "id, noteId, editType, createdAt",
       noteTaskLinks: "id, noteId, taskId, [noteId+taskId], createdAt",
       projectSubcategories: "id, projectId, order, updatedAt",
+    });
+    this.version(5).stores({
+      tasks: "id, startAt, status, projectId, taskTypeId, isMajor, updatedAt",
+      projects: "id, name, isActive, updatedAt",
+      taskTypes: "id, name, isDefault, isActive, order, updatedAt",
+      memos: "id, date, updatedAt",
+      settings: "id, updatedAt",
+      userContexts: "id, updatedAt",
+      notes: "id, projectId, subcategoryId, status, isPinned, updatedAt, createdAt",
+      noteVersions: "id, noteId, editType, createdAt",
+      noteTaskLinks: "id, noteId, taskId, [noteId+taskId], createdAt",
+      projectSubcategories: "id, projectId, order, updatedAt",
+      archiveInsightCaches: "id, updatedAt",
     });
   }
 }
