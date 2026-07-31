@@ -250,7 +250,7 @@ export const DEFAULT_PROJECT_IDS = DEFAULT_PROJECTS.map((project) => project.id)
 
 export const DEFAULT_USER_CONTEXT_PREFERENCE_RULES = [
   "일정 수정 요청에 시간 언급이 따로 없으면 기존 일정의 시작·종료 시간을 그대로 유지한다.",
-  "시간 없이 특정 날짜까지 일정을 생성해 달라고 요청하면 해당 일정의 시간을 18:00으로 설정한다.",
+  "시간 없이 특정 날짜까지 일정을 생성해 달라고 요청하면 그 날짜의 18:00을 시작 시각으로 설정하고 종료 시각은 만들지 않는다.",
 ] as const;
 
 export const DEFAULT_USER_CONTEXT_MARKDOWN = `# AI 일정 관리 개인 규칙
@@ -263,8 +263,9 @@ export const DEFAULT_USER_CONTEXT_MARKDOWN = `# AI 일정 관리 개인 규칙
 
 ## 기본 시간 규칙
 - 점심·식사·밥·lunch 일정에 시간이 없으면 11:30으로 설정한다.
-- 제출·마감·과제 일정에 시간이 없으면 18:00으로 설정한다.
+- 제출·마감·과제 일정에 시간이 없으면 18:00을 시작 시각으로 설정하고 종료 시각은 만들지 않는다.
 - 그 밖의 일정은 요청에 시간이 없으면 시간을 임의로 지정하지 않는다.
+- 시작과 끝이 모두 명시된 시간·날짜 범위에만 종료 시각을 설정한다. ‘18시까지’, ‘금요일까지’처럼 마감만 말한 요청은 해당 시점을 시작 시각으로 설정한다.
 
 ## 기본 분류 규칙
 - 점심, 식사, 밥, lunch가 포함된 일정은 프로젝트를 \`점심 약속\`, 종류를 \`식사\`로 설정한다. (일정제목은 "(점) 참여자 1, 참여자 2" 포맷으로 한다)
@@ -313,7 +314,7 @@ export const DEFAULT_USER_CONTEXT: UserContext = {
       taskTypeId: "type-submit",
       defaultTime: "18:00",
       isMajor: true,
-      note: "시간 없는 제출 일정은 18:00까지로 잡고 중요 일정으로 표시합니다.",
+      note: "시간 없는 제출 일정은 18:00을 시작 시각으로 잡고 종료 시각 없이 중요 일정으로 표시합니다.",
       source: "default",
       isActive: true,
       createdAt: "",
