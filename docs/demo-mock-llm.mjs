@@ -31,7 +31,7 @@ function nextWeek(dow, h, mi = 0) {
   return d.toISOString();
 }
 
-const op = (title, taskTypeId, projectId, startAt, isMajor = false) => ({
+const op = (title, taskTypeId, projectId, startAt, isMajor = false, endAt = "") => ({
   action: "create_task",
   title,
   content: "",
@@ -39,7 +39,7 @@ const op = (title, taskTypeId, projectId, startAt, isMajor = false) => ({
   taskTypeId,
   status: "NOT_DONE",
   startAt,
-  endAt: "",
+  endAt,
   isMajor,
 });
 
@@ -103,8 +103,24 @@ const RULE_SUGGESTIONS = [
   },
 ];
 
+// 3) "다음주 월화수 서울 출장" → 여러 날에 걸친 일정 1건 (startAt~endAt 범위)
+const seoulTrip = {
+  assistantMessage: "다음 주 월요일부터 수요일까지 출장 일정으로 정리했어요.",
+  needsUserInput: false,
+  userQuestion: "",
+  toolCalls: [],
+  proposal: {
+    summary: "다음 주 월요일부터 수요일까지 서울 출장 일정을 1건 추가합니다.",
+    operations: [op("서울 출장", "type-trip", "project-general", nextWeek(1, 9, 0), false, nextWeek(3, 18, 0))],
+  },
+  contextSuggestions: [],
+};
+
 function scheduleReply(body) {
   const req = readUserRequest(body);
+  if (req.includes("출장")) {
+    return seoulTrip;
+  }
   const base = req.includes("점심") || req.includes("김키포") ? lunchWithKipo : trainingThenReport;
   if (process.env.MOCK_RULES === "1") {
     return { ...base, contextSuggestions: RULE_SUGGESTIONS };

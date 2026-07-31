@@ -82,13 +82,24 @@ class ScheduleDB extends Dexie {
 
 export const db = new ScheduleDB();
 
+const LEGACY_DEADLINE_PREFERENCE =
+  "시간 없이 특정 날짜까지 일정을 생성해 달라고 요청하면 해당 일정의 시간을 18:00으로 설정한다.";
+const LEGACY_SUBMIT_RULE_NOTE = "시간 없는 제출 일정은 18:00까지로 잡고 중요 일정으로 표시합니다.";
+
 function mergeRequiredUserContextPreferences(markdown: string): string {
-  const missingRules = DEFAULT_USER_CONTEXT_PREFERENCE_RULES.filter((rule) => !markdown.includes(rule));
+  const deadlinePreference = DEFAULT_USER_CONTEXT_PREFERENCE_RULES[1];
+  const migratedMarkdown = markdown
+    .split(/\r?\n/)
+    .map((line) =>
+      line.trim() === `- ${LEGACY_DEADLINE_PREFERENCE}` ? `- ${deadlinePreference}` : line,
+    )
+    .join("\n");
+  const missingRules = DEFAULT_USER_CONTEXT_PREFERENCE_RULES.filter((rule) => !migratedMarkdown.includes(rule));
   if (missingRules.length === 0) {
-    return markdown;
+    return migratedMarkdown;
   }
 
-  const lines = markdown.trimEnd().split(/\r?\n/);
+  const lines = migratedMarkdown.trimEnd().split(/\r?\n/);
   const heading = "## 선호 규칙";
   const headingIndex = lines.findIndex((line) => line.trim() === heading);
   if (headingIndex >= 0) {
@@ -98,7 +109,7 @@ function mergeRequiredUserContextPreferences(markdown: string): string {
     return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
   }
 
-  return `${markdown.trimEnd()}\n\n${heading}\n${missingRules.map((rule) => `- ${rule}`).join("\n")}\n`;
+  return `${migratedMarkdown.trimEnd()}\n\n${heading}\n${missingRules.map((rule) => `- ${rule}`).join("\n")}\n`;
 }
 
 export async function bootstrapDatabase(): Promise<void> {
@@ -206,10 +217,21 @@ export async function bootstrapDatabase(): Promise<void> {
     });
   } else {
     const markdown = mergeRequiredUserContextPreferences(userContext.markdown);
-    if (markdown !== userContext.markdown) {
+    const rules = userContext.rules.map((rule) =>
+      rule.id === "context-submit-default" && rule.source === "default" && rule.note === LEGACY_SUBMIT_RULE_NOTE
+        ? {
+            ...rule,
+            note: "시간 없는 제출 일정은 18:00을 시작 시각으로 잡고 종료 시각 없이 중요 일정으로 표시합니다.",
+            updatedAt: now,
+          }
+        : rule,
+    );
+    const rulesChanged = rules.some((rule, index) => rule !== userContext.rules[index]);
+    if (markdown !== userContext.markdown || rulesChanged) {
       await db.userContexts.put({
         ...userContext,
         markdown,
+        rules,
         updatedAt: now,
       });
     }
