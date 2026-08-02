@@ -560,58 +560,6 @@ export function ArchivePage() {
         </div>
       </header>
 
-      <section className="archive-record-section" aria-labelledby="archive-record-title">
-        <header className="archive-section-heading">
-          <div>
-            <p className="eyebrow">HIGHLIGHTS</p>
-            <h3 id="archive-record-title">기억해 둘 만한 기록</h3>
-          </div>
-          <span>{PERIOD_OPTIONS.find((option) => option.value === period)?.label} 기준</span>
-        </header>
-        <div className="archive-record-grid">
-          <article className="archive-record-card lunch">
-            <div className="archive-record-card-top">
-              <span className="archive-record-icon" aria-hidden="true">🍽</span>
-              <span className="archive-record-kicker">점심 메이트</span>
-              {isAnalyzingLunch ? <span className="archive-ai-badge">AI 정리 중</span> : hasAiLunchAnalysis ? <span className="archive-ai-badge">AI 정리됨</span> : null}
-            </div>
-            <strong>{topLunchMate?.displayName ?? "아직 기록 없음"}</strong>
-            <p>
-              {topLunchMate ? `함께 점심 먹은 횟수 : ${topLunchMate.count} 번` : "함께 점심 먹은 횟수 : 0 번"}
-            </p>
-            {hasAiLunchAnalysis && topLunchMate && topLunchMate.aliases.length > 1 ? <small className="archive-alias-note">{topLunchMate.aliases.join(" · ")} 동일인 분석</small> : null}
-            {lunchAnalysisError ? <span className="archive-card-error" role="alert">{lunchAnalysisError}</span> : null}
-          </article>
-
-          <article className="archive-record-card focus">
-            <div className="archive-record-card-top">
-              <span className="archive-record-icon" aria-hidden="true">✓</span>
-              <span className="archive-record-kicker">최다 업무 완료일</span>
-            </div>
-            <strong>{bestCompletionDay ? formatRecordDay(bestCompletionDay.key) : "아직 기록 없음"}</strong>
-            <p>하루에 완료한 업무 : {bestCompletionDay?.count ?? 0} 개</p>
-          </article>
-
-          <article className="archive-record-card planning">
-            <div className="archive-record-card-top">
-              <span className="archive-record-icon" aria-hidden="true">＋</span>
-              <span className="archive-record-kicker">최다 업무 추가일</span>
-            </div>
-            <strong>{bestCreatedDay ? formatRecordDay(bestCreatedDay.key) : "아직 기록 없음"}</strong>
-            <p>하루에 추가한 업무 : {bestCreatedDay?.count ?? 0} 개</p>
-          </article>
-
-          <article className="archive-record-card project">
-            <div className="archive-record-card-top">
-              <span className="archive-record-icon" aria-hidden="true">◆</span>
-              <span className="archive-record-kicker">최다 완료 프로젝트</span>
-            </div>
-            <strong>{topProjectRecord?.project?.name ?? "아직 기록 없음"}</strong>
-            <p>완료한 업무 : {topProjectRecord?.count ?? 0} 개</p>
-          </article>
-        </div>
-      </section>
-
       <section className="archive-activity-card" aria-labelledby="archive-activity-title">
         <header className="archive-activity-header">
           <div>
@@ -672,6 +620,58 @@ export function ArchivePage() {
             <span>많음</span>
           </div>
         </footer>
+      </section>
+
+      <section className="archive-record-section" aria-labelledby="archive-record-title">
+        <header className="archive-section-heading">
+          <div>
+            <p className="eyebrow">HIGHLIGHTS</p>
+            <h3 id="archive-record-title">기억해 둘 만한 기록</h3>
+          </div>
+          <span>{PERIOD_OPTIONS.find((option) => option.value === period)?.label} 기준</span>
+        </header>
+        <div className="archive-record-grid">
+          <article className="archive-record-card lunch">
+            <div className="archive-record-card-top">
+              <span className="archive-record-icon" aria-hidden="true">🍽</span>
+              <span className="archive-record-kicker">점심 메이트</span>
+              {isAnalyzingLunch ? <span className="archive-ai-badge">AI 정리 중</span> : hasAiLunchAnalysis ? <span className="archive-ai-badge">AI 정리됨</span> : null}
+            </div>
+            <strong>{topLunchMate?.displayName ?? "아직 기록 없음"}</strong>
+            <p>
+              {topLunchMate ? `함께 점심 먹은 횟수 : ${topLunchMate.count} 번` : "함께 점심 먹은 횟수 : 0 번"}
+            </p>
+            {hasAiLunchAnalysis && topLunchMate && topLunchMate.aliases.length > 1 ? <small className="archive-alias-note">{topLunchMate.aliases.join(" · ")} 동일인 분석</small> : null}
+            {lunchAnalysisError ? <span className="archive-card-error" role="alert">{lunchAnalysisError}</span> : null}
+          </article>
+
+          <article className="archive-record-card focus">
+            <div className="archive-record-card-top">
+              <span className="archive-record-icon" aria-hidden="true">✓</span>
+              <span className="archive-record-kicker">최다 업무 완료일</span>
+            </div>
+            <strong>{bestCompletionDay ? formatRecordDay(bestCompletionDay.key) : "아직 기록 없음"}</strong>
+            <p>하루에 완료한 업무 : {bestCompletionDay?.count ?? 0} 개</p>
+          </article>
+
+          <article className="archive-record-card planning">
+            <div className="archive-record-card-top">
+              <span className="archive-record-icon" aria-hidden="true">＋</span>
+              <span className="archive-record-kicker">최다 업무 추가일</span>
+            </div>
+            <strong>{bestCreatedDay ? formatRecordDay(bestCreatedDay.key) : "아직 기록 없음"}</strong>
+            <p>하루에 추가한 업무 : {bestCreatedDay?.count ?? 0} 개</p>
+          </article>
+
+          <article className="archive-record-card project">
+            <div className="archive-record-card-top">
+              <span className="archive-record-icon" aria-hidden="true">◆</span>
+              <span className="archive-record-kicker">최다 완료 프로젝트</span>
+            </div>
+            <strong>{topProjectRecord?.project?.name ?? "아직 기록 없음"}</strong>
+            <p>완료한 업무 : {topProjectRecord?.count ?? 0} 개</p>
+          </article>
+        </div>
       </section>
 
       <section className="archive-recent-section" aria-labelledby="archive-recent-title">

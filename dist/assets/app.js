@@ -37076,6 +37076,60 @@ function ArchivePage() {
         ] })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "archive-activity-card", "aria-labelledby": "archive-activity-title", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "archive-activity-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "eyebrow", children: "YEARLY ACTIVITY" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("h3", { id: "archive-activity-title", children: [
+            "최근 1년 동안 ",
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("strong", { children: [
+              yearlyActivity.total,
+              "건"
+            ] }),
+            " ",
+            activityLabel,
+            "했어요"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: yearlyActivity.activeDays > 0 ? `${yearlyActivity.activeDays}일에 기록을 남겼습니다.${yearlyActivity.busiestDay ? ` 가장 활발한 날은 ${formatActivityDay(yearlyActivity.busiestDay.date)} ${yearlyActivity.busiestDay.count}건입니다.` : ""}` : `업무를 ${activityLabel}하면 이곳에 하루씩 기록이 쌓입니다.` })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-controls", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-toggle", role: "group", "aria-label": "활동 그래프 기준", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: activityMode === "completed" ? "active" : "", "aria-pressed": activityMode === "completed", onClick: () => setActivityMode("completed"), children: "완료한 날" }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: activityMode === "created" ? "active" : "", "aria-pressed": activityMode === "created", onClick: () => setActivityMode("created"), children: "추가한 날" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "archive-activity-range", children: [
+            formatDateOnly(yearlyActivity.rangeStartKey),
+            " – ",
+            formatDateOnly(yearlyActivity.todayKey)
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { ref: activityScrollRef, className: "archive-activity-scroll", role: "region", tabIndex: 0, "aria-label": `최근 1년 업무 ${activityLabel} 활동 그래프`, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-chart", role: "img", "aria-label": `날짜별 업무 ${activityLabel} 건수. 총 ${yearlyActivity.total}건`, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-month-row", "aria-hidden": "true", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", {}),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-months", children: yearlyActivity.weeks.map((week) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: week.monthLabel }, week.key)) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-grid-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-weekdays", "aria-hidden": "true", children: activityWeekdayLabels.map((label, index) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: label }, `${label}-${index}`)) }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-weeks", "aria-hidden": "true", children: yearlyActivity.weeks.map((week) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-week", children: week.days.map((day) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+            "span",
+            {
+              className: `archive-activity-cell level-${day.level} ${day.isOutsideRange ? "outside" : ""} ${day.key === yearlyActivity.todayKey ? "today" : ""}`,
+              title: day.isOutsideRange ? void 0 : `${formatActivityDay(day.date)} · ${activityLabel} ${day.count}건`
+            },
+            day.key
+          )) }, week.key)) })
+        ] })
+      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("footer", { className: "archive-activity-footer", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "archive-activity-scroll-hint", children: "좌우로 밀어 전체 기간 보기" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-legend", "aria-label": `${activityLabel} 건수 강도: 적음에서 많음`, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "적음" }),
+          [0, 1, 2, 3, 4].map((level) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { className: `archive-activity-cell level-${level}`, "aria-hidden": "true" }, level)),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "많음" })
+        ] })
+      ] })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "archive-record-section", "aria-labelledby": "archive-record-title", children: [
       /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "archive-section-heading", children: [
         /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
@@ -37137,60 +37191,6 @@ function ArchivePage() {
             topProjectRecord?.count ?? 0,
             " 개"
           ] })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "archive-activity-card", "aria-labelledby": "archive-activity-title", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "archive-activity-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "eyebrow", children: "YEARLY ACTIVITY" }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("h3", { id: "archive-activity-title", children: [
-            "최근 1년 동안 ",
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("strong", { children: [
-              yearlyActivity.total,
-              "건"
-            ] }),
-            " ",
-            activityLabel,
-            "했어요"
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: yearlyActivity.activeDays > 0 ? `${yearlyActivity.activeDays}일에 기록을 남겼습니다.${yearlyActivity.busiestDay ? ` 가장 활발한 날은 ${formatActivityDay(yearlyActivity.busiestDay.date)} ${yearlyActivity.busiestDay.count}건입니다.` : ""}` : `업무를 ${activityLabel}하면 이곳에 하루씩 기록이 쌓입니다.` })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-controls", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-toggle", role: "group", "aria-label": "활동 그래프 기준", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: activityMode === "completed" ? "active" : "", "aria-pressed": activityMode === "completed", onClick: () => setActivityMode("completed"), children: "완료한 날" }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: activityMode === "created" ? "active" : "", "aria-pressed": activityMode === "created", onClick: () => setActivityMode("created"), children: "추가한 날" })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "archive-activity-range", children: [
-            formatDateOnly(yearlyActivity.rangeStartKey),
-            " – ",
-            formatDateOnly(yearlyActivity.todayKey)
-          ] })
-        ] })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { ref: activityScrollRef, className: "archive-activity-scroll", role: "region", tabIndex: 0, "aria-label": `최근 1년 업무 ${activityLabel} 활동 그래프`, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-chart", role: "img", "aria-label": `날짜별 업무 ${activityLabel} 건수. 총 ${yearlyActivity.total}건`, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-month-row", "aria-hidden": "true", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", {}),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-months", children: yearlyActivity.weeks.map((week) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: week.monthLabel }, week.key)) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-grid-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-weekdays", "aria-hidden": "true", children: activityWeekdayLabels.map((label, index) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: label }, `${label}-${index}`)) }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-weeks", "aria-hidden": "true", children: yearlyActivity.weeks.map((week) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "archive-activity-week", children: week.days.map((day) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-            "span",
-            {
-              className: `archive-activity-cell level-${day.level} ${day.isOutsideRange ? "outside" : ""} ${day.key === yearlyActivity.todayKey ? "today" : ""}`,
-              title: day.isOutsideRange ? void 0 : `${formatActivityDay(day.date)} · ${activityLabel} ${day.count}건`
-            },
-            day.key
-          )) }, week.key)) })
-        ] })
-      ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("footer", { className: "archive-activity-footer", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "archive-activity-scroll-hint", children: "좌우로 밀어 전체 기간 보기" }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "archive-activity-legend", "aria-label": `${activityLabel} 건수 강도: 적음에서 많음`, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "적음" }),
-          [0, 1, 2, 3, 4].map((level) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { className: `archive-activity-cell level-${level}`, "aria-hidden": "true" }, level)),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "많음" })
         ] })
       ] })
     ] }),
@@ -44988,6 +44988,14 @@ function formatTokens(tokens) {
   }
   return `${(tokens / 1e6).toFixed(2)}M`;
 }
+async function readManifestVersion(signal) {
+  const response = await fetch("./manifest.json", { cache: "no-store", signal });
+  if (!response.ok) {
+    return "";
+  }
+  const manifest = await response.json();
+  return typeof manifest.version === "string" ? manifest.version.trim() : "";
+}
 function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -45015,6 +45023,7 @@ function SettingsPage() {
   } = useAppData();
   const [message, setMessage] = (0, import_react29.useState)("");
   const [error, setError] = (0, import_react29.useState)("");
+  const [appVersion, setAppVersion] = (0, import_react29.useState)("");
   const [isExporting, setIsExporting] = (0, import_react29.useState)(false);
   const [pendingImport, setPendingImport] = (0, import_react29.useState)();
   const [isImporting, setIsImporting] = (0, import_react29.useState)(false);
@@ -45071,6 +45080,11 @@ function SettingsPage() {
   (0, import_react29.useEffect)(() => {
     setActiveSection(resolveSettingsSection(searchParams.get("section")));
   }, [searchParams]);
+  (0, import_react29.useEffect)(() => {
+    const controller = new AbortController();
+    void readManifestVersion(controller.signal).then(setAppVersion).catch(() => void 0);
+    return () => controller.abort();
+  }, []);
   (0, import_react29.useEffect)(() => {
     if (activeSection !== "ai") {
       setActiveAiSettingsDialog(null);
@@ -45435,7 +45449,13 @@ function SettingsPage() {
     /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("section", { className: "settings-hero", children: [
       /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { className: "eyebrow", children: "SETTINGS" }),
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("h2", { children: "설정" }),
+        /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "settings-title-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("h2", { children: "설정" }),
+          appVersion ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("span", { className: "settings-version-badge", children: [
+            "v",
+            appVersion
+          ] }) : null
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { className: "description-text", children: "기본 환경과 일정 종류, AI, 일정 호출·백업을 성격별로 모아 관리합니다." })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "settings-hero-actions", children: [

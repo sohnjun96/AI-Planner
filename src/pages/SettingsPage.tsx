@@ -192,6 +192,15 @@ function formatTokens(tokens: number): string {
   return `${(tokens / 1_000_000).toFixed(2)}M`;
 }
 
+async function readManifestVersion(signal: AbortSignal): Promise<string> {
+  const response = await fetch("./manifest.json", { cache: "no-store", signal });
+  if (!response.ok) {
+    return "";
+  }
+  const manifest = (await response.json()) as { version?: unknown };
+  return typeof manifest.version === "string" ? manifest.version.trim() : "";
+}
+
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -220,6 +229,7 @@ export function SettingsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [appVersion, setAppVersion] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport>();
   const [isImporting, setIsImporting] = useState(false);
@@ -293,6 +303,14 @@ export function SettingsPage() {
   useEffect(() => {
     setActiveSection(resolveSettingsSection(searchParams.get("section")));
   }, [searchParams]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void readManifestVersion(controller.signal)
+      .then(setAppVersion)
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (activeSection !== "ai") {
@@ -725,7 +743,10 @@ export function SettingsPage() {
       <section className="settings-hero">
         <div>
           <p className="eyebrow">SETTINGS</p>
-          <h2>설정</h2>
+          <div className="settings-title-row">
+            <h2>설정</h2>
+            {appVersion ? <span className="settings-version-badge">v{appVersion}</span> : null}
+          </div>
           <p className="description-text">기본 환경과 일정 종류, AI, 일정 호출·백업을 성격별로 모아 관리합니다.</p>
         </div>
         <div className="settings-hero-actions">

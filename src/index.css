@@ -5850,6 +5850,28 @@ textarea:focus-visible,
   letter-spacing: 0;
 }
 
+.settings-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-version-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 25px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  box-shadow: 0 5px 12px -8px rgba(37, 99, 235, 0.7);
+}
+
 .settings-hero .description-text {
   margin: 8px 0 0;
 }
@@ -9544,7 +9566,7 @@ textarea:focus-visible,
     order: 0;
   }
 
-  .archive-workspace > .archive-activity-card {
+  .archive-workspace:not(.archive-record-workspace) > .archive-activity-card {
     order: 1;
   }
 
@@ -10480,7 +10502,7 @@ body:has(.modal-backdrop:not([hidden])) {
     order: 0;
   }
 
-  .archive-workspace > .archive-activity-card {
+  .archive-workspace:not(.archive-record-workspace) > .archive-activity-card {
     order: 1;
   }
 
