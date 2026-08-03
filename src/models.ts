@@ -21,6 +21,14 @@ export interface Task {
   linkedNoteIds?: string[];
 }
 
+export interface ArchiveInsightCache {
+  id: string;
+  sourceFingerprint: string;
+  payload: string;
+  lastAttemptedAt?: string;
+  updatedAt: string;
+}
+
 export type NoteStatus = "draft" | "active" | "archived";
 export type NoteVersionEditType = "manual" | "ai_full" | "ai_inline" | "autosave" | "restore";
 export type NoteTaskLinkSource = "auto_suggest" | "manual";

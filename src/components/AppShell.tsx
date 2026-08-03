@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
   { to: "/notes", label: "노트" },
   { to: "/projects", label: "프로젝트" },
-  { to: "/archive", label: "완료 기록" },
+  { to: "/archive", label: "나의 기록" },
   { to: "/settings", label: "설정" },
 ];
 

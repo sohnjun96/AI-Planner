@@ -22,6 +22,7 @@ import {
 import { bootstrapDatabase, db } from "../db";
 import type {
   AppSetting,
+  ArchiveInsightCache,
   Memo,
   Note,
   NoteFormInput,
@@ -78,6 +79,7 @@ export interface ImportDataPreview {
   noteVersions: number;
   noteTaskLinks: number;
   projectSubcategories: number;
+  archiveInsightCaches: number;
 }
 
 interface AppDataContextValue {
@@ -267,6 +269,7 @@ interface ImportPayload {
   noteVersions?: NoteVersion[];
   noteTaskLinks?: NoteTaskLink[];
   projectSubcategories?: ProjectSubcategory[];
+  archiveInsightCaches?: ArchiveInsightCache[];
   version?: number;
   exportedAt?: string;
 }
@@ -286,7 +289,8 @@ function validateImportPayload(payload: unknown): payload is ImportPayload {
     (candidate.notes === undefined || Array.isArray(candidate.notes)) &&
     (candidate.noteVersions === undefined || Array.isArray(candidate.noteVersions)) &&
     (candidate.noteTaskLinks === undefined || Array.isArray(candidate.noteTaskLinks)) &&
-    (candidate.projectSubcategories === undefined || Array.isArray(candidate.projectSubcategories))
+    (candidate.projectSubcategories === undefined || Array.isArray(candidate.projectSubcategories)) &&
+    (candidate.archiveInsightCaches === undefined || Array.isArray(candidate.archiveInsightCaches))
   );
 }
 
@@ -319,6 +323,7 @@ function toImportDataPreview(payload: ImportPayload): ImportDataPreview {
     noteVersions: payload.noteVersions?.length ?? 0,
     noteTaskLinks: payload.noteTaskLinks?.length ?? 0,
     projectSubcategories: payload.projectSubcategories?.length ?? 0,
+    archiveInsightCaches: payload.archiveInsightCaches?.length ?? 0,
   };
 }
 
@@ -1421,7 +1426,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const exportData = useCallback(async () => {
     const data = {
       exportedAt: toIsoNow(),
-      version: 3,
+      version: 4,
       tasks: await db.tasks.toArray(),
       projects: await db.projects.toArray(),
       taskTypes: await db.taskTypes.toArray(),
@@ -1432,6 +1437,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       noteVersions: await db.noteVersions.toArray(),
       noteTaskLinks: await db.noteTaskLinks.toArray(),
       projectSubcategories: await db.projectSubcategories.toArray(),
+      archiveInsightCaches: await db.archiveInsightCaches.toArray(),
     };
     return JSON.stringify(data, null, 2);
   }, []);
@@ -1456,6 +1462,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         db.noteVersions,
         db.noteTaskLinks,
         db.projectSubcategories,
+        db.archiveInsightCaches,
       ],
       async () => {
         await db.tasks.clear();
@@ -1468,6 +1475,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         await db.noteVersions.clear();
         await db.noteTaskLinks.clear();
         await db.projectSubcategories.clear();
+        await db.archiveInsightCaches.clear();
 
         if (parsed.tasks.length > 0) {
           await db.tasks.bulkAdd(parsed.tasks);
@@ -1498,6 +1506,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         }
         if (parsed.projectSubcategories && parsed.projectSubcategories.length > 0) {
           await db.projectSubcategories.bulkAdd(parsed.projectSubcategories);
+        }
+        if (parsed.archiveInsightCaches && parsed.archiveInsightCaches.length > 0) {
+          await db.archiveInsightCaches.bulkAdd(parsed.archiveInsightCaches);
         }
       },
     );
