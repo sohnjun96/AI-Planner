@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "플래나이(PLANAI)",
   "description": "쪽지로 쏟아지는 업무 일정과 메모를 AI가 정리·검색·브리핑하는 지능형 업무 플래너입니다.",
-  "version": "1.0.8",
+  "version": "1.1.1",
   "minimum_chrome_version": "111",
   "incognito": "not_allowed",
   "action": {
