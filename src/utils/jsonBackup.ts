@@ -7,6 +7,7 @@ export const JSON_BACKUP_STATUS_CHANGED_EVENT = "ai-planner:json-backup-status-c
 export const JSON_BACKUP_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const JSON_BACKUP_STATUS_STORAGE_KEY = "schedule_json_export_reminder_v1";
+const MAX_JSON_BACKUP_BYTES = 5_000_000;
 
 interface ChromeStorageLocal {
   get: (keys: string[], callback: (items: Record<string, unknown>) => void) => void;
@@ -20,17 +21,43 @@ function getChromeStorageLocal(): ChromeStorageLocal | null {
   return maybeChrome?.storage?.local ?? null;
 }
 
+function getChromeRuntimeError(): string | undefined {
+  return ((globalThis as { chrome?: { runtime?: { lastError?: { message?: string } } } }).chrome?.runtime?.lastError?.message);
+}
+
+function readChromeStorage(storage: ChromeStorageLocal): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    storage.get([JSON_BACKUP_STATUS_STORAGE_KEY], (items) => {
+      const message = getChromeRuntimeError();
+      if (message) {
+        reject(new Error(`백업 상태를 읽지 못했습니다: ${message}`));
+        return;
+      }
+      resolve(items);
+    });
+  });
+}
+
+function writeChromeStorage(storage: ChromeStorageLocal, status: JsonBackupReminderStatus): Promise<void> {
+  return new Promise((resolve, reject) => {
+    storage.set({ [JSON_BACKUP_STATUS_STORAGE_KEY]: status }, () => {
+      const message = getChromeRuntimeError();
+      if (message) {
+        reject(new Error(`백업 상태를 저장하지 못했습니다: ${message}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
 function normalizeIsoDate(value: unknown): string | undefined {
-  if (typeof value !== "string" || !Number.isFinite(new Date(value).getTime())) {
-    return undefined;
-  }
+  if (typeof value !== "string" || !Number.isFinite(new Date(value).getTime())) return undefined;
   return value;
 }
 
 function normalizeStatus(value: unknown): JsonBackupReminderStatus {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
+  if (!value || typeof value !== "object") return {};
   const candidate = value as Record<string, unknown>;
   return {
     lastExportedAt: normalizeIsoDate(candidate.lastExportedAt),
@@ -41,15 +68,10 @@ function normalizeStatus(value: unknown): JsonBackupReminderStatus {
 export async function readJsonBackupReminderStatus(): Promise<JsonBackupReminderStatus> {
   const storage = getChromeStorageLocal();
   if (storage) {
-    const items = await new Promise<Record<string, unknown>>((resolve) => {
-      storage.get([JSON_BACKUP_STATUS_STORAGE_KEY], resolve);
-    });
+    const items = await readChromeStorage(storage);
     return normalizeStatus(items[JSON_BACKUP_STATUS_STORAGE_KEY]);
   }
-
-  if (typeof localStorage === "undefined") {
-    return {};
-  }
+  if (typeof localStorage === "undefined") return {};
 
   try {
     const raw = localStorage.getItem(JSON_BACKUP_STATUS_STORAGE_KEY);
@@ -62,9 +84,7 @@ export async function readJsonBackupReminderStatus(): Promise<JsonBackupReminder
 async function writeJsonBackupReminderStatus(status: JsonBackupReminderStatus): Promise<void> {
   const storage = getChromeStorageLocal();
   if (storage) {
-    await new Promise<void>((resolve) => {
-      storage.set({ [JSON_BACKUP_STATUS_STORAGE_KEY]: status }, resolve);
-    });
+    await writeChromeStorage(storage, status);
   } else if (typeof localStorage !== "undefined") {
     localStorage.setItem(JSON_BACKUP_STATUS_STORAGE_KEY, JSON.stringify(status));
   }
@@ -80,10 +100,7 @@ function addReminderInterval(value: Date): string {
 
 export function getJsonBackupReminderDueAt(status: JsonBackupReminderStatus): number | undefined {
   const explicitReminderAt = status.nextReminderAt ? new Date(status.nextReminderAt).getTime() : Number.NaN;
-  if (Number.isFinite(explicitReminderAt)) {
-    return explicitReminderAt;
-  }
-
+  if (Number.isFinite(explicitReminderAt)) return explicitReminderAt;
   const lastExportedAt = status.lastExportedAt ? new Date(status.lastExportedAt).getTime() : Number.NaN;
   return Number.isFinite(lastExportedAt) ? lastExportedAt + JSON_BACKUP_REMINDER_INTERVAL_MS : undefined;
 }
@@ -113,6 +130,10 @@ function createBackupFileName(now: Date): string {
 }
 
 export async function downloadJsonBackup(content: string): Promise<JsonBackupReminderStatus> {
+  if (new TextEncoder().encode(content).byteLength > MAX_JSON_BACKUP_BYTES) {
+    throw new Error("백업 데이터가 안전한 처리 한도(5MB)를 초과했습니다.");
+  }
+
   const now = new Date();
   const blob = new Blob([content], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -129,9 +150,8 @@ export async function downloadJsonBackup(content: string): Promise<JsonBackupRem
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
 
-  const exportedAt = now.toISOString();
   const status = {
-    lastExportedAt: exportedAt,
+    lastExportedAt: now.toISOString(),
     nextReminderAt: addReminderInterval(now),
   } satisfies JsonBackupReminderStatus;
   await writeJsonBackupReminderStatus(status);

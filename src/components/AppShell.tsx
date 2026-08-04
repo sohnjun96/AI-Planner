@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { generateNoteTitleWithAi } from "../agent/noteTitleAgent";
 import { generationOptionsFromSetting } from "../agent/llmClient";
 import { DEFAULT_PROJECT_ID } from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import { NavLink, useLocation, useNavigate } from "../routing";
 import { deriveNoteTitle } from "../utils/noteTitle";
+import { showToast } from "../utils/toast";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
 import { AskDataModal } from "./AskDataModal";
 import { HelpModal } from "./HelpModal";
 import { NoteQuickAddModal } from "./NoteQuickAddModal";
-import { ToastHost, showToast } from "./ToastHost";
+import { ToastHost } from "./ToastHost";
 import { WeeklyBackupReminder } from "./WeeklyBackupReminder";
 
 const planaiLogo = "./icon.svg";
@@ -27,7 +28,7 @@ type AiScheduleOpenDetail = {
   initialDraft?: string;
 };
 
-export function AppShell() {
+export function AppShell({ children }: { children: ReactNode }) {
   const { undoLastChange, projects, setting, createNote } = useAppData();
   const location = useLocation();
   const navigate = useNavigate();
@@ -203,7 +204,14 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#main-content">
+      <a
+        className="skip-link"
+        href={`#${location.pathname}${location.search}`}
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+      >
         본문으로 건너뛰기
       </a>
 
@@ -320,7 +328,7 @@ export function AppShell() {
 
       <main className="page-content" id="main-content" tabIndex={-1}>
         <div key={location.pathname} className="route-transition">
-          <Outlet />
+          {children}
         </div>
       </main>
 

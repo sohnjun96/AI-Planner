@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
-
-export interface ToastOptions {
-  tone?: "success" | "error";
-  actionLabel?: string;
-  onAction?: () => void;
-  duration?: number;
-}
+import type { ToastOptions } from "../utils/toast";
 
 interface ToastItem {
   id: number;
@@ -17,40 +11,39 @@ interface ToastItem {
 
 let toastSeq = 0;
 
-/** 앱 어디서든 하단 토스트를 띄운다. AppShell의 ToastHost가 수신한다. */
-export function showToast(message: string, options: ToastOptions = {}): void {
-  window.dispatchEvent(new CustomEvent("ai-planner:toast", { detail: { message, ...options } }));
-}
-
 export function ToastHost() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   useEffect(() => {
+    const timerIds = new Set<number>();
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string } & ToastOptions>).detail;
-      if (!detail?.message) {
-        return;
-      }
+      if (!detail?.message) return;
+
       const message = detail.message;
       const id = ++toastSeq;
       const tone = detail.tone ?? "success";
-      // 최대 3개까지만 쌓는다 (오래된 것부터 밀어냄)
-      setToasts((prev) => [
-        ...prev.slice(-2),
+      setToasts((previous) => [
+        ...previous.slice(-2),
         { id, message, tone, actionLabel: detail.actionLabel, onAction: detail.onAction },
       ]);
-      const duration = detail.duration ?? (tone === "error" ? 6000 : 3500);
-      window.setTimeout(() => {
-        setToasts((prev) => prev.filter((toast) => toast.id !== id));
-      }, duration);
+
+      const timerId = window.setTimeout(() => {
+        timerIds.delete(timerId);
+        setToasts((previous) => previous.filter((toast) => toast.id !== id));
+      }, detail.duration ?? (tone === "error" ? 6_000 : 3_500));
+      timerIds.add(timerId);
     };
+
     window.addEventListener("ai-planner:toast", handler);
-    return () => window.removeEventListener("ai-planner:toast", handler);
+    return () => {
+      window.removeEventListener("ai-planner:toast", handler);
+      timerIds.forEach((timerId) => window.clearTimeout(timerId));
+      timerIds.clear();
+    };
   }, []);
 
-  if (toasts.length === 0) {
-    return null;
-  }
+  if (toasts.length === 0) return null;
 
   return (
     <div className="toast-host" role="status" aria-live="polite">
@@ -63,7 +56,7 @@ export function ToastHost() {
               className="toast-action"
               onClick={() => {
                 toast.onAction?.();
-                setToasts((prev) => prev.filter((item) => item.id !== toast.id));
+                setToasts((previous) => previous.filter((item) => item.id !== toast.id));
               }}
             >
               {toast.actionLabel}
@@ -73,7 +66,7 @@ export function ToastHost() {
             type="button"
             className="toast-close"
             aria-label="알림 닫기"
-            onClick={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
+            onClick={() => setToasts((previous) => previous.filter((item) => item.id !== toast.id))}
           >
             ×
           </button>

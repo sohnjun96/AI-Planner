@@ -7,7 +7,15 @@ export const USER_CONTEXT_ID = "user-context";
 export const DEFAULT_PROJECT_ID = "project-general";
 export const LUNCH_PROJECT_ID = "project-lunch";
 
-export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = "http://127.0.0.1:3000/api/chat/completions";
+export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = "https://llm.moip.go.kr/chat/completions";
+export const LLM_REQUEST_TIMEOUT_MS = 60_000;
+export const LLM_IDLE_TIMEOUT_MS = 15_000;
+export const LLM_MAX_COMPLETION_TOKENS = 4_096;
+export const LLM_MAX_RESPONSE_BYTES = 1_000_000;
+export const LLM_MAX_ERROR_BYTES = 8_192;
+export const LLM_MAX_TOTAL_PROMPT_CHARS = 250_000;
+export const LLM_MAX_MESSAGE_COUNT = 64;
+export const LLM_MAX_API_KEY_LENGTH = 4_096;
 export const LLM_DEFAULT_MODEL = "gpt-4o-mini";
 export const DEFAULT_LLM_TEMPERATURE = 0;
 export const MIN_LLM_TEMPERATURE = 0;
@@ -342,7 +350,6 @@ export const DEFAULT_SETTING: AppSetting = {
   weekStartsOn: "mon",
   timeFormat: "24h",
   llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
-  llmApiKey: "",
   llmModel: LLM_DEFAULT_MODEL,
   llmTemperature: DEFAULT_LLM_TEMPERATURE,
   llmReasoningEffort: DEFAULT_LLM_REASONING_EFFORT,

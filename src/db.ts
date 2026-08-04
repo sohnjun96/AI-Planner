@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import {
   clampLlmTemperature,
+  DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   DEFAULT_PROJECTS,
   DEFAULT_SETTING,
   DEFAULT_TASK_TYPES,
@@ -97,6 +98,12 @@ class ScheduleDB extends Dexie {
 
 export const db = new ScheduleDB();
 
+function sanitizePersistentSetting(setting: AppSetting): AppSetting {
+  const sanitized = { ...setting, llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL };
+  delete sanitized.llmApiKey;
+  return sanitized;
+}
+
 const LEGACY_DEADLINE_PREFERENCE =
   "시간 없이 특정 날짜까지 일정을 생성해 달라고 요청하면 해당 일정의 시간을 18:00으로 설정한다.";
 const LEGACY_SUBMIT_RULE_NOTE = "시간 없는 제출 일정은 18:00까지로 잡고 중요 일정으로 표시합니다.";
@@ -130,7 +137,7 @@ function mergeRequiredUserContextPreferences(markdown: string): string {
 export async function bootstrapDatabase(): Promise<void> {
   const now = toIsoNow();
 
-  const existingTaskTypes = await db.taskTypes.toArray();
+  const existingTaskTypes = await db.taskTypes.limit(200).toArray();
   const legacyTripType = existingTaskTypes.find(
     (type) => type.id === "type-trip" && type.color.toLowerCase() === "#7c3aed",
   );
@@ -156,7 +163,7 @@ export async function bootstrapDatabase(): Promise<void> {
     await db.taskTypes.bulkPut(seeded);
   }
 
-  const existingProjects = await db.projects.toArray();
+  const existingProjects = await db.projects.limit(1_000).toArray();
   const existingProjectNames = new Set(existingProjects.map((project) => project.name.trim().toLowerCase()));
   const existingProjectIds = new Set(existingProjects.map((project) => project.id));
   const missingProjects = DEFAULT_PROJECTS.filter(
@@ -185,8 +192,8 @@ export async function bootstrapDatabase(): Promise<void> {
   if (
     setting &&
     (
-      setting.llmEndpoint === undefined ||
-      setting.llmApiKey === undefined ||
+      setting.llmEndpoint !== DEFAULT_LLM_CHAT_COMPLETIONS_URL ||
+      setting.llmApiKey !== undefined ||
       setting.llmModel === undefined ||
       setting.llmTemperature !== normalizedLlmTemperature ||
       setting.llmReasoningEffort !== normalizedLlmReasoningEffort ||
@@ -200,10 +207,9 @@ export async function bootstrapDatabase(): Promise<void> {
       setting.relatedNoteSuggestionsEnabled === undefined
     )
   ) {
-    await db.settings.put({
+    await db.settings.put(sanitizePersistentSetting({
       ...setting,
-      llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
-      llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
+      llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
       llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
       llmTemperature: normalizedLlmTemperature,
       llmReasoningEffort: normalizedLlmReasoningEffort,
@@ -216,7 +222,7 @@ export async function bootstrapDatabase(): Promise<void> {
       noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
       relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled,
       updatedAt: now,
-    });
+    }));
   }
 
   const userContext = await db.userContexts.get(USER_CONTEXT_ID);

@@ -1,5 +1,5 @@
 import { useRef, type CSSProperties, type MouseEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../routing";
 import { STATUS_LABELS } from "../constants";
 import type { Project, Task, TaskStatus, TaskType } from "../models";
 import { formatDateTime } from "../utils/date";

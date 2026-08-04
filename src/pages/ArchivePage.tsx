@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../routing";
 import { analyzeLunchMateAliases, type LunchMateGroup } from "../agent/lunchMateAgent";
 import { generationOptionsFromSetting } from "../agent/llmClient";
 import { STATUS_LABELS } from "../constants";
@@ -485,10 +485,14 @@ export function ArchivePage() {
       })
       .then(async (groups) => {
         if (!groups) return;
+        const payload = JSON.stringify(groups);
+        if (new TextEncoder().encode(payload).byteLength > 500_000) {
+          throw new Error("분석 결과가 안전 저장 한도(500KB)를 초과했습니다.");
+        }
         await db.archiveInsightCaches.put({
           id: lunchCacheId,
           sourceFingerprint: lunchFingerprint,
-          payload: JSON.stringify(groups),
+          payload,
           lastAttemptedAt: attemptedAt,
           updatedAt: attemptedAt,
         });

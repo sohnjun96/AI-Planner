@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useJsonBackupStatus } from "../hooks/useJsonBackupStatus";
 import { formatDateTime } from "../utils/date";
+import { showToast } from "../utils/toast";
 import {
   downloadJsonBackup,
   getJsonBackupReminderDueAt,
   isJsonBackupReminderDue,
   snoozeJsonBackupReminder,
 } from "../utils/jsonBackup";
-import { showToast } from "./ToastHost";
 
 export function WeeklyBackupReminder() {
   const { exportData, setting } = useAppData();

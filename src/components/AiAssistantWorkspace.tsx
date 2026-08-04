@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  buildLlmChatRequestBody,
-  generationOptionsFromSetting,
-  type LlmGenerationOptions,
-} from "../agent/llmClient";
+import { generationOptionsFromSetting, requestLlmResponse, type LlmGenerationOptions } from "../agent/llmClient";
 import { runScheduleAgent } from "../agent/scheduleAgent";
 import type {
   AgentConversationMessage,
@@ -101,43 +97,17 @@ async function probeEndpoint(
   apiKey: string,
   model: string,
   generationOptions: LlmGenerationOptions,
+  signal: AbortSignal,
 ): Promise<void> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (apiKey.trim()) {
-    headers.Authorization = `Bearer ${apiKey.trim()}`;
-  }
-
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => {
-    controller.abort();
-  }, 5000);
-
-  try {
-    const response = await fetch(endpoint.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        ...buildLlmChatRequestBody({
-          model,
-          messages: [{ role: "user", content: "ping" }],
-          stream: false,
-          generationOptions,
-        }),
-        max_tokens: 2,
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`연결 실패 (${response.status}): ${body.slice(0, 120)}`);
-    }
-  } finally {
-    window.clearTimeout(timeout);
-  }
+  await requestLlmResponse({
+    endpoint,
+    apiKey,
+    model,
+    generationOptions,
+    maxTokens: 2,
+    signal,
+    messages: [{ role: "user", content: "ping" }],
+  });
 }
 
 function formatProposalDate(date: Date): string {
@@ -323,6 +293,7 @@ export function AiAssistantWorkspace({
       return;
     }
     let isMounted = true;
+    const controller = new AbortController();
     setEndpointStatus("checking");
     setEndpointStatusMessage("연결 확인 중");
 
@@ -331,6 +302,7 @@ export function AiAssistantWorkspace({
       setting.llmApiKey ?? "",
       setting.llmModel ?? "",
       generationOptions,
+      controller.signal,
     )
       .then(() => {
         if (!isMounted) {
@@ -349,6 +321,7 @@ export function AiAssistantWorkspace({
 
     return () => {
       isMounted = false;
+      controller.abort();
     };
   }, [generationOptions, isActive, setting.llmApiKey, setting.llmEndpoint, setting.llmModel]);
 

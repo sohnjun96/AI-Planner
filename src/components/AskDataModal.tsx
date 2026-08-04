@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../routing";
 import { isAbortError } from "../agent/agentUtils";
 import { generationOptionsFromSetting } from "../agent/llmClient";
 import { runQaAgent, type QaReference } from "../agent/qaAgent";

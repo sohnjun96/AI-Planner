@@ -88,11 +88,11 @@ export async function analyzeLunchMateAliases(input: AnalyzeLunchMateAliasesInpu
 
   const used = new Set<string>();
   const groups: LunchMateGroup[] = [];
-  for (const rawGroup of payload.groups) {
+  for (const rawGroup of payload.groups.slice(0, 160)) {
     if (!isRecord(rawGroup) || !Array.isArray(rawGroup.aliases)) {
       continue;
     }
-    const aliases = rawGroup.aliases.filter(
+    const aliases = rawGroup.aliases.slice(0, 160).filter(
       (alias): alias is string => typeof alias === "string" && allowedNames.has(alias) && !used.has(alias),
     );
     if (aliases.length === 0) {

@@ -1,8 +1,10 @@
-﻿{
+{
   "manifest_version": 3,
   "name": "플래나이(PLANAI)",
   "description": "쪽지로 쏟아지는 업무 일정과 메모를 AI가 정리·검색·브리핑하는 지능형 업무 플래너입니다.",
   "version": "1.0.8",
+  "minimum_chrome_version": "111",
+  "incognito": "not_allowed",
   "action": {
     "default_title": "플래나이(PLANAI) 열기",
     "default_icon": {
@@ -18,9 +20,12 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "alarms", "tabs"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["https://llm.moip.go.kr/*"],
   "background": {
     "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self' https://llm.moip.go.kr; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
   }
 }

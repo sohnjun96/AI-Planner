@@ -1,4 +1,3 @@
-﻿import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AppDataProvider, useAppData } from "./context/AppDataContext";
 import { ArchivePage } from "./pages/ArchivePage";
@@ -6,6 +5,19 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { NotesPage } from "./pages/NotesPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { RouterProvider, useLocation } from "./routing";
+
+function RoutedPages() {
+  const { pathname } = useLocation();
+  const page =
+    pathname === "/notes" ? <NotesPage />
+      : pathname === "/projects" ? <ProjectsPage />
+        : pathname === "/archive" ? <ArchivePage />
+          : pathname === "/settings" ? <SettingsPage />
+            : <DashboardPage />;
+
+  return <AppShell>{page}</AppShell>;
+}
 
 function RoutedApp() {
   const { isReady, bootstrapError, retryBootstrap } = useAppData();
@@ -43,22 +55,9 @@ function RoutedApp() {
   }
 
   return (
-    <HashRouter>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/tasks" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/ai" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/notes" element={<NotesPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/types" element={<Navigate to="/settings?section=general" replace />} />
-          <Route path="/archive" element={<ArchivePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      </Routes>
-    </HashRouter>
+    <RouterProvider>
+      <RoutedPages />
+    </RouterProvider>
   );
 }
 

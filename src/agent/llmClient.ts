@@ -2,6 +2,14 @@ import {
   clampLlmTemperature,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   LLM_DEFAULT_MODEL,
+  LLM_IDLE_TIMEOUT_MS,
+  LLM_MAX_API_KEY_LENGTH,
+  LLM_MAX_COMPLETION_TOKENS,
+  LLM_MAX_ERROR_BYTES,
+  LLM_MAX_MESSAGE_COUNT,
+  LLM_MAX_RESPONSE_BYTES,
+  LLM_MAX_TOTAL_PROMPT_CHARS,
+  LLM_REQUEST_TIMEOUT_MS,
   normalizeLlmGemmaThinkingEnabled,
   normalizeLlmReasoningEffort,
 } from "../constants";
@@ -23,8 +31,19 @@ export interface BuildLlmChatRequestBodyParams {
   messages: LlmChatMessage[];
   model?: string;
   stream?: boolean;
+  maxTokens?: number;
   generationOptions?: LlmGenerationOptions;
 }
+
+interface LlmChatResponse {
+  choices?: Array<{ message?: { content?: unknown } }>;
+  message?: { content?: unknown };
+  content?: unknown;
+  usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
+}
+
+const MAX_CONCURRENT_LLM_REQUESTS = 2;
+let activeLlmRequests = 0;
 
 export function generationOptionsFromSetting(setting?: AppSetting): LlmGenerationOptions {
   return {
@@ -36,130 +55,257 @@ export function generationOptionsFromSetting(setting?: AppSetting): LlmGeneratio
 
 export function isGemma4ThinkingModel(model?: string): boolean {
   const normalized = model?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
-  return (
-    normalized.includes("gemma4") &&
-    normalized.includes("26b") &&
-    (normalized.includes("a4b") || normalized.includes("moe"))
-  );
+  return normalized.includes("gemma4") && normalized.includes("26b") && (normalized.includes("a4b") || normalized.includes("moe"));
+}
+
+export function validateLlmEndpoint(endpoint?: string): string {
+  const candidate = endpoint?.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL;
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error("승인된 AI Endpoint 주소가 아닙니다.");
+  }
+
+  if (
+    parsed.href !== DEFAULT_LLM_CHAT_COMPLETIONS_URL ||
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.hash ||
+    parsed.search
+  ) {
+    throw new Error("AI Endpoint는 승인된 MOIP 주소만 사용할 수 있습니다.");
+  }
+  return DEFAULT_LLM_CHAT_COMPLETIONS_URL;
+}
+
+function normalizeModel(model?: string): string {
+  const normalized = model?.trim() || LLM_DEFAULT_MODEL;
+  if (normalized.length > 200 || !/^[A-Za-z0-9._:/-]+$/.test(normalized)) {
+    throw new Error("LLM 모델명 형식이 올바르지 않습니다.");
+  }
+  return normalized;
+}
+
+function validateApiKey(apiKey: string): string {
+  const normalized = apiKey.trim();
+  if (normalized.length > LLM_MAX_API_KEY_LENGTH || /[\r\n]/.test(normalized)) {
+    throw new Error("API 키 형식이 올바르지 않습니다.");
+  }
+  return normalized;
+}
+
+function validateMessages(messages: LlmChatMessage[]): LlmChatMessage[] {
+  if (messages.length === 0 || messages.length > LLM_MAX_MESSAGE_COUNT) {
+    throw new Error("AI 요청 메시지 수가 허용 범위를 벗어났습니다.");
+  }
+
+  let totalChars = 0;
+  return messages.map((message) => {
+    if (!message || !["system", "user", "assistant"].includes(message.role) || typeof message.content !== "string") {
+      throw new Error("AI 요청 메시지 형식이 올바르지 않습니다.");
+    }
+    totalChars += message.content.length;
+    if (totalChars > LLM_MAX_TOTAL_PROMPT_CHARS) {
+      throw new Error("AI 요청 데이터가 허용 크기를 초과했습니다.");
+    }
+    return { role: message.role, content: message.content };
+  });
 }
 
 export function buildLlmChatRequestBody(params: BuildLlmChatRequestBodyParams): Record<string, unknown> {
-  const model = params.model?.trim() || LLM_DEFAULT_MODEL;
+  const model = normalizeModel(params.model);
+  const maxTokens = Number.isFinite(params.maxTokens)
+    ? Math.max(1, Math.min(LLM_MAX_COMPLETION_TOKENS, Math.floor(params.maxTokens ?? LLM_MAX_COMPLETION_TOKENS)))
+    : LLM_MAX_COMPLETION_TOKENS;
   const body: Record<string, unknown> = {
     model,
-    messages: params.messages,
+    messages: validateMessages(params.messages),
     stream: params.stream ?? false,
     temperature: clampLlmTemperature(params.generationOptions?.temperature),
+    max_tokens: maxTokens,
   };
 
   const reasoningEffort = normalizeLlmReasoningEffort(params.generationOptions?.reasoningEffort);
   if (reasoningEffort !== "default") {
     body.reasoning_effort = reasoningEffort;
   }
-
   if (isGemma4ThinkingModel(model)) {
     const enableThinking = normalizeLlmGemmaThinkingEnabled(params.generationOptions?.gemmaThinkingEnabled);
     body.chat_template_kwargs = { enable_thinking: enableThinking };
-    if (enableThinking) {
-      body.skip_special_tokens = false;
-    }
+    if (enableThinking) body.skip_special_tokens = false;
   }
-
   return body;
 }
 
-interface LlmChatResponse {
-  choices?: Array<{
-    message?: {
-      content?: unknown;
-    };
-  }>;
-  message?: {
-    content?: unknown;
-  };
-  content?: unknown;
-  usage?: {
-    prompt_tokens?: unknown;
-    completion_tokens?: unknown;
-  };
-}
-
 function readTextContent(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-
+  if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
       .map((item) => {
-        if (typeof item === "string") {
-          return item;
-        }
-        if (!item || typeof item !== "object") {
-          return "";
-        }
-
-        const maybeText = item as { text?: unknown };
-        return typeof maybeText.text === "string" ? maybeText.text : "";
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return "";
+        return typeof (item as { text?: unknown }).text === "string" ? (item as { text: string }).text : "";
       })
       .filter(Boolean)
       .join("\n");
   }
-
   if (content && typeof content === "object") {
-    const maybeText = content as { text?: unknown; content?: unknown };
-    if (typeof maybeText.text === "string") {
-      return maybeText.text;
-    }
-    if (typeof maybeText.content === "string") {
-      return maybeText.content;
-    }
+    const value = content as { text?: unknown; content?: unknown };
+    if (typeof value.text === "string") return value.text;
+    if (typeof value.content === "string") return value.content;
   }
-
   return "";
 }
 
-/** SSE(text/event-stream) 응답을 읽어 델타를 누적하고, 토큰마다 onToken을 호출한다. */
-async function readSseStream(body: ReadableStream<Uint8Array>, onToken: (delta: string) => void): Promise<string> {
+function assertContentLength(response: Response, maxBytes: number): void {
+  const raw = response.headers.get("content-length");
+  if (!raw) return;
+  const length = Number(raw);
+  if (!Number.isFinite(length) || length < 0 || length > maxBytes) {
+    throw new Error("AI 응답 크기가 허용 한도를 초과했습니다.");
+  }
+}
+
+async function readBodyWithLimit(
+  body: ReadableStream<Uint8Array> | null,
+  maxBytes: number,
+  onActivity: () => void,
+): Promise<string> {
+  if (!body) throw new Error("AI 응답 본문이 없습니다.");
   const reader = body.getReader();
   const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+  let completed = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        completed = true;
+        text += decoder.decode();
+        break;
+      }
+      onActivity();
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) throw new Error("AI 응답 크기가 허용 한도를 초과했습니다.");
+      text += decoder.decode(value, { stream: true });
+    }
+    return text;
+  } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}
+
+async function readSseStream(
+  body: ReadableStream<Uint8Array>,
+  onToken: (delta: string) => void,
+  onActivity: () => void,
+): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
   let buffer = "";
   let full = "";
+  let pending = "";
+  let lastFlush = performance.now();
+  let completed = false;
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) {
-        continue;
+  const flush = () => {
+    if (!pending) return;
+    onToken(pending);
+    pending = "";
+    lastFlush = performance.now();
+  };
+
+  try {
+    stream: for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        completed = true;
+        buffer += decoder.decode();
+        break;
       }
-      const data = trimmed.slice(5).trim();
-      if (!data || data === "[DONE]") {
-        continue;
-      }
-      try {
-        const json = JSON.parse(data) as {
-          choices?: Array<{ delta?: { content?: unknown }; message?: { content?: unknown } }>;
-        };
-        const choice = json.choices?.[0];
-        const delta = choice?.delta?.content ?? choice?.message?.content;
-        if (typeof delta === "string" && delta) {
-          full += delta;
-          onToken(delta);
+      onActivity();
+      totalBytes += value.byteLength;
+      if (totalBytes > LLM_MAX_RESPONSE_BYTES) throw new Error("AI 스트림 응답 크기가 허용 한도를 초과했습니다.");
+      buffer += decoder.decode(value, { stream: true });
+      if (buffer.length > 128_000) throw new Error("AI 스트림 형식이 올바르지 않습니다.");
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (!data) continue;
+        if (data === "[DONE]") {
+          break stream;
         }
-      } catch {
-        // 부분 청크 등 파싱 실패는 무시하고 계속 읽는다.
+        try {
+          const json = JSON.parse(data) as {
+            choices?: Array<{ delta?: { content?: unknown }; message?: { content?: unknown } }>;
+          };
+          const choice = json.choices?.[0];
+          const delta = choice?.delta?.content ?? choice?.message?.content;
+          if (typeof delta === "string" && delta) {
+            if (full.length + delta.length > LLM_MAX_RESPONSE_BYTES) {
+              throw new Error("AI 응답 텍스트가 허용 한도를 초과했습니다.");
+            }
+            full += delta;
+            pending += delta;
+            if (pending.length >= 2_048 || performance.now() - lastFlush >= 50) flush();
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("허용 한도")) throw error;
+        }
       }
     }
+    flush();
+    return full;
+  } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
+}
 
-  return full;
+function createAbortScope(externalSignal?: AbortSignal) {
+  const controller = new AbortController();
+  const abortFromExternal = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener("abort", abortFromExternal, { once: true });
+
+  const totalTimer = window.setTimeout(() => controller.abort(), LLM_REQUEST_TIMEOUT_MS);
+  let idleTimer = window.setTimeout(() => controller.abort(), LLM_IDLE_TIMEOUT_MS);
+  const activity = () => {
+    window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => controller.abort(), LLM_IDLE_TIMEOUT_MS);
+  };
+  const cleanup = () => {
+    window.clearTimeout(totalTimer);
+    window.clearTimeout(idleTimer);
+    externalSignal?.removeEventListener("abort", abortFromExternal);
+  };
+  return { signal: controller.signal, activity, cleanup };
+}
+
+function recordBoundedUsage(promptChars: number, contentChars: number, usage?: LlmChatResponse["usage"]): void {
+  const bounded = (value: unknown) => typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.min(10_000_000, Math.floor(value)))
+    : undefined;
+  const promptTokens = bounded(usage?.prompt_tokens);
+  const completionTokens = bounded(usage?.completion_tokens);
+  recordAiUsage(
+    promptTokens === undefined
+      ? {
+          promptTokens: estimateTokensFromChars(promptChars),
+          completionTokens: estimateTokensFromChars(contentChars),
+          estimated: true,
+        }
+      : { promptTokens, completionTokens: completionTokens ?? 0, estimated: false },
+  );
 }
 
 export async function requestLlmResponse(params: {
@@ -168,79 +314,72 @@ export async function requestLlmResponse(params: {
   endpoint?: string;
   model?: string;
   generationOptions?: LlmGenerationOptions;
+  maxTokens?: number;
   onToken?: (delta: string) => void;
-  /** 요청 취소용. 모달을 닫거나 새 요청을 보낼 때 이전 fetch를 중단한다. */
   signal?: AbortSignal;
 }): Promise<string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (params.apiKey.trim()) {
-    headers.Authorization = `Bearer ${params.apiKey.trim()}`;
+  if (activeLlmRequests >= MAX_CONCURRENT_LLM_REQUESTS) {
+    throw new Error("동시에 처리할 수 있는 AI 요청 수를 초과했습니다. 잠시 후 다시 시도해 주세요.");
   }
+  activeLlmRequests += 1;
+  const abortScope = createAbortScope(params.signal);
+  try {
+    const apiKey = validateApiKey(params.apiKey);
+    const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const useStream = typeof params.onToken === "function";
+    const messages = validateMessages(params.messages);
+    const response = await fetch(validateLlmEndpoint(params.endpoint), {
+      method: "POST",
+      headers,
+      signal: abortScope.signal,
+      cache: "no-store",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      body: JSON.stringify(
+        buildLlmChatRequestBody({
+          model: params.model,
+          messages,
+          stream: useStream,
+          maxTokens: params.maxTokens,
+          generationOptions: params.generationOptions,
+        }),
+      ),
+    });
+    abortScope.activity();
+    assertContentLength(response, response.ok ? LLM_MAX_RESPONSE_BYTES : LLM_MAX_ERROR_BYTES);
 
-  const useStream = typeof params.onToken === "function";
-
-  const response = await fetch(params.endpoint?.trim() || DEFAULT_LLM_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers,
-    signal: params.signal,
-    body: JSON.stringify(
-      buildLlmChatRequestBody({
-        model: params.model,
-        messages: params.messages,
-        stream: useStream,
-        generationOptions: params.generationOptions,
-      }),
-    ),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`LLM 호출 실패 (${response.status}): ${errorBody.slice(0, 240)}`);
-  }
-
-  // 통계용: 서버가 usage를 안 주면 문자 수로 추정한다 (설정 > 통계에 표시)
-  const promptChars = params.messages.reduce((sum, message) => sum + message.content.length, 0);
-
-  // 스트리밍 요청이고 서버가 실제 event-stream을 반환하면 SSE로 처리한다.
-  const contentType = response.headers.get("content-type") ?? "";
-  if (useStream && response.body && contentType.includes("text/event-stream")) {
-    const streamed = await readSseStream(response.body, params.onToken!);
-    if (!streamed.trim()) {
-      throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
+    if (!response.ok) {
+      await readBodyWithLimit(response.body, LLM_MAX_ERROR_BYTES, abortScope.activity).catch(() => "");
+      throw new Error(`LLM 호출에 실패했습니다. 상태 코드: ${response.status}`);
     }
-    recordAiUsage({
-      promptTokens: estimateTokensFromChars(promptChars),
-      completionTokens: estimateTokensFromChars(streamed.length),
-      estimated: true,
-    });
-    return streamed.trim();
+
+    const promptChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (useStream && response.body && contentType.includes("text/event-stream")) {
+      const streamed = await readSseStream(response.body, params.onToken!, abortScope.activity);
+      if (!streamed.trim()) throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
+      recordBoundedUsage(promptChars, streamed.length);
+      return streamed.trim();
+    }
+    if (!contentType.includes("application/json") && !contentType.includes("+json")) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error("LLM 서버가 허용되지 않은 응답 형식을 반환했습니다.");
+    }
+
+    const raw = await readBodyWithLimit(response.body, LLM_MAX_RESPONSE_BYTES, abortScope.activity);
+    let payload: LlmChatResponse;
+    try {
+      payload = JSON.parse(raw) as LlmChatResponse;
+    } catch {
+      throw new Error("LLM 서버의 JSON 응답 형식이 올바르지 않습니다.");
+    }
+    const content = readTextContent(payload.choices?.[0]?.message?.content ?? payload.message?.content ?? payload.content);
+    if (!content.trim()) throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
+    recordBoundedUsage(promptChars, content.length, payload.usage);
+    return content.trim();
+  } finally {
+    abortScope.cleanup();
+    activeLlmRequests -= 1;
   }
-
-  // 그 외(스트림 미지원 서버가 일반 JSON을 반환한 경우 포함)는 JSON으로 폴백한다.
-  const payload = (await response.json()) as LlmChatResponse;
-  const content = readTextContent(payload.choices?.[0]?.message?.content ?? payload.message?.content ?? payload.content);
-
-  if (!content.trim()) {
-    throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
-  }
-
-  const usage = payload.usage;
-  if (usage && typeof usage.prompt_tokens === "number") {
-    recordAiUsage({
-      promptTokens: usage.prompt_tokens,
-      completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0,
-      estimated: false,
-    });
-  } else {
-    recordAiUsage({
-      promptTokens: estimateTokensFromChars(promptChars),
-      completionTokens: estimateTokensFromChars(content.length),
-      estimated: true,
-    });
-  }
-
-  return content.trim();
 }

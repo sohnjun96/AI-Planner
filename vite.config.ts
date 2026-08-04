@@ -6,8 +6,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    minify: false,
-    reportCompressedSize: false,
+    minify: "esbuild",
+    sourcemap: false,
+    target: "chrome111",
+    reportCompressedSize: true,
     rollupOptions: {
       input: {
         app: resolve(__dirname, "index.html"),

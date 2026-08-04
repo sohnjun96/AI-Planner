@@ -7,8 +7,26 @@ interface MarkdownRendererProps {
   onChecklistToggle?: (lineIndex: number, checked: boolean) => void;
 }
 
-function isSafeUrl(url: string): boolean {
-  return /^(https?:|mailto:)/i.test(url);
+function toSafeExternalUrl(value: string): string | undefined {
+  if (value.length > 2_048 || Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  })) return undefined;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "mailto:") return parsed.href;
+    if (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      parsed.hostname &&
+      !parsed.username &&
+      !parsed.password
+    ) {
+      return parsed.href;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 // 인라인: 코드, 볼드(**/__), 이탤릭(*/_), 취소선(~~), 링크
@@ -37,9 +55,10 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       const label = linkMatch?.[1] ?? token;
       const href = linkMatch?.[2] ?? "";
+      const safeHref = toSafeExternalUrl(href);
       nodes.push(
-        isSafeUrl(href) ? (
-          <a key={key} href={href} target="_blank" rel="noreferrer">
+        safeHref ? (
+          <a key={key} href={safeHref} target="_blank" rel="noreferrer">
             {label}
           </a>
         ) : (

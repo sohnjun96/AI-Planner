@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "../routing";
 import { ColorSelector } from "../components/ColorSelector";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { TaskForm, type TaskFormInteractionState } from "../components/TaskForm";

@@ -1,5 +1,6 @@
 import { build } from "esbuild";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,74 +9,149 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const publicDir = path.join(rootDir, "public");
+const backupRootDir = path.join(rootDir, ".dist-build-backups");
 const logoFileName = "icon.svg";
 const logoSourcePath = path.join(rootDir, logoFileName);
 
-function toDistHref(outputPath) {
-  return `./${path.relative(distDir, path.resolve(rootDir, outputPath)).replace(/\\/g, "/")}`;
+function isInsideRoot(candidate) {
+  const relative = path.relative(rootDir, path.resolve(candidate));
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-function cssHrefsForEntry(entryName, cssOutputs) {
+function assertSafeGeneratedPath(candidate, expectedPrefix) {
+  if (!isInsideRoot(candidate) || !path.basename(candidate).startsWith(expectedPrefix)) {
+    throw new Error(`안전하지 않은 빌드 경로를 거부했습니다: ${candidate}`);
+  }
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
+function toBuildHref(buildDir, outputPath) {
+  const absoluteOutput = path.resolve(rootDir, outputPath);
+  return `./${path.relative(buildDir, absoluteOutput).replace(/\\/g, "/")}`;
+}
+
+function cssHrefsForEntry(buildDir, entryName, cssOutputs) {
   const exactMatch = cssOutputs.find((filePath) => path.basename(filePath) === `${entryName}.css`);
-  return (exactMatch ? [exactMatch] : cssOutputs).map(toDistHref);
+  return (exactMatch ? [exactMatch] : cssOutputs).map((output) => toBuildHref(buildDir, output));
 }
 
 async function readHtmlMetadata(sourceHtmlPath, fallbackTitle) {
   const sourceHtml = await readFile(sourceHtmlPath, "utf8");
-  const langMatched = sourceHtml.match(/<html[^>]*lang="([^"]+)"/i);
-  const titleMatched = sourceHtml.match(/<title>([^<]+)<\/title>/i);
-
+  const rawLang = sourceHtml.match(/<html[^>]*lang="([^"]+)"/i)?.[1] ?? "ko";
+  const title = sourceHtml.match(/<title>([^<]+)<\/title>/i)?.[1] ?? fallbackTitle;
   return {
-    lang: langMatched?.[1] ?? "ko",
-    title: titleMatched?.[1] ?? fallbackTitle,
+    lang: /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(rawLang) ? rawLang : "ko",
+    title,
   };
 }
 
-async function writeBuiltHtml({ fileName, title, lang, jsHref, cssHrefs, bodyClass = "" }) {
-  const cssLinks = cssHrefs.map((href) => `<link rel="stylesheet" href="${href}" />`).join("\n    ");
-  const classAttribute = bodyClass ? ` class="${bodyClass}"` : "";
+async function writeBuiltHtml(buildDir, { fileName, title, lang, jsHref, cssHrefs }) {
+  const cssLinks = cssHrefs.map((href) => `<link rel="stylesheet" href="${escapeHtml(href)}" />`).join("\n    ");
   const html = `<!doctype html>
-<html lang="${lang}">
+<html lang="${escapeHtml(lang)}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="./${logoFileName}" />
-    <title>${title}</title>
+    <title>${escapeHtml(title)}</title>
     ${cssLinks}
   </head>
-  <body${classAttribute}>
+  <body>
     <div id="root"></div>
-    <script type="module" src="${jsHref}"></script>
+    <script type="module" src="${escapeHtml(jsHref)}"></script>
   </body>
 </html>
 `;
+  await writeFile(path.join(buildDir, fileName), html, "utf8");
+}
 
-  await writeFile(path.join(distDir, fileName), html, "utf8");
+async function validateBuildDirectory(buildDir) {
+  const directoryInfo = await lstat(buildDir);
+  if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) {
+    throw new Error("빌드 출력 폴더가 실제 디렉터리가 아닙니다.");
+  }
+
+  const manifestSource = await readFile(path.join(buildDir, "manifest.json"), "utf8");
+  const manifest = JSON.parse(manifestSource.replace(/^\uFEFF/, ""));
+  if (
+    JSON.stringify(manifest.permissions) !== JSON.stringify(["storage", "alarms"]) ||
+    JSON.stringify(manifest.host_permissions) !== JSON.stringify(["https://llm.moip.go.kr/*"])
+  ) {
+    throw new Error("빌드 매니페스트의 권한 제한이 예상과 다릅니다.");
+  }
+  await Promise.all([
+    lstat(path.join(buildDir, "index.html")),
+    lstat(path.join(buildDir, "background.js")),
+    lstat(path.join(buildDir, "icons", "icon-128.png")),
+  ]);
+}
+
+async function pathExists(candidate) {
+  try {
+    await lstat(candidate);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function promoteBuild(buildDir) {
+  assertSafeGeneratedPath(buildDir, ".dist-staging-");
+  assertSafeGeneratedPath(distDir, "dist");
+  const hasExistingDist = await pathExists(distDir);
+  let backupDir;
+
+  if (hasExistingDist) {
+    await mkdir(backupRootDir, { recursive: true });
+    backupDir = path.join(backupRootDir, `dist-${Date.now()}-${randomUUID()}`);
+    assertSafeGeneratedPath(backupDir, "dist-");
+    await rename(distDir, backupDir);
+  }
+
+  try {
+    await rename(buildDir, distDir);
+  } catch (error) {
+    if (backupDir && !(await pathExists(distDir))) await rename(backupDir, distDir);
+    throw error;
+  }
+
+  if (backupDir) console.info(`이전 빌드는 복구용으로 보존했습니다: ${backupDir}`);
 }
 
 async function runBuild() {
-  await rm(distDir, { recursive: true, force: true });
-  await mkdir(distDir, { recursive: true });
-  await cp(publicDir, distDir, { recursive: true, force: true });
-  await cp(logoSourcePath, path.join(distDir, logoFileName), { force: true });
+  const buildDir = await mkdtemp(path.join(rootDir, ".dist-staging-"));
+  assertSafeGeneratedPath(buildDir, ".dist-staging-");
+  await cp(publicDir, buildDir, { recursive: true, force: false, errorOnExist: true });
+  await cp(logoSourcePath, path.join(buildDir, logoFileName), { force: false, errorOnExist: true });
 
+  const assetsDir = path.join(buildDir, "assets");
   const buildResult = await build({
     absWorkingDir: rootDir,
-    entryPoints: {
-      app: "src/main.tsx",
-    },
-    outdir: "dist/assets",
+    entryPoints: { app: "src/main.tsx" },
+    outdir: assetsDir,
     bundle: true,
     platform: "browser",
     format: "esm",
     charset: "utf8",
-    target: ["chrome107"],
+    target: ["chrome111"],
+    conditions: ["browser", "production"],
+    define: { "process.env.NODE_ENV": '"production"' },
+    treeShaking: true,
     jsx: "automatic",
-    loader: {
-      ".png": "file",
-    },
-    minify: false,
+    loader: { ".png": "file" },
+    minify: true,
     sourcemap: false,
+    legalComments: "eof",
     entryNames: "[name]",
     assetNames: "asset-[name]-[hash]",
     metafile: true,
@@ -85,25 +161,23 @@ async function runBuild() {
 
   const outputs = buildResult.metafile.outputs;
   const appJsOutput = Object.keys(outputs).find((filePath) => outputs[filePath].entryPoint === "src/main.tsx");
-  const cssOutputs = Object.keys(outputs)
-    .filter((filePath) => filePath.endsWith(".css"))
-    .sort();
-
-  if (!appJsOutput) {
-    throw new Error("Failed to locate bundled JavaScript outputs.");
-  }
+  const cssOutputs = Object.keys(outputs).filter((filePath) => filePath.endsWith(".css")).sort();
+  if (!appJsOutput) throw new Error("번들 JavaScript 출력을 찾지 못했습니다.");
 
   const appMeta = await readHtmlMetadata(path.join(rootDir, "index.html"), "플래나이(PLANAI)");
-  await writeBuiltHtml({
+  await writeBuiltHtml(buildDir, {
     fileName: "index.html",
     title: appMeta.title,
     lang: appMeta.lang,
-    jsHref: toDistHref(appJsOutput),
-    cssHrefs: cssHrefsForEntry("app", cssOutputs),
+    jsHref: toBuildHref(buildDir, appJsOutput),
+    cssHrefs: cssHrefsForEntry(buildDir, "app", cssOutputs),
   });
+
+  await validateBuildDirectory(buildDir);
+  await promoteBuild(buildDir);
 }
 
 runBuild().catch((error) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });

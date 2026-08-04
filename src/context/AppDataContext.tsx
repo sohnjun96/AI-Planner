@@ -5,11 +5,13 @@ import {
   clampLlmTemperature,
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
+  DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   DEFAULT_NOTE_AI_ACTIONS,
   DEFAULT_NOTIFY_BEFORE_MINUTES,
   DEFAULT_PROJECT_IDS,
   DEFAULT_SETTING,
   DEFAULT_USER_CONTEXT,
+  LLM_MAX_API_KEY_LENGTH,
   MAX_AI_CONTEXT_MAX_LENGTH,
   MAX_AUTOSAVE_NOTE_VERSIONS,
   MAX_MANUAL_NOTE_VERSIONS,
@@ -22,7 +24,6 @@ import {
 import { bootstrapDatabase, db } from "../db";
 import type {
   AppSetting,
-  ArchiveInsightCache,
   Memo,
   Note,
   NoteFormInput,
@@ -41,6 +42,13 @@ import type {
   UserContextSuggestion,
 } from "../models";
 import { toIsoNow } from "../utils/date";
+import {
+  BACKUP_VERSION,
+  MAX_IMPORT_FILE_BYTES,
+  parseAndSanitizeImportPayload,
+  stripSecretsFromBackupRaw,
+  type ValidatedImportPayload,
+} from "../utils/importBackup";
 import { getLunchAutoCompleteAt, isLunchTask } from "../utils/lunchTasks";
 import { isTaskActive, isTaskCanceled, isTaskDone } from "../utils/taskStatus";
 
@@ -161,6 +169,22 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(undefined)
 const AUTO_BACKUPS_STORAGE_KEY = "schedule_auto_backups_v1";
 const ALARM_SYNC_STORAGE_KEY = "schedule_alarm_payload_v1";
 const MAX_AUTO_BACKUPS = 20;
+const MAX_AUTO_BACKUP_TOTAL_BYTES = 8_000_000;
+const IMPORT_BATCH_SIZE = 500;
+const MAX_ALARM_SYNC_TASKS = 2_000;
+const LIVE_QUERY_LIMITS = {
+  tasks: 20_000,
+  projects: 1_000,
+  taskTypes: 200,
+  memos: 10_000,
+  notes: 10_000,
+  noteVersions: 20_000,
+  noteTaskLinks: 20_000,
+  projectSubcategories: 5_000,
+  settings: 1,
+  userContexts: 1,
+  archiveInsightCaches: 5_000,
+} as const;
 const MAX_UNDO_STACK = 80;
 const UPDATE_UNDO_MERGE_WINDOW_MS = 15_000;
 
@@ -193,11 +217,54 @@ function getId(prefix: string): string {
 }
 
 function trimTaskInput(input: TaskFormInput): TaskFormInput {
+  const title = input.title.trim();
+  const content = input.content.trim();
+  if (!title || title.length > 500) throw new Error("일정 제목은 1~500자로 입력해 주세요.");
+  if (content.length > 100_000) throw new Error("일정 내용은 100,000자 이하여야 합니다.");
+  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(input.taskTypeId) || !/^[A-Za-z0-9._:-]{1,128}$/.test(input.projectId)) {
+    throw new Error("일정 분류 식별자가 올바르지 않습니다.");
+  }
+  if (!["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"].includes(input.status)) {
+    throw new Error("일정 상태가 올바르지 않습니다.");
+  }
+  if (input.recurrencePattern && !["NONE", "DAILY", "WEEKLY", "MONTHLY"].includes(input.recurrencePattern)) {
+    throw new Error("반복 주기가 올바르지 않습니다.");
+  }
+  const startTime = new Date(input.startAt).getTime();
+  const endTime = input.endAt ? new Date(input.endAt).getTime() : undefined;
+  if (!Number.isFinite(startTime) || input.startAt.length > 40 || (endTime !== undefined && (!Number.isFinite(endTime) || endTime < startTime))) {
+    throw new Error("일정 시작·종료 시간이 올바르지 않습니다.");
+  }
   return {
     ...input,
-    title: input.title.trim(),
-    content: input.content.trim(),
+    title,
+    content,
   };
+}
+
+function normalizeNoteInput(input: NoteFormInput): NoteFormInput {
+  const title = input.title.trim() || "제목 없는 노트";
+  if (title.length > 500) throw new Error("노트 제목은 500자 이하여야 합니다.");
+  if (input.content.length > 500_000) throw new Error("노트 내용은 500,000자 이하여야 합니다.");
+  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(input.projectId) || (input.subcategoryId && !/^[A-Za-z0-9._:-]{1,128}$/.test(input.subcategoryId))) {
+    throw new Error("노트 분류 식별자가 올바르지 않습니다.");
+  }
+  if (!["draft", "active", "archived"].includes(input.status)) throw new Error("노트 상태가 올바르지 않습니다.");
+  if (!Array.isArray(input.tags) || input.tags.length > 50) throw new Error("노트 태그는 최대 50개까지 지정할 수 있습니다.");
+  const tags = Array.from(new Set(input.tags.map((tag) => tag.trim()).filter(Boolean)));
+  if (tags.some((tag) => tag.length > 100)) throw new Error("각 노트 태그는 100자 이하여야 합니다.");
+  return { ...input, title, tags };
+}
+
+function validateColor(value: string): string {
+  if (!/^#[0-9a-f]{6}$/i.test(value)) throw new Error("색상 값은 6자리 HEX 형식이어야 합니다.");
+  return value;
+}
+
+async function assertCapacity(currentCount: Promise<number>, added: number, limit: number, label: string): Promise<void> {
+  if ((await currentCount) + added > limit) {
+    throw new Error(`${label} 항목 수가 안전 처리 한도(${limit.toLocaleString()}개)를 초과합니다.`);
+  }
 }
 
 function clampRecurrenceCount(value: number | undefined): number {
@@ -258,55 +325,10 @@ function serializeTaskForEquality(task: Task): string {
   });
 }
 
-interface ImportPayload {
-  tasks: Task[];
-  projects: Project[];
-  taskTypes: TaskType[];
-  memos: Memo[];
-  settings: AppSetting[];
-  userContexts?: UserContext[];
-  notes?: Note[];
-  noteVersions?: NoteVersion[];
-  noteTaskLinks?: NoteTaskLink[];
-  projectSubcategories?: ProjectSubcategory[];
-  archiveInsightCaches?: ArchiveInsightCache[];
-  version?: number;
-  exportedAt?: string;
-}
-
-function validateImportPayload(payload: unknown): payload is ImportPayload {
-  if (!payload || typeof payload !== "object") {
-    return false;
-  }
-  const candidate = payload as Record<string, unknown>;
-  return (
-    Array.isArray(candidate.tasks) &&
-    Array.isArray(candidate.projects) &&
-    Array.isArray(candidate.taskTypes) &&
-    Array.isArray(candidate.memos) &&
-    Array.isArray(candidate.settings) &&
-    (candidate.userContexts === undefined || Array.isArray(candidate.userContexts)) &&
-    (candidate.notes === undefined || Array.isArray(candidate.notes)) &&
-    (candidate.noteVersions === undefined || Array.isArray(candidate.noteVersions)) &&
-    (candidate.noteTaskLinks === undefined || Array.isArray(candidate.noteTaskLinks)) &&
-    (candidate.projectSubcategories === undefined || Array.isArray(candidate.projectSubcategories)) &&
-    (candidate.archiveInsightCaches === undefined || Array.isArray(candidate.archiveInsightCaches))
-  );
-}
+type ImportPayload = ValidatedImportPayload;
 
 function parseImportPayload(raw: string): ImportPayload {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("JSON 형식이 올바르지 않습니다.");
-  }
-
-  if (!validateImportPayload(parsed)) {
-    throw new Error("가져오기 데이터 형식이 맞지 않습니다. 이 앱에서 내보낸 JSON 백업 파일인지 확인해 주세요.");
-  }
-
-  return parsed;
+  return parseAndSanitizeImportPayload(raw);
 }
 
 function toImportDataPreview(payload: ImportPayload): ImportDataPreview {
@@ -336,14 +358,16 @@ function clampAiContextMaxLength(value: number | undefined): number {
 
 function normalizeSetting(setting: AppSetting): AppSetting {
   return {
-    ...setting,
+    id: SETTINGS_ID,
+    showPastCompleted: Boolean(setting.showPastCompleted),
+    weekStartsOn: setting.weekStartsOn === "sun" ? "sun" : "mon",
+    timeFormat: setting.timeFormat === "12h" ? "12h" : "24h",
     notificationsEnabled: setting.notificationsEnabled ?? DEFAULT_SETTING.notificationsEnabled,
     notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES,
     autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
     autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
-    llmEndpoint: setting.llmEndpoint ?? DEFAULT_SETTING.llmEndpoint,
-    llmApiKey: setting.llmApiKey ?? DEFAULT_SETTING.llmApiKey,
-    llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
+    llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+    llmModel: typeof setting.llmModel === "string" && setting.llmModel.length <= 200 ? setting.llmModel : DEFAULT_SETTING.llmModel,
     llmTemperature: clampLlmTemperature(setting.llmTemperature),
     llmReasoningEffort: normalizeLlmReasoningEffort(setting.llmReasoningEffort),
     llmGemmaThinkingEnabled: normalizeLlmGemmaThinkingEnabled(setting.llmGemmaThinkingEnabled),
@@ -354,7 +378,14 @@ function normalizeSetting(setting: AppSetting): AppSetting {
         : DEFAULT_NOTE_AI_ACTIONS,
     noteTaskSuggestionsEnabled: setting.noteTaskSuggestionsEnabled ?? DEFAULT_SETTING.noteTaskSuggestionsEnabled,
     relatedNoteSuggestionsEnabled: setting.relatedNoteSuggestionsEnabled ?? DEFAULT_SETTING.relatedNoteSuggestionsEnabled,
+    updatedAt: typeof setting.updatedAt === "string" ? setting.updatedAt : "",
   };
+}
+
+function sanitizeSettingForStorage(setting: AppSetting): AppSetting {
+  const sanitized = normalizeSetting(setting);
+  delete sanitized.llmApiKey;
+  return sanitized;
 }
 
 function normalizeUserContext(context: UserContext | undefined): UserContext {
@@ -527,10 +558,12 @@ function mergeUserContextSuggestionLine(
   return `${nextLines.join("\n").trimEnd()}\n\n${AI_LEARNED_CONTEXT_HEADING}\n${line}\n`;
 }
 
-function getChromeStorageLocal(): {
+interface ChromeStorageLocal {
   get: (keys: string[], callback: (items: Record<string, unknown>) => void) => void;
   set: (items: Record<string, unknown>, callback?: () => void) => void;
-} | null {
+}
+
+function getChromeStorageLocal(): ChromeStorageLocal | null {
   const maybeChrome = (globalThis as { chrome?: unknown }).chrome as
     | {
         storage?: {
@@ -545,30 +578,83 @@ function getChromeStorageLocal(): {
   return maybeChrome?.storage?.local ?? null;
 }
 
-function isStoredAutoBackupEntry(value: unknown): value is StoredAutoBackupEntry {
+function getChromeRuntimeError(): string | undefined {
+  return ((globalThis as { chrome?: { runtime?: { lastError?: { message?: string } } } }).chrome?.runtime?.lastError?.message);
+}
+
+async function readChromeStorage(storage: ChromeStorageLocal, key: string): Promise<Record<string, unknown>> {
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
+    storage.get([key], (result) => {
+      const message = getChromeRuntimeError();
+      if (message) {
+        reject(new Error(`확장 프로그램 저장소를 읽지 못했습니다: ${message}`));
+        return;
+      }
+      resolve(result);
+    });
+  });
+}
+
+async function writeChromeStorage(storage: ChromeStorageLocal, value: Record<string, unknown>): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    storage.set(value, () => {
+      const message = getChromeRuntimeError();
+      if (message) {
+        reject(new Error(`확장 프로그램 저장소에 쓰지 못했습니다: ${message}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function sanitizeStoredAutoBackupEntry(value: unknown): StoredAutoBackupEntry | undefined {
   if (!value || typeof value !== "object") {
-    return false;
+    return undefined;
   }
   const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.createdAt === "string" &&
-    typeof candidate.reason === "string" &&
-    typeof candidate.raw === "string"
-  );
+  if (
+    typeof candidate.id !== "string" ||
+    !/^[A-Za-z0-9._:-]{1,128}$/.test(candidate.id) ||
+    typeof candidate.createdAt !== "string" ||
+    !Number.isFinite(new Date(candidate.createdAt).getTime()) ||
+    typeof candidate.reason !== "string" ||
+    candidate.reason.length > 200 ||
+    typeof candidate.raw !== "string" ||
+    new TextEncoder().encode(candidate.raw).byteLength > MAX_IMPORT_FILE_BYTES
+  ) {
+    return undefined;
+  }
+
+  try {
+    const raw = JSON.stringify(parseAndSanitizeImportPayload(stripSecretsFromBackupRaw(candidate.raw)));
+    return { id: candidate.id, createdAt: candidate.createdAt, reason: candidate.reason, raw };
+  } catch {
+    return undefined;
+  }
+}
+
+function limitStoredAutoBackups(values: unknown[]): StoredAutoBackupEntry[] {
+  let totalBytes = 0;
+  const entries: StoredAutoBackupEntry[] = [];
+  for (const value of values.slice(0, MAX_AUTO_BACKUPS * 2)) {
+    const entry = sanitizeStoredAutoBackupEntry(value);
+    if (!entry) continue;
+    const entryBytes = new TextEncoder().encode(entry.raw).byteLength;
+    if (totalBytes + entryBytes > MAX_AUTO_BACKUP_TOTAL_BYTES) continue;
+    entries.push(entry);
+    totalBytes += entryBytes;
+    if (entries.length >= MAX_AUTO_BACKUPS) break;
+  }
+  return entries.sort(compareNewestFirst);
 }
 
 async function readStoredAutoBackups(): Promise<StoredAutoBackupEntry[]> {
   const storage = getChromeStorageLocal();
   if (storage) {
-    const items = await new Promise<Record<string, unknown>>((resolve) => {
-      storage.get([AUTO_BACKUPS_STORAGE_KEY], (result) => {
-        resolve(result);
-      });
-    });
-
+    const items = await readChromeStorage(storage, AUTO_BACKUPS_STORAGE_KEY);
     const rawEntries = Array.isArray(items[AUTO_BACKUPS_STORAGE_KEY]) ? items[AUTO_BACKUPS_STORAGE_KEY] : [];
-    return rawEntries.filter(isStoredAutoBackupEntry);
+    return limitStoredAutoBackups(rawEntries);
   }
 
   if (typeof localStorage === "undefined") {
@@ -585,23 +671,30 @@ async function readStoredAutoBackups(): Promise<StoredAutoBackupEntry[]> {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed.filter(isStoredAutoBackupEntry);
+    return limitStoredAutoBackups(parsed);
   } catch {
     return [];
   }
 }
 
 async function writeStoredAutoBackups(entries: StoredAutoBackupEntry[]): Promise<void> {
+  const safeEntries = limitStoredAutoBackups(entries);
+  const expected = JSON.stringify(safeEntries);
   const storage = getChromeStorageLocal();
   if (storage) {
-    await new Promise<void>((resolve) => {
-      storage.set({ [AUTO_BACKUPS_STORAGE_KEY]: entries }, () => resolve());
-    });
+    await writeChromeStorage(storage, { [AUTO_BACKUPS_STORAGE_KEY]: safeEntries });
+    const stored = await readChromeStorage(storage, AUTO_BACKUPS_STORAGE_KEY);
+    if (JSON.stringify(stored[AUTO_BACKUPS_STORAGE_KEY] ?? []) !== expected) {
+      throw new Error("자동 백업 저장 검증에 실패했습니다.");
+    }
     return;
   }
 
   if (typeof localStorage !== "undefined") {
-    localStorage.setItem(AUTO_BACKUPS_STORAGE_KEY, JSON.stringify(entries));
+    localStorage.setItem(AUTO_BACKUPS_STORAGE_KEY, expected);
+    if (localStorage.getItem(AUTO_BACKUPS_STORAGE_KEY) !== expected) {
+      throw new Error("자동 백업 저장 검증에 실패했습니다.");
+    }
   }
 }
 
@@ -613,7 +706,6 @@ async function writeAlarmSyncPayload(payload: {
   };
   tasks: Array<{
     id: string;
-    title: string;
     startAt: string;
     status: Task["status"];
   }>;
@@ -623,9 +715,13 @@ async function writeAlarmSyncPayload(payload: {
     return;
   }
 
-  await new Promise<void>((resolve) => {
-    storage.set({ [ALARM_SYNC_STORAGE_KEY]: payload }, () => resolve());
-  });
+  await writeChromeStorage(storage, { [ALARM_SYNC_STORAGE_KEY]: payload });
+}
+
+async function addInChunks<T>(items: T[], addChunk: (chunk: T[]) => Promise<unknown>): Promise<void> {
+  for (let offset = 0; offset < items.length; offset += IMPORT_BATCH_SIZE) {
+    await addChunk(items.slice(offset, offset + IMPORT_BATCH_SIZE));
+  }
 }
 
 function toBackupSummary(entry: StoredAutoBackupEntry): AutoBackupSummary {
@@ -643,6 +739,7 @@ function compareNewestFirst(a: { createdAt: string }, b: { createdAt: string }):
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const [llmApiKey, setLlmApiKey] = useState("");
   // setState 업데이터는 렌더 시점에 실행되므로, 이벤트 핸들러에서 즉시 읽을 수 있는
   // 동기 미러를 유지한다. (업데이터 안에서 top을 캡처하면 pop만 되고 복원이 누락될 수 있음)
   const undoStackRef = useRef<UndoEntry[]>([]);
@@ -673,18 +770,21 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const tasks = useLiveQuery(() => db.tasks.toArray(), [], []);
-  const projects = useLiveQuery(() => db.projects.toArray(), [], []);
-  const taskTypes = useLiveQuery(() => db.taskTypes.orderBy("order").toArray(), [], []);
-  const memos = useLiveQuery(() => db.memos.toArray(), [], []);
-  const notes = useLiveQuery(() => db.notes.toArray(), [], []);
-  const noteVersions = useLiveQuery(() => db.noteVersions.toArray(), [], []);
-  const noteTaskLinks = useLiveQuery(() => db.noteTaskLinks.toArray(), [], []);
-  const projectSubcategories = useLiveQuery(() => db.projectSubcategories.toArray(), [], []);
+  const tasks = useLiveQuery(() => db.tasks.orderBy("startAt").limit(LIVE_QUERY_LIMITS.tasks).toArray(), [], []);
+  const projects = useLiveQuery(() => db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(), [], []);
+  const taskTypes = useLiveQuery(() => db.taskTypes.orderBy("order").limit(LIVE_QUERY_LIMITS.taskTypes).toArray(), [], []);
+  const memos = useLiveQuery(() => db.memos.orderBy("date").reverse().limit(LIVE_QUERY_LIMITS.memos).toArray(), [], []);
+  const notes = useLiveQuery(() => db.notes.orderBy("updatedAt").reverse().limit(LIVE_QUERY_LIMITS.notes).toArray(), [], []);
+  const noteVersions = useLiveQuery(() => db.noteVersions.orderBy("createdAt").reverse().limit(LIVE_QUERY_LIMITS.noteVersions).toArray(), [], []);
+  const noteTaskLinks = useLiveQuery(() => db.noteTaskLinks.limit(LIVE_QUERY_LIMITS.noteTaskLinks).toArray(), [], []);
+  const projectSubcategories = useLiveQuery(() => db.projectSubcategories.limit(LIVE_QUERY_LIMITS.projectSubcategories).toArray(), [], []);
   const rawSetting = useLiveQuery(() => db.settings.get(SETTINGS_ID), [], undefined);
   const rawUserContext = useLiveQuery(() => db.userContexts.get(USER_CONTEXT_ID), [], undefined);
 
-  const setting = useMemo(() => normalizeSetting(rawSetting ?? DEFAULT_SETTING), [rawSetting]);
+  const setting = useMemo(
+    () => ({ ...normalizeSetting(rawSetting ?? DEFAULT_SETTING), llmApiKey }),
+    [llmApiKey, rawSetting],
+  );
   const userContext = useMemo(() => normalizeUserContext(rawUserContext), [rawUserContext]);
   const lunchProjectMap = useMemo<Record<string, Project | undefined>>(
     () => Object.fromEntries(projects.map((project) => [project.id, project])),
@@ -707,7 +807,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
     const completeDueLunchTasks = async () => {
       await db.transaction("rw", db.tasks, async () => {
-        const currentTasks = await db.tasks.toArray();
+        const currentTasks = (await db.tasks.bulkGet(activeLunchTasks.map(({ task }) => task.id))).filter(
+          (task): task is Task => Boolean(task),
+        );
         const checkAt = Date.now();
         const completedAt = toIsoNow();
         const dueTasks = currentTasks.filter((task) => {
@@ -812,6 +914,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
+      await assertCapacity(db.tasks.count(), records.length, LIVE_QUERY_LIMITS.tasks, "일정");
+      const [project, taskType] = await Promise.all([
+        db.projects.get(normalized.projectId),
+        db.taskTypes.get(normalized.taskTypeId),
+      ]);
+      if (!project || !taskType) throw new Error("선택한 프로젝트 또는 일정 종류를 찾을 수 없습니다.");
       await db.tasks.bulkAdd(records);
 
       pushUndo({
@@ -835,6 +943,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
       const now = toIsoNow();
       const normalized = trimTaskInput(input);
+      const [project, taskType] = await Promise.all([
+        db.projects.get(normalized.projectId),
+        db.taskTypes.get(normalized.taskTypeId),
+      ]);
+      if (!project || !taskType) throw new Error("선택한 프로젝트 또는 일정 종류를 찾을 수 없습니다.");
       const nextTask: Task = {
         ...existing,
         ...toTaskCoreRecord(normalized),
@@ -901,29 +1014,42 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     async (input: NoteFormInput, editType: NoteVersionEditType = "manual", aiPrompt?: string) => {
       const now = toIsoNow();
       const id = getId("note");
-      const title = input.title.trim() || "제목 없는 노트";
+      const normalized = normalizeNoteInput(input);
+      if (aiPrompt && aiPrompt.length > 4_000) throw new Error("AI 편집 지시문은 4,000자 이하여야 합니다.");
+      await assertCapacity(db.notes.count(), 1, LIVE_QUERY_LIMITS.notes, "노트");
+      await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
+      const [project, subcategory] = await Promise.all([
+        db.projects.get(normalized.projectId),
+        normalized.subcategoryId ? db.projectSubcategories.get(normalized.subcategoryId) : undefined,
+      ]);
+      if (!project || (normalized.subcategoryId && (!subcategory || subcategory.projectId !== normalized.projectId))) {
+        throw new Error("선택한 노트 분류를 찾을 수 없습니다.");
+      }
+      const title = normalized.title;
       const note: Note = {
         id,
         title,
-        content: input.content,
-        projectId: input.projectId,
-        subcategoryId: input.subcategoryId,
-        tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
-        status: input.status,
-        isPinned: input.isPinned,
+        content: normalized.content,
+        projectId: normalized.projectId,
+        subcategoryId: normalized.subcategoryId,
+        tags: normalized.tags,
+        status: normalized.status,
+        isPinned: normalized.isPinned,
         linkedTaskIds: [],
         createdAt: now,
         updatedAt: now,
       };
-      await db.notes.add(note);
-      await db.noteVersions.add({
-        id: getId("noteversion"),
-        noteId: id,
-        title,
-        content: input.content,
-        editType,
-        aiPrompt,
-        createdAt: now,
+      await db.transaction("rw", [db.notes, db.noteVersions], async () => {
+        await db.notes.add(note);
+        await db.noteVersions.add({
+          id: getId("noteversion"),
+          noteId: id,
+          title,
+          content: normalized.content,
+          editType,
+          aiPrompt,
+          createdAt: now,
+        });
       });
       return id;
     },
@@ -936,45 +1062,60 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (!existing) {
         return;
       }
+      const normalized = normalizeNoteInput(input);
+      if (aiPrompt && aiPrompt.length > 4_000) throw new Error("AI 편집 지시문은 4,000자 이하여야 합니다.");
+      const [project, subcategory] = await Promise.all([
+        db.projects.get(normalized.projectId),
+        normalized.subcategoryId ? db.projectSubcategories.get(normalized.subcategoryId) : undefined,
+      ]);
+      if (!project || (normalized.subcategoryId && (!subcategory || subcategory.projectId !== normalized.projectId))) {
+        throw new Error("선택한 노트 분류를 찾을 수 없습니다.");
+      }
       const now = toIsoNow();
-      const nextTitle = input.title.trim() || "제목 없는 노트";
-      const nextTags = input.tags.map((tag) => tag.trim()).filter(Boolean);
-      const contentChanged = existing.content !== input.content || existing.title !== nextTitle;
+      const nextTitle = normalized.title;
+      const nextTags = normalized.tags;
+      const contentChanged = existing.content !== normalized.content || existing.title !== nextTitle;
       const metaChanged =
-        existing.projectId !== input.projectId ||
-        (existing.subcategoryId ?? "") !== (input.subcategoryId ?? "") ||
-        existing.status !== input.status ||
-        existing.isPinned !== input.isPinned ||
+        existing.projectId !== normalized.projectId ||
+        (existing.subcategoryId ?? "") !== (normalized.subcategoryId ?? "") ||
+        existing.status !== normalized.status ||
+        existing.isPinned !== normalized.isPinned ||
         JSON.stringify(existing.tags) !== JSON.stringify(nextTags);
 
       if (!contentChanged && !metaChanged) {
         return;
       }
-
-      await db.notes.put({
-        ...existing,
-        title: nextTitle,
-        content: input.content,
-        projectId: input.projectId,
-        subcategoryId: input.subcategoryId,
-        tags: nextTags,
-        status: input.status,
-        isPinned: input.isPinned,
-        updatedAt: now,
-      });
-
       if (contentChanged) {
-        await db.noteVersions.add({
-          id: getId("noteversion"),
-          noteId: id,
-          title: nextTitle,
-          content: input.content,
-          editType,
-          aiPrompt,
-          createdAt: now,
-        });
         await pruneNoteVersions(id);
+        await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
       }
+
+      await db.transaction("rw", [db.notes, db.noteVersions], async () => {
+        await db.notes.put({
+          ...existing,
+          title: nextTitle,
+          content: normalized.content,
+          projectId: normalized.projectId,
+          subcategoryId: normalized.subcategoryId,
+          tags: nextTags,
+          status: normalized.status,
+          isPinned: normalized.isPinned,
+          updatedAt: now,
+        });
+
+        if (contentChanged) {
+          await db.noteVersions.add({
+            id: getId("noteversion"),
+            noteId: id,
+            title: nextTitle,
+            content: normalized.content,
+            editType,
+            aiPrompt,
+            createdAt: now,
+          });
+          await pruneNoteVersions(id);
+        }
+      });
     },
     [pruneNoteVersions],
   );
@@ -985,6 +1126,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (!existing || existing.aiClassifiedAt || (expectedUpdatedAt && existing.updatedAt !== expectedUpdatedAt)) {
       return;
     }
+    const [project, subcategory] = await Promise.all([
+      db.projects.get(projectId),
+      subcategoryId ? db.projectSubcategories.get(subcategoryId) : undefined,
+    ]);
+    if (!project || (subcategoryId && (!subcategory || subcategory.projectId !== projectId))) return;
     const now = toIsoNow();
     await db.notes.put({
       ...existing,
@@ -1018,9 +1164,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const restoreNoteVersion = useCallback(
     async (noteId: string, versionId: string) => {
       const [note, version] = await Promise.all([db.notes.get(noteId), db.noteVersions.get(versionId)]);
-      if (!note || !version) {
+      if (!note || !version || version.noteId !== noteId) {
         return;
       }
+      await pruneNoteVersions(noteId);
+      await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
       const now = toIsoNow();
       await db.notes.put({
         ...note,
@@ -1043,6 +1191,13 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const linkNoteToTask = useCallback(
     async (noteId: string, taskId: string, source: NoteTaskLinkSource = "manual") => {
+      if (
+        !/^[A-Za-z0-9._:-]{1,128}$/.test(noteId) ||
+        !/^[A-Za-z0-9._:-]{1,128}$/.test(taskId) ||
+        (source !== "manual" && source !== "auto_suggest")
+      ) {
+        throw new Error("노트 연결 정보가 올바르지 않습니다.");
+      }
       const now = toIsoNow();
       await db.transaction("rw", [db.notes, db.tasks, db.noteTaskLinks], async () => {
         const [note, task] = await Promise.all([db.notes.get(noteId), db.tasks.get(taskId)]);
@@ -1051,6 +1206,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         }
         const existingLink = await db.noteTaskLinks.where("[noteId+taskId]").equals([noteId, taskId]).first();
         if (!existingLink) {
+          if ((note.linkedTaskIds?.length ?? 0) >= 200 || (task.linkedNoteIds?.length ?? 0) >= 200) {
+            throw new Error("노트와 일정 연결은 항목당 최대 200개까지 허용됩니다.");
+          }
+          await assertCapacity(db.noteTaskLinks.count(), 1, LIVE_QUERY_LIMITS.noteTaskLinks, "노트 연결");
           await db.noteTaskLinks.add({
             id: getId("notelink"),
             noteId,
@@ -1101,9 +1260,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const createSubcategory = useCallback(async (projectId: string, name: string) => {
     const trimmed = name.trim();
-    if (!trimmed) {
-      throw new Error("세부 항목 이름을 입력해 주세요.");
+    if (!trimmed || trimmed.length > 200) throw new Error("세부 항목 이름은 1~200자로 입력해 주세요.");
+    if (!/^[A-Za-z0-9._:-]{1,128}$/.test(projectId) || !(await db.projects.get(projectId))) {
+      throw new Error("대상 프로젝트를 찾을 수 없습니다.");
     }
+    await assertCapacity(db.projectSubcategories.count(), 1, LIVE_QUERY_LIMITS.projectSubcategories, "세부 항목");
     const now = toIsoNow();
     const id = getId("subcat");
     const highest = await db.projectSubcategories.where("projectId").equals(projectId).count();
@@ -1120,9 +1281,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const renameSubcategory = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
-    if (!trimmed) {
-      throw new Error("세부 항목 이름을 입력해 주세요.");
-    }
+    if (!trimmed || trimmed.length > 200) throw new Error("세부 항목 이름은 1~200자로 입력해 주세요.");
     const existing = await db.projectSubcategories.get(id);
     if (!existing) {
       return;
@@ -1162,9 +1321,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const upsertProject = useCallback(async (input: ProjectInput) => {
     const now = toIsoNow();
     const name = input.name.trim();
-    if (!name) {
-      throw new Error("프로젝트명을 입력해 주세요.");
-    }
+    if (!name || name.length > 200) throw new Error("프로젝트명은 1~200자로 입력해 주세요.");
+    const color = validateColor(input.color);
+    const description = input.description?.trim();
+    if (description && description.length > 2_000) throw new Error("프로젝트 설명은 2,000자 이하여야 합니다.");
 
     if (input.id) {
       const existing = await db.projects.get(input.id);
@@ -1174,8 +1334,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       await db.projects.put({
         ...existing,
         name,
-        color: input.color,
-        description: input.description?.trim(),
+        color,
+        description,
         isActive: input.isActive,
         updatedAt: now,
       });
@@ -1183,13 +1343,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 새 프로젝트는 목록 맨 뒤 순서로 추가한다
-    const existingProjects = await db.projects.toArray();
+    await assertCapacity(db.projects.count(), 1, LIVE_QUERY_LIMITS.projects, "프로젝트");
+    const existingProjects = await db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray();
     const maxOrder = existingProjects.reduce((max, project) => Math.max(max, project.order ?? -1), -1);
     await db.projects.add({
       id: getId("project"),
       name,
-      color: input.color,
-      description: input.description?.trim(),
+      color,
+      description,
       isActive: input.isActive,
       order: maxOrder + 1,
       createdAt: now,
@@ -1236,9 +1397,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const upsertTaskType = useCallback(async (input: TaskTypeInput) => {
     const now = toIsoNow();
     const name = input.name.trim();
-    if (!name) {
-      throw new Error("종류명을 입력해 주세요.");
-    }
+    if (!name || name.length > 200) throw new Error("종류명은 1~200자로 입력해 주세요.");
+    const color = validateColor(input.color);
 
     if (input.id) {
       const existing = await db.taskTypes.get(input.id);
@@ -1248,18 +1408,19 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       await db.taskTypes.put({
         ...existing,
         name,
-        color: input.color,
+        color,
         isActive: input.isActive,
         updatedAt: now,
       });
       return;
     }
 
+    await assertCapacity(db.taskTypes.count(), 1, LIVE_QUERY_LIMITS.taskTypes, "일정 종류");
     const highestOrder = await db.taskTypes.orderBy("order").last();
     await db.taskTypes.add({
       id: getId("type"),
       name,
-      color: input.color,
+      color,
       isDefault: false,
       isActive: input.isActive,
       order: (highestOrder?.order ?? 0) + 1,
@@ -1285,6 +1446,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const saveMemo = useCallback(async (date: string, content: string) => {
     const trimmed = content.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(new Date(`${date}T00:00:00`).getTime())) {
+      throw new Error("메모 날짜 형식이 올바르지 않습니다.");
+    }
+    if (trimmed.length > 100_000) throw new Error("메모 내용은 100,000자 이하여야 합니다.");
     const id = `memo-${date}`;
 
     if (!trimmed) {
@@ -1292,6 +1457,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (!(await db.memos.get(id))) await assertCapacity(db.memos.count(), 1, LIVE_QUERY_LIMITS.memos, "메모");
     await db.memos.put({
       id,
       date,
@@ -1325,38 +1491,78 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         >
       >,
     ) => {
+      if (patch.llmEndpoint !== undefined && patch.llmEndpoint !== DEFAULT_LLM_CHAT_COMPLETIONS_URL) {
+        throw new Error("AI Endpoint는 승인된 MOIP 주소만 사용할 수 있습니다.");
+      }
+      if (patch.llmModel !== undefined && !/^[A-Za-z0-9._:/-]{1,200}$/.test(patch.llmModel.trim())) {
+        throw new Error("LLM 모델명 형식이 올바르지 않습니다.");
+      }
+      if (patch.noteAiActions !== undefined) {
+        if (!Array.isArray(patch.noteAiActions) || patch.noteAiActions.length > 20) {
+          throw new Error("AI 노트 작업은 최대 20개까지 저장할 수 있습니다.");
+        }
+        const actionIds = new Set<string>();
+        for (const action of patch.noteAiActions) {
+          if (
+            !/^[A-Za-z0-9._:-]{1,128}$/.test(action.id) ||
+            !action.label.trim() ||
+            action.label.length > 100 ||
+            !action.prompt.trim() ||
+            action.prompt.length > 4_000 ||
+            actionIds.has(action.id)
+          ) {
+            throw new Error("AI 노트 작업의 이름 또는 지시문 형식이 올바르지 않습니다.");
+          }
+          actionIds.add(action.id);
+        }
+      }
+      if (patch.llmApiKey !== undefined) {
+        const sessionKey = patch.llmApiKey.trim();
+        if (sessionKey.length > LLM_MAX_API_KEY_LENGTH || /[\r\n]/.test(sessionKey)) {
+          throw new Error("API 키 형식이 올바르지 않습니다.");
+        }
+        setLlmApiKey(sessionKey);
+      }
+
+      const persistedPatch = { ...patch };
+      delete persistedPatch.llmApiKey;
+      delete persistedPatch.llmEndpoint;
+      if (Object.keys(persistedPatch).length === 0) {
+        return;
+      }
       const current = normalizeSetting((await db.settings.get(SETTINGS_ID)) ?? DEFAULT_SETTING);
-      await db.settings.put({
+      await db.settings.put(sanitizeSettingForStorage({
         ...current,
-        ...patch,
-        llmTemperature: clampLlmTemperature(patch.llmTemperature ?? current.llmTemperature),
+        ...persistedPatch,
+        llmTemperature: clampLlmTemperature(persistedPatch.llmTemperature ?? current.llmTemperature),
         llmReasoningEffort: normalizeLlmReasoningEffort(
-          patch.llmReasoningEffort ?? current.llmReasoningEffort,
+          persistedPatch.llmReasoningEffort ?? current.llmReasoningEffort,
         ),
         llmGemmaThinkingEnabled:
-          patch.llmGemmaThinkingEnabled === undefined
+          persistedPatch.llmGemmaThinkingEnabled === undefined
             ? normalizeLlmGemmaThinkingEnabled(current.llmGemmaThinkingEnabled)
-            : normalizeLlmGemmaThinkingEnabled(patch.llmGemmaThinkingEnabled),
+            : normalizeLlmGemmaThinkingEnabled(persistedPatch.llmGemmaThinkingEnabled),
         notifyBeforeMinutes:
-          patch.notifyBeforeMinutes !== undefined
-            ? Math.max(0, Math.min(24 * 60, Math.floor(patch.notifyBeforeMinutes)))
+          persistedPatch.notifyBeforeMinutes !== undefined
+            ? Math.max(0, Math.min(24 * 60, Math.floor(persistedPatch.notifyBeforeMinutes)))
             : current.notifyBeforeMinutes,
         autoBackupIntervalMinutes:
-          patch.autoBackupIntervalMinutes !== undefined
-            ? Math.max(15, Math.min(24 * 60, Math.floor(patch.autoBackupIntervalMinutes)))
+          persistedPatch.autoBackupIntervalMinutes !== undefined
+            ? Math.max(15, Math.min(24 * 60, Math.floor(persistedPatch.autoBackupIntervalMinutes)))
             : current.autoBackupIntervalMinutes,
         aiContextMaxLength:
-          patch.aiContextMaxLength !== undefined
-            ? clampAiContextMaxLength(patch.aiContextMaxLength)
+          persistedPatch.aiContextMaxLength !== undefined
+            ? clampAiContextMaxLength(persistedPatch.aiContextMaxLength)
             : current.aiContextMaxLength,
         id: SETTINGS_ID,
         updatedAt: toIsoNow(),
-      });
+      }));
     },
     [],
   );
 
   const updateUserContextMarkdown = useCallback(async (markdown: string) => {
+    if (markdown.length > 20_000) throw new Error("AI 맞춤 규칙은 20,000자 이하여야 합니다.");
     const now = toIsoNow();
     const current = normalizeUserContext((await db.userContexts.get(USER_CONTEXT_ID)) ?? DEFAULT_USER_CONTEXT);
     await db.userContexts.put({
@@ -1424,22 +1630,43 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const exportData = useCallback(async () => {
+    const counts = await Promise.all([
+      db.tasks.count(),
+      db.projects.count(),
+      db.taskTypes.count(),
+      db.memos.count(),
+      db.notes.count(),
+      db.noteVersions.count(),
+      db.noteTaskLinks.count(),
+      db.projectSubcategories.count(),
+      db.settings.count(),
+      db.userContexts.count(),
+      db.archiveInsightCaches.count(),
+    ]);
+    const limits = Object.values(LIVE_QUERY_LIMITS);
+    if (counts.some((count, index) => count > limits[index])) {
+      throw new Error("데이터 항목 수가 단일 백업의 안전 처리 한도를 초과했습니다. 데이터를 분할 보관해 주세요.");
+    }
     const data = {
       exportedAt: toIsoNow(),
-      version: 4,
-      tasks: await db.tasks.toArray(),
-      projects: await db.projects.toArray(),
-      taskTypes: await db.taskTypes.toArray(),
-      memos: await db.memos.toArray(),
-      settings: await db.settings.toArray(),
-      userContexts: await db.userContexts.toArray(),
-      notes: await db.notes.toArray(),
-      noteVersions: await db.noteVersions.toArray(),
-      noteTaskLinks: await db.noteTaskLinks.toArray(),
-      projectSubcategories: await db.projectSubcategories.toArray(),
-      archiveInsightCaches: await db.archiveInsightCaches.toArray(),
+      version: BACKUP_VERSION,
+      tasks: await db.tasks.limit(LIVE_QUERY_LIMITS.tasks).toArray(),
+      projects: await db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(),
+      taskTypes: await db.taskTypes.limit(LIVE_QUERY_LIMITS.taskTypes).toArray(),
+      memos: await db.memos.limit(LIVE_QUERY_LIMITS.memos).toArray(),
+      settings: (await db.settings.limit(LIVE_QUERY_LIMITS.settings).toArray()).map(sanitizeSettingForStorage),
+      userContexts: await db.userContexts.limit(LIVE_QUERY_LIMITS.userContexts).toArray(),
+      notes: await db.notes.limit(LIVE_QUERY_LIMITS.notes).toArray(),
+      noteVersions: await db.noteVersions.limit(LIVE_QUERY_LIMITS.noteVersions).toArray(),
+      noteTaskLinks: await db.noteTaskLinks.limit(LIVE_QUERY_LIMITS.noteTaskLinks).toArray(),
+      projectSubcategories: await db.projectSubcategories.limit(LIVE_QUERY_LIMITS.projectSubcategories).toArray(),
+      archiveInsightCaches: await db.archiveInsightCaches.limit(LIVE_QUERY_LIMITS.archiveInsightCaches).toArray(),
     };
-    return JSON.stringify(data, null, 2);
+    const raw = JSON.stringify(data, null, 2);
+    if (new TextEncoder().encode(raw).byteLength > MAX_IMPORT_FILE_BYTES) {
+      throw new Error("백업 데이터가 안전한 처리 한도(5MB)를 초과했습니다. 데이터를 분할 보관해 주세요.");
+    }
+    return raw;
   }, []);
 
   const inspectImportData = useCallback((raw: string) => {
@@ -1477,39 +1704,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         await db.projectSubcategories.clear();
         await db.archiveInsightCaches.clear();
 
-        if (parsed.tasks.length > 0) {
-          await db.tasks.bulkAdd(parsed.tasks);
-        }
-        if (parsed.projects.length > 0) {
-          await db.projects.bulkAdd(parsed.projects);
-        }
-        if (parsed.taskTypes.length > 0) {
-          await db.taskTypes.bulkAdd(parsed.taskTypes);
-        }
-        if (parsed.memos.length > 0) {
-          await db.memos.bulkAdd(parsed.memos);
-        }
-        if (parsed.settings.length > 0) {
-          await db.settings.bulkAdd(parsed.settings.map(normalizeSetting));
-        }
-        if (parsed.userContexts && parsed.userContexts.length > 0) {
-          await db.userContexts.bulkAdd(parsed.userContexts.map(normalizeUserContext));
-        }
-        if (parsed.notes && parsed.notes.length > 0) {
-          await db.notes.bulkAdd(parsed.notes);
-        }
-        if (parsed.noteVersions && parsed.noteVersions.length > 0) {
-          await db.noteVersions.bulkAdd(parsed.noteVersions);
-        }
-        if (parsed.noteTaskLinks && parsed.noteTaskLinks.length > 0) {
-          await db.noteTaskLinks.bulkAdd(parsed.noteTaskLinks);
-        }
-        if (parsed.projectSubcategories && parsed.projectSubcategories.length > 0) {
-          await db.projectSubcategories.bulkAdd(parsed.projectSubcategories);
-        }
-        if (parsed.archiveInsightCaches && parsed.archiveInsightCaches.length > 0) {
-          await db.archiveInsightCaches.bulkAdd(parsed.archiveInsightCaches);
-        }
+        await addInChunks(parsed.projects, (chunk) => db.projects.bulkAdd(chunk));
+        await addInChunks(parsed.taskTypes, (chunk) => db.taskTypes.bulkAdd(chunk));
+        await addInChunks(parsed.notes, (chunk) => db.notes.bulkAdd(chunk));
+        await addInChunks(parsed.tasks, (chunk) => db.tasks.bulkAdd(chunk));
+        await addInChunks(parsed.memos, (chunk) => db.memos.bulkAdd(chunk));
+        await addInChunks(parsed.settings.map(normalizeSetting), (chunk) => db.settings.bulkAdd(chunk));
+        await addInChunks(parsed.userContexts.map(normalizeUserContext), (chunk) => db.userContexts.bulkAdd(chunk));
+        await addInChunks(parsed.noteVersions, (chunk) => db.noteVersions.bulkAdd(chunk));
+        await addInChunks(parsed.noteTaskLinks, (chunk) => db.noteTaskLinks.bulkAdd(chunk));
+        await addInChunks(parsed.projectSubcategories, (chunk) => db.projectSubcategories.bulkAdd(chunk));
+        await addInChunks(parsed.archiveInsightCaches, (chunk) => db.archiveInsightCaches.bulkAdd(chunk));
       },
     );
 
@@ -1520,6 +1725,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAutoBackups = useCallback(async () => {
     const entries = await readStoredAutoBackups();
+    // 기존 백업도 다시 써서 과거 버전의 키/임의 엔드포인트를 즉시 제거한다.
+    await writeStoredAutoBackups(entries);
     setAutoBackups(entries.sort(compareNewestFirst).map(toBackupSummary));
   }, []);
 
@@ -1534,7 +1741,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       };
 
       const existing = await readStoredAutoBackups();
-      const next = [entry, ...existing].sort(compareNewestFirst).slice(0, MAX_AUTO_BACKUPS);
+      const next = limitStoredAutoBackups([entry, ...existing]);
       await writeStoredAutoBackups(next);
       await refreshAutoBackups();
     },
@@ -1549,10 +1756,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         throw new Error("선택한 백업을 찾을 수 없습니다.");
       }
 
+      await createAutoBackup("자동 백업 복원 직전");
       await importData(target.raw);
       await refreshAutoBackups();
     },
-    [importData, refreshAutoBackups],
+    [createAutoBackup, importData, refreshAutoBackups],
   );
 
   const deleteAutoBackup = useCallback(
@@ -1566,8 +1774,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refreshAutoBackups();
+    void refreshAutoBackups().catch((error: unknown) => {
+      console.error("자동 백업 저장소 검증에 실패했습니다.", error);
+    });
   }, [refreshAutoBackups]);
 
   useEffect(() => {
@@ -1586,21 +1795,28 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [setting.autoBackupEnabled, setting.autoBackupIntervalMinutes, createAutoBackup]);
 
   useEffect(() => {
-    void writeAlarmSyncPayload({
+    const futureTasks = tasks
+      .filter((task) => isTaskActive(task.status) && Number.isFinite(new Date(task.startAt).getTime()))
+      .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime())
+      .slice(0, MAX_ALARM_SYNC_TASKS);
+    const timerId = window.setTimeout(() => {
+      void writeAlarmSyncPayload({
       updatedAt: toIsoNow(),
       settings: {
         notificationsEnabled: Boolean(setting.notificationsEnabled),
         notifyBeforeMinutes: Math.max(0, Math.floor(setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES)),
       },
-      tasks: tasks
-        .filter((task) => isTaskActive(task.status))
-        .map((task) => ({
+      tasks: futureTasks.map((task) => ({
           id: task.id,
-          title: task.title,
           startAt: task.startAt,
           status: task.status,
         })),
-    });
+      }).catch((error: unknown) => {
+        console.error("알림 동기화 저장에 실패했습니다.", error);
+      });
+    }, 300);
+
+    return () => window.clearTimeout(timerId);
   }, [tasks, setting.notificationsEnabled, setting.notifyBeforeMinutes]);
 
   const isReady = Boolean(rawSetting);

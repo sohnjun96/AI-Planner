@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../routing";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { NoteCard } from "../components/NoteCard";
@@ -9,7 +9,7 @@ import { NoteHistoryPanel } from "../components/NoteHistoryPanel";
 import { NoteMetaModal } from "../components/NoteMetaModal";
 import { NoteActionModal, type ConfirmedAction } from "../components/NoteActionModal";
 import { ProjectNoteTree, type NoteFilterNode } from "../components/ProjectNoteTree";
-import { showToast } from "../components/ToastHost";
+import { showToast } from "../utils/toast";
 import { isAbortError } from "../agent/agentUtils";
 import { generationOptionsFromSetting } from "../agent/llmClient";
 import {

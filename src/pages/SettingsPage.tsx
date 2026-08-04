@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorSelector } from "../components/ColorSelector";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "../routing";
 import {
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_LLM_GEMMA_THINKING_ENABLED,
@@ -25,6 +25,7 @@ import type { AppSetting, NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
 import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
 import { downloadJsonBackup } from "../utils/jsonBackup";
+import { MAX_IMPORT_FILE_BYTES } from "../utils/importBackup";
 
 function makeActionId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -521,6 +522,9 @@ export function SettingsPage() {
     setMessage("");
 
     try {
+      if (file.size > MAX_IMPORT_FILE_BYTES) {
+        throw new Error("백업 파일은 5MB 이하여야 합니다.");
+      }
       const content = await file.text();
       const preview = inspectImportData(content);
       setPendingImport({ fileName: file.name, raw: content, preview });
@@ -1079,10 +1083,7 @@ export function SettingsPage() {
               <input
                 type="url"
                 value={setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL}
-                onChange={(event) => {
-                  void updateSetting({ llmEndpoint: event.target.value });
-                }}
-                placeholder={DEFAULT_LLM_CHAT_COMPLETIONS_URL}
+                readOnly
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -1114,7 +1115,10 @@ export function SettingsPage() {
             </label>
           </div>
 
-          <p className="description-text">Endpoint, 모델명, API Key는 입력 즉시 저장됩니다.</p>
+          <p className="description-text">
+            Endpoint는 보안 정책에 따라 승인된 MOIP 주소로 고정됩니다. API Key는 현재 앱 세션의 메모리에만 보관되며
+            새로고침·종료 시 삭제되고 백업에도 포함되지 않습니다.
+          </p>
           <p
             className={`endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`}
             role={aiConnectionStatus === "error" ? "alert" : "status"}

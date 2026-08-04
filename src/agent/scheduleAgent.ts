@@ -780,7 +780,7 @@ function parseProposal(value: unknown, options: ParseOptions = {}): AgentProposa
   const normalizedValue = tryParseJsonLikeValue(value);
   const operationsRaw = getOperationCandidates(normalizedValue);
   const operations: AgentOperation[] = [];
-  for (const item of operationsRaw) {
+  for (const item of operationsRaw.slice(0, 50)) {
     const operation = parseOperationCandidate(item, options);
     if (operation) {
       operations.push(operation);

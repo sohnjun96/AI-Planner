@@ -10,22 +10,6 @@ export type NoteFilterNode =
   | { kind: "subcategory"; projectId: string; subcategoryId: string }
   | { kind: "uncategorized"; projectId: string };
 
-export function isSameNode(a: NoteFilterNode, b: NoteFilterNode): boolean {
-  if (a.kind !== b.kind) {
-    return false;
-  }
-  if (a.kind === "project" && b.kind === "project") {
-    return a.projectId === b.projectId;
-  }
-  if (a.kind === "uncategorized" && b.kind === "uncategorized") {
-    return a.projectId === b.projectId;
-  }
-  if (a.kind === "subcategory" && b.kind === "subcategory") {
-    return a.projectId === b.projectId && a.subcategoryId === b.subcategoryId;
-  }
-  return true;
-}
-
 interface ProjectNoteTreeProps {
   projects: Project[];
   subcategories: ProjectSubcategory[];
