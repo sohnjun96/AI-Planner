@@ -7,7 +7,7 @@ export const USER_CONTEXT_ID = "user-context";
 export const DEFAULT_PROJECT_ID = "project-general";
 export const LUNCH_PROJECT_ID = "project-lunch";
 
-export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = "https://llm.moip.go.kr/chat/completions";
+export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = "https://llm.moip.go.kr/api/chat/completions";
 export const LLM_REQUEST_TIMEOUT_MS = 60_000;
 export const LLM_IDLE_TIMEOUT_MS = 15_000;
 export const LLM_MAX_COMPLETION_TOKENS = 4_096;
