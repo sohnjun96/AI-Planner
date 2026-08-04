@@ -1197,12 +1197,6 @@ export function SettingsPage() {
             </button>
           </div>
 
-          <p className="description-text">
-            Endpoint는 보안 정책에 따라 승인된 MOIP 주소로 고정됩니다. API 키를 입력하면 입력이 멈춘 뒤 자동으로
-            Chrome 확장 저장소에 저장·검증되며 Chrome을 종료한 뒤에도 유지됩니다. 키를 비우면 저장소에서도 삭제됩니다.
-            키는 앱 DB, JSON 내보내기, 자동 백업에 포함되지 않습니다. Chrome 확장 저장소는 운영체제의 전용 시크릿
-            매니저와 같은 수준의 암호화를 보장하지 않으므로 신뢰할 수 있는 개인 기기에서만 사용하세요.
-          </p>
           {isApiKeyStorageBusy || isApiKeyStorageDirty ? (
             <p className="description-text" role="status">
               {isApiKeyStorageBusy ? "API 키를 Chrome 저장소에 저장하고 검증하는 중입니다." : "입력이 끝나면 API 키를 자동 저장합니다."}
