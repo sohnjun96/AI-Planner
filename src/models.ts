@@ -139,6 +139,7 @@ export interface AppSetting {
   timeFormat: "24h" | "12h";
   llmEndpoint?: string;
   llmApiKey?: string;
+  rememberLlmApiKey?: boolean;
   llmModel?: string;
   llmTemperature?: number;
   llmReasoningEffort?: LlmReasoningEffort;

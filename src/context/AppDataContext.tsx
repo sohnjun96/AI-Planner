@@ -103,6 +103,7 @@ interface AppDataContextValue {
   userContext: UserContext;
   isReady: boolean;
   bootstrapError?: string;
+  credentialStorageError?: string;
   retryBootstrap: () => Promise<void>;
   canUndo: boolean;
   undoDescription?: string;
@@ -137,6 +138,7 @@ interface AppDataContextValue {
         | "timeFormat"
         | "llmEndpoint"
         | "llmApiKey"
+        | "rememberLlmApiKey"
         | "llmModel"
         | "llmTemperature"
         | "llmReasoningEffort"
@@ -168,6 +170,7 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(undefined)
 
 const AUTO_BACKUPS_STORAGE_KEY = "schedule_auto_backups_v1";
 const ALARM_SYNC_STORAGE_KEY = "schedule_alarm_payload_v1";
+const LLM_CREDENTIAL_STORAGE_KEY = "planai_llm_credential_v1";
 const MAX_AUTO_BACKUPS = 20;
 const MAX_AUTO_BACKUP_TOTAL_BYTES = 8_000_000;
 const IMPORT_BATCH_SIZE = 500;
@@ -367,6 +370,7 @@ function normalizeSetting(setting: AppSetting): AppSetting {
     autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
     autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
     llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+    rememberLlmApiKey: setting.rememberLlmApiKey === true,
     llmModel: typeof setting.llmModel === "string" && setting.llmModel.length <= 200 ? setting.llmModel : DEFAULT_SETTING.llmModel,
     llmTemperature: clampLlmTemperature(setting.llmTemperature),
     llmReasoningEffort: normalizeLlmReasoningEffort(setting.llmReasoningEffort),
@@ -561,6 +565,7 @@ function mergeUserContextSuggestionLine(
 interface ChromeStorageLocal {
   get: (keys: string[], callback: (items: Record<string, unknown>) => void) => void;
   set: (items: Record<string, unknown>, callback?: () => void) => void;
+  remove: (keys: string[], callback?: () => void) => void;
 }
 
 function getChromeStorageLocal(): ChromeStorageLocal | null {
@@ -570,6 +575,7 @@ function getChromeStorageLocal(): ChromeStorageLocal | null {
           local?: {
             get: (keys: string[], callback: (items: Record<string, unknown>) => void) => void;
             set: (items: Record<string, unknown>, callback?: () => void) => void;
+            remove: (keys: string[], callback?: () => void) => void;
           };
         };
       }
@@ -606,6 +612,66 @@ async function writeChromeStorage(storage: ChromeStorageLocal, value: Record<str
       resolve();
     });
   });
+}
+
+async function removeChromeStorage(storage: ChromeStorageLocal, key: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    storage.remove([key], () => {
+      const message = getChromeRuntimeError();
+      if (message) {
+        reject(new Error(`확장 프로그램 저장소에서 삭제하지 못했습니다: ${message}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function normalizeStoredApiKey(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (value.length > LLM_MAX_API_KEY_LENGTH || /[\r\n]/.test(value)) return undefined;
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+  return normalized;
+}
+
+async function readRememberedLlmApiKey(): Promise<string | undefined> {
+  const storage = getChromeStorageLocal();
+  if (!storage) return undefined;
+  const items = await readChromeStorage(storage, LLM_CREDENTIAL_STORAGE_KEY);
+  const raw = items[LLM_CREDENTIAL_STORAGE_KEY];
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Chrome에 저장된 API 키 데이터 형식이 올바르지 않습니다.");
+  }
+  const credential = raw as Record<string, unknown>;
+  const apiKey = normalizeStoredApiKey(credential.apiKey);
+  if (credential.version !== 1 || !apiKey) {
+    throw new Error("Chrome에 저장된 API 키 데이터가 손상되었습니다.");
+  }
+  return apiKey;
+}
+
+async function writeRememberedLlmApiKey(apiKey: string): Promise<void> {
+  const storage = getChromeStorageLocal();
+  if (!storage) throw new Error("API 키 영구 저장은 Chrome 확장 프로그램에서만 사용할 수 있습니다.");
+  const normalized = normalizeStoredApiKey(apiKey);
+  if (!normalized) throw new Error("저장할 API 키를 먼저 입력해 주세요.");
+  await writeChromeStorage(storage, {
+    [LLM_CREDENTIAL_STORAGE_KEY]: { version: 1, apiKey: normalized, savedAt: toIsoNow() },
+  });
+  if ((await readRememberedLlmApiKey()) !== normalized) {
+    throw new Error("Chrome API 키 저장 검증에 실패했습니다.");
+  }
+}
+
+async function deleteRememberedLlmApiKey(): Promise<void> {
+  const storage = getChromeStorageLocal();
+  if (!storage) return;
+  await removeChromeStorage(storage, LLM_CREDENTIAL_STORAGE_KEY);
+  if ((await readRememberedLlmApiKey()) !== undefined) {
+    throw new Error("Chrome API 키 삭제 검증에 실패했습니다.");
+  }
 }
 
 function sanitizeStoredAutoBackupEntry(value: unknown): StoredAutoBackupEntry | undefined {
@@ -740,6 +806,8 @@ function compareNewestFirst(a: { createdAt: string }, b: { createdAt: string }):
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [llmApiKey, setLlmApiKey] = useState("");
+  const [isLlmCredentialReady, setIsLlmCredentialReady] = useState(false);
+  const [credentialStorageError, setCredentialStorageError] = useState<string>();
   // setState 업데이터는 렌더 시점에 실행되므로, 이벤트 핸들러에서 즉시 읽을 수 있는
   // 동기 미러를 유지한다. (업데이터 안에서 top을 캡처하면 pop만 되고 복원이 누락될 수 있음)
   const undoStackRef = useRef<UndoEntry[]>([]);
@@ -780,6 +848,49 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const projectSubcategories = useLiveQuery(() => db.projectSubcategories.limit(LIVE_QUERY_LIMITS.projectSubcategories).toArray(), [], []);
   const rawSetting = useLiveQuery(() => db.settings.get(SETTINGS_ID), [], undefined);
   const rawUserContext = useLiveQuery(() => db.userContexts.get(USER_CONTEXT_ID), [], undefined);
+  const hasRawSetting = rawSetting !== undefined;
+  const shouldRememberLlmApiKey = rawSetting?.rememberLlmApiKey === true;
+
+  useEffect(() => {
+    if (!hasRawSetting) return;
+
+    let isMounted = true;
+    void (async () => {
+      try {
+        if (!shouldRememberLlmApiKey) {
+          await deleteRememberedLlmApiKey();
+          if (isMounted) {
+            setCredentialStorageError(undefined);
+          }
+          return;
+        }
+
+        if (!getChromeStorageLocal()) {
+          throw new Error("Chrome 확장 프로그램 저장소를 사용할 수 없습니다.");
+        }
+        const rememberedApiKey = await readRememberedLlmApiKey();
+        if (!rememberedApiKey) {
+          throw new Error("Chrome에 저장된 API 키가 없습니다.");
+        }
+        if (isMounted) {
+          setLlmApiKey(rememberedApiKey);
+          setCredentialStorageError(undefined);
+        }
+      } catch (error) {
+        if (isMounted) {
+          const detail = error instanceof Error ? error.message : "알 수 없는 저장소 오류";
+          setLlmApiKey("");
+          setCredentialStorageError(`저장된 API 키를 불러오지 않았습니다. ${detail}`);
+        }
+      } finally {
+        if (isMounted) setIsLlmCredentialReady(true);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hasRawSetting, shouldRememberLlmApiKey]);
 
   const setting = useMemo(
     () => ({ ...normalizeSetting(rawSetting ?? DEFAULT_SETTING), llmApiKey }),
@@ -1476,6 +1587,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           | "timeFormat"
           | "llmEndpoint"
           | "llmApiKey"
+          | "rememberLlmApiKey"
           | "llmModel"
           | "llmTemperature"
           | "llmReasoningEffort"
@@ -1516,12 +1628,21 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           actionIds.add(action.id);
         }
       }
+      const nextApiKey = patch.llmApiKey !== undefined ? patch.llmApiKey.trim() : llmApiKey;
       if (patch.llmApiKey !== undefined) {
-        const sessionKey = patch.llmApiKey.trim();
-        if (sessionKey.length > LLM_MAX_API_KEY_LENGTH || /[\r\n]/.test(sessionKey)) {
+        if (patch.llmApiKey.length > LLM_MAX_API_KEY_LENGTH || /[\r\n]/.test(patch.llmApiKey)) {
           throw new Error("API 키 형식이 올바르지 않습니다.");
         }
-        setLlmApiKey(sessionKey);
+        setLlmApiKey(nextApiKey);
+      }
+
+      if (patch.rememberLlmApiKey !== undefined) {
+        if (patch.rememberLlmApiKey) {
+          await writeRememberedLlmApiKey(nextApiKey);
+        } else {
+          await deleteRememberedLlmApiKey();
+        }
+        setCredentialStorageError(undefined);
       }
 
       const persistedPatch = { ...patch };
@@ -1558,7 +1679,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         updatedAt: toIsoNow(),
       }));
     },
-    [],
+    [llmApiKey],
   );
 
   const updateUserContextMarkdown = useCallback(async (markdown: string) => {
@@ -1819,7 +1940,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(timerId);
   }, [tasks, setting.notificationsEnabled, setting.notifyBeforeMinutes]);
 
-  const isReady = Boolean(rawSetting);
+  const isReady = Boolean(rawSetting) && isLlmCredentialReady;
 
   const value = useMemo<AppDataContextValue>(
     () => ({
@@ -1835,6 +1956,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       userContext,
       isReady,
       bootstrapError,
+      credentialStorageError,
       retryBootstrap,
       canUndo: undoStack.length > 0,
       undoDescription: undoStack[undoStack.length - 1]?.description,
@@ -1885,6 +2007,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       userContext,
       isReady,
       bootstrapError,
+      credentialStorageError,
       retryBootstrap,
       undoStack,
       autoBackups,

@@ -201,6 +201,7 @@ function parseSetting(value: unknown): AppSetting {
     weekStartsOn: item.weekStartsOn === "sun" ? "sun" : "mon",
     timeFormat: item.timeFormat === "12h" ? "12h" : "24h",
     llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+    rememberLlmApiKey: item.rememberLlmApiKey === true,
     llmModel: typeof item.llmModel === "string" && /^[A-Za-z0-9._:/-]{1,200}$/.test(item.llmModel) ? item.llmModel : DEFAULT_SETTING.llmModel,
     llmTemperature: clampLlmTemperature(item.llmTemperature),
     llmReasoningEffort: normalizeLlmReasoningEffort(item.llmReasoningEffort),

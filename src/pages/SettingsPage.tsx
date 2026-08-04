@@ -10,6 +10,7 @@ import {
   DEFAULT_NOTE_AI_ACTIONS,
   DEFAULT_NOTIFY_BEFORE_MINUTES,
   LLM_DEFAULT_MODEL,
+  LLM_MAX_API_KEY_LENGTH,
   MAX_AI_CONTEXT_MAX_LENGTH,
   MAX_LLM_TEMPERATURE,
   MIN_AI_CONTEXT_MAX_LENGTH,
@@ -207,6 +208,7 @@ export function SettingsPage() {
   const {
     setting,
     updateSetting,
+    credentialStorageError,
     exportData,
     inspectImportData,
     importData,
@@ -243,6 +245,8 @@ export function SettingsPage() {
   const [userContextError, setUserContextError] = useState("");
   const [aiConnectionStatus, setAiConnectionStatus] = useState<AiConnectionStatus>("idle");
   const [aiConnectionMessage, setAiConnectionMessage] = useState("연결 상태를 아직 확인하지 않았습니다.");
+  const [isApiKeyStorageBusy, setIsApiKeyStorageBusy] = useState(false);
+  const [isApiKeyStorageDirty, setIsApiKeyStorageDirty] = useState(false);
   const [noteAiActionsDraft, setNoteAiActionsDraft] = useState<NoteAiAction[]>(
     () => setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS,
   );
@@ -663,6 +667,39 @@ export function SettingsPage() {
     } catch (connectionError) {
       setAiConnectionStatus("error");
       setAiConnectionMessage(connectionError instanceof Error ? connectionError.message : "AI 연결 확인에 실패했습니다.");
+    }
+  }
+
+  async function handleRememberApiKey(remember: boolean) {
+    setError("");
+    setMessage("");
+    setIsApiKeyStorageBusy(true);
+    try {
+      await updateSetting({
+        llmApiKey: setting.llmApiKey ?? "",
+        rememberLlmApiKey: remember,
+      });
+      setIsApiKeyStorageDirty(false);
+      setMessage(remember ? "API 키를 Chrome에 저장하고 검증했습니다." : "Chrome에 저장된 API 키를 삭제했습니다.");
+    } catch (storageError) {
+      setError(storageError instanceof Error ? storageError.message : "API 키 저장 설정을 변경하지 못했습니다.");
+    } finally {
+      setIsApiKeyStorageBusy(false);
+    }
+  }
+
+  async function handleDeleteApiKey() {
+    setError("");
+    setMessage("");
+    setIsApiKeyStorageBusy(true);
+    try {
+      await updateSetting({ llmApiKey: "", rememberLlmApiKey: false });
+      setIsApiKeyStorageDirty(false);
+      setMessage("메모리와 Chrome 저장소에서 API 키를 삭제했습니다.");
+    } catch (storageError) {
+      setError(storageError instanceof Error ? storageError.message : "API 키를 삭제하지 못했습니다.");
+    } finally {
+      setIsApiKeyStorageBusy(false);
     }
   }
 
@@ -1107,18 +1144,65 @@ export function SettingsPage() {
                 type="password"
                 value={setting.llmApiKey ?? ""}
                 onChange={(event) => {
+                  if (setting.rememberLlmApiKey) setIsApiKeyStorageDirty(true);
                   void updateSetting({ llmApiKey: event.target.value });
                 }}
                 placeholder="API 키"
                 autoComplete="off"
+                maxLength={LLM_MAX_API_KEY_LENGTH}
               />
             </label>
           </div>
 
+          <label className="checkbox-inline settings-toggle-row settings-thinking-toggle">
+            <input
+              type="checkbox"
+              checked={setting.rememberLlmApiKey === true}
+              disabled={isApiKeyStorageBusy || (!setting.rememberLlmApiKey && !(setting.llmApiKey ?? "").trim())}
+              onChange={(event) => {
+                void handleRememberApiKey(event.currentTarget.checked);
+              }}
+            />
+            <span className="settings-toggle-copy">
+              <span className="settings-toggle-title">Chrome에 API 키 저장</span>
+              <small className="settings-field-help">
+                선택하면 Chrome을 종료한 뒤에도 키가 유지됩니다. 신뢰할 수 있는 개인 기기에서만 사용하세요.
+              </small>
+            </span>
+          </label>
+
+          <div className="button-row compact">
+            {setting.rememberLlmApiKey ? (
+              <button
+                type="button"
+                className="btn btn-soft"
+                disabled={isApiKeyStorageBusy || !(setting.llmApiKey ?? "").trim() || !isApiKeyStorageDirty}
+                onClick={() => void handleRememberApiKey(true)}
+              >
+                {isApiKeyStorageBusy ? "처리 중…" : "변경한 키 저장"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={isApiKeyStorageBusy || (!setting.rememberLlmApiKey && !(setting.llmApiKey ?? "").trim())}
+              onClick={() => void handleDeleteApiKey()}
+            >
+              메모리·저장소에서 키 삭제
+            </button>
+          </div>
+
           <p className="description-text">
-            Endpoint는 보안 정책에 따라 승인된 MOIP 주소로 고정됩니다. API Key는 현재 앱 세션의 메모리에만 보관되며
-            새로고침·종료 시 삭제되고 백업에도 포함되지 않습니다.
+            Endpoint는 보안 정책에 따라 승인된 MOIP 주소로 고정됩니다. 저장 옵션을 끄면 키는 현재 탭의 메모리에만
+            유지되어 새로고침·종료 시 삭제됩니다. 저장 옵션을 켜도 키는 앱 DB, JSON 내보내기, 자동 백업에 포함되지 않습니다.
+            Chrome 확장 저장소는 운영체제의 전용 시크릿 매니저와 같은 수준의 암호화를 보장하지 않습니다.
           </p>
+          {isApiKeyStorageDirty ? (
+            <p className="description-text" role="status">입력한 변경 사항은 아직 Chrome 저장소에 반영되지 않았습니다.</p>
+          ) : null}
+          {credentialStorageError ? (
+            <p className="error-text" role="alert">{credentialStorageError}</p>
+          ) : null}
           <p
             className={`endpoint-status ${aiConnectionStatus === "idle" ? "" : aiConnectionStatus}`}
             role={aiConnectionStatus === "error" ? "alert" : "status"}

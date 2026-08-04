@@ -194,6 +194,7 @@ export async function bootstrapDatabase(): Promise<void> {
     (
       setting.llmEndpoint !== DEFAULT_LLM_CHAT_COMPLETIONS_URL ||
       setting.llmApiKey !== undefined ||
+      setting.rememberLlmApiKey === undefined ||
       setting.llmModel === undefined ||
       setting.llmTemperature !== normalizedLlmTemperature ||
       setting.llmReasoningEffort !== normalizedLlmReasoningEffort ||
@@ -210,6 +211,7 @@ export async function bootstrapDatabase(): Promise<void> {
     await db.settings.put(sanitizePersistentSetting({
       ...setting,
       llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+      rememberLlmApiKey: setting.rememberLlmApiKey === true,
       llmModel: setting.llmModel ?? DEFAULT_SETTING.llmModel,
       llmTemperature: normalizedLlmTemperature,
       llmReasoningEffort: normalizedLlmReasoningEffort,

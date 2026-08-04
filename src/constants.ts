@@ -350,6 +350,7 @@ export const DEFAULT_SETTING: AppSetting = {
   weekStartsOn: "mon",
   timeFormat: "24h",
   llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  rememberLlmApiKey: false,
   llmModel: LLM_DEFAULT_MODEL,
   llmTemperature: DEFAULT_LLM_TEMPERATURE,
   llmReasoningEffort: DEFAULT_LLM_REASONING_EFFORT,
