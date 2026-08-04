@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { cp, lstat, mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rmdir, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const publicDir = path.join(rootDir, "public");
 const backupRootDir = path.join(rootDir, ".dist-build-backups");
+const MAX_BUILD_BACKUPS = 3;
 const logoFileName = "icon.svg";
 const logoSourcePath = path.join(rootDir, logoFileName);
 
@@ -105,6 +106,53 @@ async function pathExists(candidate) {
   }
 }
 
+async function removeGeneratedTree(candidate, expectedPrefix) {
+  assertSafeGeneratedPath(candidate, expectedPrefix);
+  const generatedName = path.basename(candidate);
+  if (
+    (expectedPrefix === ".dist-staging-" && !/^\.dist-staging-[A-Za-z0-9]{6}$/.test(generatedName)) ||
+    (expectedPrefix === "dist-" && !/^dist-\d{13}-[0-9a-f-]{36}$/.test(generatedName))
+  ) {
+    throw new Error("자동 생성 규칙과 일치하지 않는 경로는 정리하지 않습니다.");
+  }
+  if (!(await pathExists(candidate))) return;
+
+  async function removeEntry(entryPath) {
+    const relative = path.relative(candidate, entryPath);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("빌드 정리 경로가 허용 범위를 벗어났습니다.");
+    const info = await lstat(entryPath);
+    if (info.isSymbolicLink()) throw new Error("심볼릭 링크가 포함된 빌드 폴더는 자동 정리하지 않습니다.");
+    if (info.isDirectory()) {
+      const children = await readdir(entryPath);
+      for (const child of children) await removeEntry(path.join(entryPath, child));
+      await rmdir(entryPath);
+      return;
+    }
+    if (!info.isFile()) throw new Error("알 수 없는 파일 유형이 포함된 빌드 폴더는 자동 정리하지 않습니다.");
+    await unlink(entryPath);
+  }
+
+  await removeEntry(candidate);
+}
+
+async function pruneBuildArtifacts() {
+  if (await pathExists(backupRootDir)) {
+    const backupEntries = (await readdir(backupRootDir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && /^dist-\d{13}-[0-9a-f-]{36}$/.test(entry.name))
+      .sort((left, right) => right.name.localeCompare(left.name));
+    for (const entry of backupEntries.slice(MAX_BUILD_BACKUPS)) {
+      await removeGeneratedTree(path.join(backupRootDir, entry.name), "dist-");
+    }
+  }
+
+  const rootEntries = await readdir(rootDir, { withFileTypes: true });
+  for (const entry of rootEntries) {
+    if (entry.isDirectory() && !entry.isSymbolicLink() && entry.name.startsWith(".dist-staging-")) {
+      await removeGeneratedTree(path.join(rootDir, entry.name), ".dist-staging-");
+    }
+  }
+}
+
 async function promoteBuild(buildDir) {
   assertSafeGeneratedPath(buildDir, ".dist-staging-");
   assertSafeGeneratedPath(distDir, "dist");
@@ -129,13 +177,15 @@ async function promoteBuild(buildDir) {
 }
 
 async function runBuild() {
+  await pruneBuildArtifacts();
   const buildDir = await mkdtemp(path.join(rootDir, ".dist-staging-"));
   assertSafeGeneratedPath(buildDir, ".dist-staging-");
-  await cp(publicDir, buildDir, { recursive: true, force: false, errorOnExist: true });
-  await cp(logoSourcePath, path.join(buildDir, logoFileName), { force: false, errorOnExist: true });
+  try {
+    await cp(publicDir, buildDir, { recursive: true, force: false, errorOnExist: true });
+    await cp(logoSourcePath, path.join(buildDir, logoFileName), { force: false, errorOnExist: true });
 
-  const assetsDir = path.join(buildDir, "assets");
-  const buildResult = await build({
+    const assetsDir = path.join(buildDir, "assets");
+    const buildResult = await build({
     absWorkingDir: rootDir,
     entryPoints: { app: "src/main.tsx" },
     outdir: assetsDir,
@@ -157,24 +207,29 @@ async function runBuild() {
     metafile: true,
     logLevel: "info",
     write: true,
-  });
+    });
 
-  const outputs = buildResult.metafile.outputs;
-  const appJsOutput = Object.keys(outputs).find((filePath) => outputs[filePath].entryPoint === "src/main.tsx");
-  const cssOutputs = Object.keys(outputs).filter((filePath) => filePath.endsWith(".css")).sort();
-  if (!appJsOutput) throw new Error("번들 JavaScript 출력을 찾지 못했습니다.");
+    const outputs = buildResult.metafile.outputs;
+    const appJsOutput = Object.keys(outputs).find((filePath) => outputs[filePath].entryPoint === "src/main.tsx");
+    const cssOutputs = Object.keys(outputs).filter((filePath) => filePath.endsWith(".css")).sort();
+    if (!appJsOutput) throw new Error("번들 JavaScript 출력을 찾지 못했습니다.");
 
-  const appMeta = await readHtmlMetadata(path.join(rootDir, "index.html"), "플래나이(PLANAI)");
-  await writeBuiltHtml(buildDir, {
-    fileName: "index.html",
-    title: appMeta.title,
-    lang: appMeta.lang,
-    jsHref: toBuildHref(buildDir, appJsOutput),
-    cssHrefs: cssHrefsForEntry(buildDir, "app", cssOutputs),
-  });
+    const appMeta = await readHtmlMetadata(path.join(rootDir, "index.html"), "플래나이(PLANAI)");
+    await writeBuiltHtml(buildDir, {
+      fileName: "index.html",
+      title: appMeta.title,
+      lang: appMeta.lang,
+      jsHref: toBuildHref(buildDir, appJsOutput),
+      cssHrefs: cssHrefsForEntry(buildDir, "app", cssOutputs),
+    });
 
-  await validateBuildDirectory(buildDir);
-  await promoteBuild(buildDir);
+    await validateBuildDirectory(buildDir);
+    await promoteBuild(buildDir);
+    await pruneBuildArtifacts();
+  } catch (error) {
+    await removeGeneratedTree(buildDir, ".dist-staging-");
+    throw error;
+  }
 }
 
 runBuild().catch((error) => {
