@@ -1223,16 +1223,26 @@ export function SettingsPage() {
               </p>
               <h3>AI 연결</h3>
             </div>
-            <button
-              type="button"
-              className="btn btn-soft"
-              onClick={() => {
-                void handleCheckAiConnection();
-              }}
-              disabled={aiConnectionStatus === "checking"}
-            >
-              {aiConnectionStatus === "checking" ? "확인 중" : "연결 확인"}
-            </button>
+            <div className="settings-card-header-actions">
+              <button
+                type="button"
+                className="btn btn-soft"
+                disabled={llmModelListStatus === "loading"}
+                onClick={() => void handleLoadLlmModels()}
+              >
+                {llmModelListStatus === "loading" ? "모델 불러오는 중" : "모델 목록 불러오기"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-soft"
+                onClick={() => {
+                  void handleCheckAiConnection();
+                }}
+                disabled={aiConnectionStatus === "checking"}
+              >
+                {aiConnectionStatus === "checking" ? "확인 중" : "연결 확인"}
+              </button>
+            </div>
           </header>
 
           <div className="form-grid two-col settings-ai-connection-grid">
@@ -1297,14 +1307,6 @@ export function SettingsPage() {
           </div>
 
           <div className="button-row compact">
-            <button
-              type="button"
-              className="btn btn-soft"
-              disabled={llmModelListStatus === "loading"}
-              onClick={() => void handleLoadLlmModels()}
-            >
-              {llmModelListStatus === "loading" ? "모델 불러오는 중" : "모델 목록 불러오기"}
-            </button>
             <button
               type="button"
               className="btn btn-outline"

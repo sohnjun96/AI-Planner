@@ -5981,6 +5981,14 @@ textarea:focus-visible,
   line-height: 1.2;
 }
 
+.settings-card-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .settings-inline-note {
   display: grid;
   gap: 6px;
