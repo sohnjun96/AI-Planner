@@ -12,6 +12,16 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: createBuildDefines(profile),
+    server: {
+      watch: {
+        ignored: [
+          "**/dist/**",
+          "**/dist-external/**",
+          "**/.dist-build-backups/**",
+          "**/.dist-staging-*/**",
+        ],
+      },
+    },
     build: {
       minify: "esbuild",
       sourcemap: false,
@@ -19,7 +29,7 @@ export default defineConfig(({ mode }) => {
       reportCompressedSize: true,
       rollupOptions: {
         input: {
-          app: resolve(__dirname, "index.html"),
+          app: resolve(rootDir, "index.html"),
         },
       },
     },

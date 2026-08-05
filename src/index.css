@@ -534,6 +534,8 @@ a {
 }
 
 input[type="text"],
+input[type="url"],
+input[type="password"],
 input[type="date"],
 input[type="time"],
 input[type="month"],
@@ -6036,6 +6038,10 @@ textarea:focus-visible,
   font-size: 12px;
   font-weight: 400;
   line-height: 1.45;
+}
+
+.settings-ai-connection-grid > label {
+  align-content: start;
 }
 
 .settings-thinking-toggle {

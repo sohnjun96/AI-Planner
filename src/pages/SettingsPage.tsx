@@ -1232,7 +1232,7 @@ export function SettingsPage() {
             </button>
           </header>
 
-          <div className="form-grid two-col">
+          <div className="form-grid two-col settings-ai-connection-grid">
             <label>
               Endpoint 주소
               <input
