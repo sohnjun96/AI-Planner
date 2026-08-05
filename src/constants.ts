@@ -16,12 +16,24 @@ export const LLM_MAX_ERROR_BYTES = 8_192;
 export const LLM_MAX_TOTAL_PROMPT_CHARS = 250_000;
 export const LLM_MAX_MESSAGE_COUNT = 64;
 export const LLM_MAX_API_KEY_LENGTH = 4_096;
+export const LLM_MAX_MODEL_ID_LENGTH = 200;
+export const LLM_MAX_MODEL_COUNT = 500;
+export const LLM_MAX_MODEL_LIST_BYTES = 256_000;
+export const LLM_MODEL_LIST_TIMEOUT_MS = 15_000;
 export const LLM_DEFAULT_MODEL = "gpt-4o-mini";
 export const DEFAULT_LLM_TEMPERATURE = 0;
 export const MIN_LLM_TEMPERATURE = 0;
 export const MAX_LLM_TEMPERATURE = 2;
 export const DEFAULT_LLM_REASONING_EFFORT: LlmReasoningEffort = "default";
 export const DEFAULT_LLM_GEMMA_THINKING_ENABLED = false;
+
+export function isValidLlmModelId(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim();
+  return normalized.length > 0
+    && normalized.length <= LLM_MAX_MODEL_ID_LENGTH
+    && /^[A-Za-z0-9._:/-]+$/.test(normalized);
+}
 
 export function clampLlmTemperature(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -347,7 +359,7 @@ export const DEFAULT_USER_CONTEXT: UserContext = {
 export const DEFAULT_SETTING: AppSetting = {
   id: SETTINGS_ID,
   showPastCompleted: false,
-  weekStartsOn: "mon",
+  weekStartsOn: "sun",
   timeFormat: "24h",
   llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   rememberLlmApiKey: false,

@@ -11,6 +11,7 @@ import {
   DEFAULT_PROJECT_IDS,
   DEFAULT_SETTING,
   DEFAULT_USER_CONTEXT,
+  isValidLlmModelId,
   LLM_MAX_API_KEY_LENGTH,
   MAX_AI_CONTEXT_MAX_LENGTH,
   MAX_AUTOSAVE_NOTE_VERSIONS,
@@ -363,7 +364,7 @@ function normalizeSetting(setting: AppSetting): AppSetting {
   return {
     id: SETTINGS_ID,
     showPastCompleted: Boolean(setting.showPastCompleted),
-    weekStartsOn: setting.weekStartsOn === "sun" ? "sun" : "mon",
+    weekStartsOn: setting.weekStartsOn === "mon" ? "mon" : "sun",
     timeFormat: setting.timeFormat === "12h" ? "12h" : "24h",
     notificationsEnabled: setting.notificationsEnabled ?? DEFAULT_SETTING.notificationsEnabled,
     notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES,
@@ -371,7 +372,7 @@ function normalizeSetting(setting: AppSetting): AppSetting {
     autoBackupIntervalMinutes: setting.autoBackupIntervalMinutes ?? DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES,
     llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
     rememberLlmApiKey: setting.rememberLlmApiKey === true,
-    llmModel: typeof setting.llmModel === "string" && setting.llmModel.length <= 200 ? setting.llmModel : DEFAULT_SETTING.llmModel,
+    llmModel: isValidLlmModelId(setting.llmModel) ? setting.llmModel.trim() : DEFAULT_SETTING.llmModel,
     llmTemperature: clampLlmTemperature(setting.llmTemperature),
     llmReasoningEffort: normalizeLlmReasoningEffort(setting.llmReasoningEffort),
     llmGemmaThinkingEnabled: normalizeLlmGemmaThinkingEnabled(setting.llmGemmaThinkingEnabled),
@@ -1606,7 +1607,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (patch.llmEndpoint !== undefined && patch.llmEndpoint !== DEFAULT_LLM_CHAT_COMPLETIONS_URL) {
         throw new Error("AI Endpoint는 승인된 MOIP 주소만 사용할 수 있습니다.");
       }
-      if (patch.llmModel !== undefined && !/^[A-Za-z0-9._:/-]{1,200}$/.test(patch.llmModel.trim())) {
+      if (patch.llmModel !== undefined && !isValidLlmModelId(patch.llmModel)) {
         throw new Error("LLM 모델명 형식이 올바르지 않습니다.");
       }
       if (patch.noteAiActions !== undefined) {

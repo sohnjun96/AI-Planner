@@ -11,6 +11,7 @@ import {
   DEFAULT_NOTIFY_BEFORE_MINUTES,
   LLM_DEFAULT_MODEL,
   LLM_MAX_API_KEY_LENGTH,
+  LLM_MAX_MODEL_ID_LENGTH,
   MAX_AI_CONTEXT_MAX_LENGTH,
   MAX_LLM_TEMPERATURE,
   MIN_AI_CONTEXT_MAX_LENGTH,
@@ -21,7 +22,12 @@ import { useAppData } from "../context/AppDataContext";
 import type { ImportDataPreview } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { useJsonBackupStatus } from "../hooks/useJsonBackupStatus";
-import { generationOptionsFromSetting, isGemma4ThinkingModel, requestLlmResponse } from "../agent/llmClient";
+import {
+  generationOptionsFromSetting,
+  isGemma4ThinkingModel,
+  listLlmModels,
+  requestLlmResponse,
+} from "../agent/llmClient";
 import type { AppSetting, NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
 import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
@@ -112,6 +118,7 @@ function createEmptyTypeForm(): TypeFormState {
 
 const TYPE_FORM_AUTOSAVE_DELAY_MS = 700;
 type AiConnectionStatus = "idle" | "checking" | "ok" | "error";
+type LlmModelListStatus = "idle" | "loading" | "ok" | "error";
 type LlmReasoningEffortOption = NonNullable<AppSetting["llmReasoningEffort"]>;
 type AiSettingsDialog = "actions" | "context";
 
@@ -247,6 +254,11 @@ export function SettingsPage() {
   const [userContextError, setUserContextError] = useState("");
   const [aiConnectionStatus, setAiConnectionStatus] = useState<AiConnectionStatus>("idle");
   const [aiConnectionMessage, setAiConnectionMessage] = useState("연결 상태를 아직 확인하지 않았습니다.");
+  const [llmModelDraft, setLlmModelDraft] = useState(() => setting.llmModel ?? LLM_DEFAULT_MODEL);
+  const [llmModelInputError, setLlmModelInputError] = useState("");
+  const [llmModelListStatus, setLlmModelListStatus] = useState<LlmModelListStatus>("idle");
+  const [llmModelListMessage, setLlmModelListMessage] = useState("");
+  const [availableLlmModels, setAvailableLlmModels] = useState<string[]>([]);
   const [isApiKeyStorageBusy, setIsApiKeyStorageBusy] = useState(false);
   const [isApiKeyStorageDirty, setIsApiKeyStorageDirty] = useState(false);
   const [noteAiActionsDraft, setNoteAiActionsDraft] = useState<NoteAiAction[]>(
@@ -265,6 +277,7 @@ export function SettingsPage() {
   const lastTypeIdRef = useRef<string | undefined>(undefined);
   const apiKeySaveRevisionRef = useRef(0);
   const apiKeySaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const llmModelListAbortRef = useRef<AbortController | null>(null);
 
   function closePendingImport() {
     if (!isImporting) {
@@ -290,7 +303,7 @@ export function SettingsPage() {
   const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
   const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
   const savedUserContextLength = Math.min(userContext.markdown.length, aiContextMaxLength);
-  const isGemma4ThinkingAvailable = isGemma4ThinkingModel(setting.llmModel ?? LLM_DEFAULT_MODEL);
+  const isGemma4ThinkingAvailable = isGemma4ThinkingModel(llmModelDraft);
   const savedNoteAiActions = setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS;
   const savedActionPreview = savedNoteAiActions
     .slice(0, 3)
@@ -338,6 +351,22 @@ export function SettingsPage() {
     setting.llmReasoningEffort,
     setting.llmTemperature,
   ]);
+
+  useEffect(() => {
+    setLlmModelDraft(setting.llmModel ?? LLM_DEFAULT_MODEL);
+  }, [setting.llmModel]);
+
+  useEffect(() => {
+    llmModelListAbortRef.current?.abort();
+    llmModelListAbortRef.current = null;
+    setAvailableLlmModels([]);
+    setLlmModelListStatus("idle");
+    setLlmModelListMessage("");
+  }, [setting.llmApiKey, setting.llmEndpoint]);
+
+  useEffect(() => {
+    return () => llmModelListAbortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     if (!isApiKeyStorageDirty) return;
@@ -396,7 +425,10 @@ export function SettingsPage() {
     let thisWeek = 0;
     const weekStart = new Date();
     weekStart.setHours(0, 0, 0, 0);
-    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // 월요일 기준
+    const weekStartOffset = setting.weekStartsOn === "mon"
+      ? (weekStart.getDay() + 6) % 7
+      : weekStart.getDay();
+    weekStart.setDate(weekStart.getDate() - weekStartOffset);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
     for (const task of tasks) {
@@ -409,7 +441,7 @@ export function SettingsPage() {
       if (start >= weekStart && start < weekEnd) thisWeek += 1;
     }
     return { total: tasks.length, notDone, onHold, done, canceled, major, thisWeek };
-  }, [tasks]);
+  }, [setting.weekStartsOn, tasks]);
 
   const noteStats = useMemo(() => {
     let archived = 0;
@@ -683,15 +715,72 @@ export function SettingsPage() {
     }
   }
 
+  async function saveLlmModelDraft(): Promise<string | undefined> {
+    const model = llmModelDraft.trim() || LLM_DEFAULT_MODEL;
+    setLlmModelInputError("");
+    try {
+      await updateSetting({ llmModel: model });
+      setLlmModelDraft(model);
+      return model;
+    } catch (modelSaveError) {
+      setLlmModelInputError(
+        modelSaveError instanceof Error ? modelSaveError.message : "LLM 모델명을 저장하지 못했습니다.",
+      );
+      return undefined;
+    }
+  }
+
+  async function handleLoadLlmModels() {
+    if (llmModelListAbortRef.current) return;
+    const controller = new AbortController();
+    llmModelListAbortRef.current = controller;
+    setLlmModelListStatus("loading");
+    setLlmModelListMessage("사용 가능한 모델 목록을 불러오는 중입니다.");
+
+    try {
+      const models = await listLlmModels({
+        endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+        apiKey: setting.llmApiKey ?? "",
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+
+      setAvailableLlmModels(models);
+      setLlmModelListStatus("ok");
+      setLlmModelListMessage(
+        models.length > 0
+          ? `${models.length}개 모델을 불러왔습니다. 목록에서 선택하거나 직접 입력할 수 있습니다.`
+          : "조회된 모델이 없습니다. 모델명을 직접 입력해 주세요.",
+      );
+    } catch (modelListError) {
+      if (controller.signal.aborted) return;
+      setAvailableLlmModels([]);
+      setLlmModelListStatus("error");
+      setLlmModelListMessage(
+        `${modelListError instanceof Error ? modelListError.message : "모델 목록을 불러오지 못했습니다."} 모델명은 직접 입력할 수 있습니다.`,
+      );
+    } finally {
+      if (llmModelListAbortRef.current === controller) {
+        llmModelListAbortRef.current = null;
+      }
+    }
+  }
+
   async function handleCheckAiConnection() {
+    const model = await saveLlmModelDraft();
+    if (!model) {
+      setAiConnectionStatus("error");
+      setAiConnectionMessage("올바른 LLM 모델명을 입력해 주세요.");
+      return;
+    }
+
     const startedAt = performance.now();
     setAiConnectionStatus("checking");
     setAiConnectionMessage("AI 연결을 확인하는 중입니다.");
-
     try {
       const response = await requestLlmResponse({
         endpoint: setting.llmEndpoint ?? DEFAULT_LLM_CHAT_COMPLETIONS_URL,
-        model: setting.llmModel ?? LLM_DEFAULT_MODEL,
+        model,
         apiKey: setting.llmApiKey ?? "",
         generationOptions: generationOptionsFromSetting(setting),
         messages: [
@@ -706,9 +795,8 @@ export function SettingsPage() {
         ],
       });
       const elapsedMs = Math.max(1, Math.round(performance.now() - startedAt));
-      const modelName = (setting.llmModel ?? LLM_DEFAULT_MODEL).trim() || LLM_DEFAULT_MODEL;
       setAiConnectionStatus("ok");
-      setAiConnectionMessage(`연결 성공 (${modelName}, ${elapsedMs}ms): ${response.slice(0, 80)}`);
+      setAiConnectionMessage(`연결 성공 (${model}, ${elapsedMs}ms): ${response.slice(0, 80)}`);
     } catch (connectionError) {
       setAiConnectionStatus("error");
       setAiConnectionMessage(connectionError instanceof Error ? connectionError.message : "AI 연결 확인에 실패했습니다.");
@@ -1092,8 +1180,8 @@ export function SettingsPage() {
                   void updateSetting({ weekStartsOn: event.target.value as "sun" | "mon" });
                 }}
               >
-                <option value="mon">월요일</option>
                 <option value="sun">일요일</option>
+                <option value="mon">월요일</option>
               </select>
             </label>
 
@@ -1159,12 +1247,30 @@ export function SettingsPage() {
               LLM 모델명
               <input
                 type="text"
-                value={setting.llmModel ?? LLM_DEFAULT_MODEL}
+                list="llm-model-options"
+                value={llmModelDraft}
                 onChange={(event) => {
-                  void updateSetting({ llmModel: event.target.value });
+                  setLlmModelDraft(event.currentTarget.value);
+                  setLlmModelInputError("");
+                }}
+                onBlur={() => void saveLlmModelDraft()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
                 }}
                 placeholder={LLM_DEFAULT_MODEL}
+                maxLength={LLM_MAX_MODEL_ID_LENGTH}
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={Boolean(llmModelInputError)}
+                aria-describedby="llm-model-help"
               />
+              <datalist id="llm-model-options">
+                {availableLlmModels.map((model) => <option key={model} value={model} />)}
+              </datalist>
+              <small id="llm-model-help" className="settings-field-help">
+                서버 목록에서 선택하거나 모델 식별자를 직접 입력할 수 있습니다.
+              </small>
+              {llmModelInputError ? <small className="error-text" role="alert">{llmModelInputError}</small> : null}
             </label>
 
             <label>
@@ -1189,6 +1295,14 @@ export function SettingsPage() {
           <div className="button-row compact">
             <button
               type="button"
+              className="btn btn-soft"
+              disabled={llmModelListStatus === "loading"}
+              onClick={() => void handleLoadLlmModels()}
+            >
+              {llmModelListStatus === "loading" ? "모델 불러오는 중" : "모델 목록 불러오기"}
+            </button>
+            <button
+              type="button"
               className="btn btn-outline"
               disabled={isApiKeyStorageBusy || (!setting.rememberLlmApiKey && !(setting.llmApiKey ?? "").trim())}
               onClick={() => void handleDeleteApiKey()}
@@ -1196,6 +1310,16 @@ export function SettingsPage() {
               메모리·저장소에서 키 삭제
             </button>
           </div>
+
+          {llmModelListStatus !== "idle" ? (
+            <p
+              className={`endpoint-status ${llmModelListStatus === "loading" ? "checking" : llmModelListStatus}`}
+              role={llmModelListStatus === "error" ? "alert" : "status"}
+              aria-live={llmModelListStatus === "error" ? "assertive" : "polite"}
+            >
+              {llmModelListMessage}
+            </p>
+          ) : null}
 
           {isApiKeyStorageBusy || isApiKeyStorageDirty ? (
             <p className="description-text" role="status">

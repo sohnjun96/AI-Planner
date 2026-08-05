@@ -1,14 +1,18 @@
 import {
   clampLlmTemperature,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  isValidLlmModelId,
   LLM_DEFAULT_MODEL,
   LLM_IDLE_TIMEOUT_MS,
   LLM_MAX_API_KEY_LENGTH,
   LLM_MAX_COMPLETION_TOKENS,
   LLM_MAX_ERROR_BYTES,
   LLM_MAX_MESSAGE_COUNT,
+  LLM_MAX_MODEL_COUNT,
+  LLM_MAX_MODEL_LIST_BYTES,
   LLM_MAX_RESPONSE_BYTES,
   LLM_MAX_TOTAL_PROMPT_CHARS,
+  LLM_MODEL_LIST_TIMEOUT_MS,
   LLM_REQUEST_TIMEOUT_MS,
   normalizeLlmGemmaThinkingEnabled,
   normalizeLlmReasoningEffort,
@@ -82,7 +86,7 @@ export function validateLlmEndpoint(endpoint?: string): string {
 
 function normalizeModel(model?: string): string {
   const normalized = model?.trim() || LLM_DEFAULT_MODEL;
-  if (normalized.length > 200 || !/^[A-Za-z0-9._:/-]+$/.test(normalized)) {
+  if (!isValidLlmModelId(normalized)) {
     throw new Error("LLM 모델명 형식이 올바르지 않습니다.");
   }
   return normalized;
@@ -94,6 +98,46 @@ function validateApiKey(apiKey: string): string {
     throw new Error("API 키 형식이 올바르지 않습니다.");
   }
   return normalized;
+}
+
+function getLlmModelsEndpoint(endpoint?: string): string {
+  const approvedChatEndpoint = new URL(validateLlmEndpoint(endpoint));
+  return new URL("/v1/models", approvedChatEndpoint.origin).href;
+}
+
+function parseLlmModelList(raw: string): string[] {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error("모델 목록의 JSON 응답 형식이 올바르지 않습니다.");
+  }
+
+  if (!payload || typeof payload !== "object" || !Array.isArray((payload as { data?: unknown }).data)) {
+    throw new Error("모델 목록이 OpenAI 호환 형식이 아닙니다.");
+  }
+
+  const data = (payload as { data: unknown[] }).data;
+  if (data.length > LLM_MAX_MODEL_COUNT) {
+    throw new Error(`모델 목록이 허용 개수(${LLM_MAX_MODEL_COUNT}개)를 초과했습니다.`);
+  }
+
+  const modelIds = new Set<string>();
+  for (const item of data) {
+    if (!item || typeof item !== "object") continue;
+    const id = (item as { id?: unknown }).id;
+    if (typeof id !== "string" || !id.trim()) continue;
+    try {
+      modelIds.add(normalizeModel(id));
+    } catch {
+      // 허용되지 않은 외부 모델 식별자는 선택 목록에 노출하지 않는다.
+    }
+  }
+
+  if (data.length > 0 && modelIds.size === 0) {
+    throw new Error("사용 가능한 형식의 모델 식별자를 찾지 못했습니다.");
+  }
+  return [...modelIds].sort((left, right) => left.localeCompare(right, "en"));
 }
 
 function validateMessages(messages: LlmChatMessage[]): LlmChatMessage[] {
@@ -271,17 +315,21 @@ async function readSseStream(
   }
 }
 
-function createAbortScope(externalSignal?: AbortSignal) {
+function createAbortScope(
+  externalSignal?: AbortSignal,
+  totalTimeoutMs = LLM_REQUEST_TIMEOUT_MS,
+  idleTimeoutMs = LLM_IDLE_TIMEOUT_MS,
+) {
   const controller = new AbortController();
   const abortFromExternal = () => controller.abort();
   if (externalSignal?.aborted) controller.abort();
   else externalSignal?.addEventListener("abort", abortFromExternal, { once: true });
 
-  const totalTimer = window.setTimeout(() => controller.abort(), LLM_REQUEST_TIMEOUT_MS);
-  let idleTimer = window.setTimeout(() => controller.abort(), LLM_IDLE_TIMEOUT_MS);
+  const totalTimer = window.setTimeout(() => controller.abort(), totalTimeoutMs);
+  let idleTimer = window.setTimeout(() => controller.abort(), idleTimeoutMs);
   const activity = () => {
     window.clearTimeout(idleTimer);
-    idleTimer = window.setTimeout(() => controller.abort(), LLM_IDLE_TIMEOUT_MS);
+    idleTimer = window.setTimeout(() => controller.abort(), idleTimeoutMs);
   };
   const cleanup = () => {
     window.clearTimeout(totalTimer);
@@ -289,6 +337,55 @@ function createAbortScope(externalSignal?: AbortSignal) {
     externalSignal?.removeEventListener("abort", abortFromExternal);
   };
   return { signal: controller.signal, activity, cleanup };
+}
+
+export async function listLlmModels(params: {
+  apiKey: string;
+  endpoint?: string;
+  signal?: AbortSignal;
+}): Promise<string[]> {
+  const abortScope = createAbortScope(
+    params.signal,
+    LLM_MODEL_LIST_TIMEOUT_MS,
+    LLM_MODEL_LIST_TIMEOUT_MS,
+  );
+  try {
+    const apiKey = validateApiKey(params.apiKey);
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+    const response = await fetch(getLlmModelsEndpoint(params.endpoint), {
+      method: "GET",
+      headers,
+      signal: abortScope.signal,
+      cache: "no-store",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
+    abortScope.activity();
+    assertContentLength(response, response.ok ? LLM_MAX_MODEL_LIST_BYTES : LLM_MAX_ERROR_BYTES);
+
+    if (!response.ok) {
+      await readBodyWithLimit(response.body, LLM_MAX_ERROR_BYTES, abortScope.activity).catch(() => "");
+      throw new Error(`모델 목록을 불러오지 못했습니다. 상태 코드: ${response.status}`);
+    }
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (!contentType.includes("application/json") && !contentType.includes("+json")) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error("모델 목록 서버가 허용되지 않은 응답 형식을 반환했습니다.");
+    }
+
+    const raw = await readBodyWithLimit(response.body, LLM_MAX_MODEL_LIST_BYTES, abortScope.activity);
+    return parseLlmModelList(raw);
+  } catch (error) {
+    if (abortScope.signal.aborted && !params.signal?.aborted) {
+      throw new Error("모델 목록 요청 시간이 초과되었습니다.");
+    }
+    throw error;
+  } finally {
+    abortScope.cleanup();
+  }
 }
 
 function recordBoundedUsage(promptChars: number, contentChars: number, usage?: LlmChatResponse["usage"]): void {
