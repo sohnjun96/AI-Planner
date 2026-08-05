@@ -3,6 +3,7 @@ import { ColorSelector } from "../components/ColorSelector";
 import { useSearchParams } from "../routing";
 import {
   BUILD_PROFILE_LABEL,
+  BUILD_PROFILE_ID,
   DEFAULT_AI_CONTEXT_MAX_LENGTH,
   DEFAULT_LLM_GEMMA_THINKING_ENABLED,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
@@ -1217,7 +1218,9 @@ export function SettingsPage() {
         <section className="settings-card">
           <header className="settings-card-header">
             <div>
-              <p className="eyebrow">AI · {BUILD_PROFILE_LABEL}</p>
+              <p className="eyebrow">
+                {BUILD_PROFILE_ID === "external" ? `AI · ${BUILD_PROFILE_LABEL}` : "AI"}
+              </p>
               <h3>AI 연결</h3>
             </div>
             <button

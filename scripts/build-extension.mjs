@@ -99,7 +99,7 @@ async function writeProfileManifest(buildDir, profile) {
   }
 
   manifest.name = `${manifest.name}${profile.extensionNameSuffix}`;
-  manifest.version_name = `${manifest.version}-${profile.id}`;
+  manifest.version_name = profile.id === "internal" ? manifest.version : `${manifest.version}-${profile.id}`;
   manifest.host_permissions = [`${profile.origin}/*`];
   manifest.content_security_policy = { extension_pages: createExtensionCsp(profile.origin) };
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
@@ -117,7 +117,7 @@ async function validateBuildDirectory(buildDir, profile, excludedProfile) {
     JSON.stringify(manifest.permissions) !== JSON.stringify(["storage", "alarms"]) ||
     JSON.stringify(manifest.host_permissions) !== JSON.stringify([`${profile.origin}/*`]) ||
     manifest.content_security_policy?.extension_pages !== createExtensionCsp(profile.origin) ||
-    manifest.version_name !== `${manifest.version}-${profile.id}` ||
+    manifest.version_name !== (profile.id === "internal" ? manifest.version : `${manifest.version}-${profile.id}`) ||
     !manifest.name.endsWith(profile.extensionNameSuffix)
   ) {
     throw new Error("빌드 매니페스트의 권한 제한이 예상과 다릅니다.");
