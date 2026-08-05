@@ -70,8 +70,13 @@ src/
   main.tsx
   index.css
 scripts/
+  build-profile-config.mjs
   build-extension.mjs
+config/
+  build-profiles.json
 ```
+
+망별 Endpoint, 권한, 출력 폴더는 `docs/BUILD_PROFILES.md`의 절차에 따라 관리한다.
 
 ## 6) Future Extensions
 - deadline wake-up (`chrome.alarms`, `tabs`, `windows`)

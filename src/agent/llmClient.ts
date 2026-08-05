@@ -1,6 +1,7 @@
 import {
   clampLlmTemperature,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
+  DEFAULT_LLM_MODELS_URL,
   isValidLlmModelId,
   LLM_DEFAULT_MODEL,
   LLM_IDLE_TIMEOUT_MS,
@@ -101,8 +102,8 @@ function validateApiKey(apiKey: string): string {
 }
 
 function getLlmModelsEndpoint(endpoint?: string): string {
-  const approvedChatEndpoint = new URL(validateLlmEndpoint(endpoint));
-  return new URL("/v1/models", approvedChatEndpoint.origin).href;
+  validateLlmEndpoint(endpoint);
+  return DEFAULT_LLM_MODELS_URL;
 }
 
 function parseLlmModelList(raw: string): string[] {
