@@ -2,8 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useNavigate } from "../routing";
 import { analyzeLunchMateAliases, type LunchMateGroup } from "../agent/lunchMateAgent";
-import { generationOptionsFromSetting } from "../agent/llmClient";
-import { STATUS_LABELS } from "../constants";
+import {
+  clampLlmTemperature,
+  normalizeLlmGemmaThinkingEnabled,
+  normalizeLlmReasoningEffort,
+  STATUS_LABELS,
+} from "../constants";
 import { useAppData } from "../context/AppDataContext";
 import { db } from "../db";
 import type { Project, Task, TaskType } from "../models";
@@ -47,6 +51,7 @@ type ActivityMode = "completed" | "created";
 const ACTIVITY_WEEK_COUNT = 53;
 const ACTIVITY_DAY_COUNT = 365;
 const RECENT_COMPLETED_LIMIT = 10;
+const LUNCH_ANALYSIS_STABILIZATION_MS = 300;
 const PERIOD_OPTIONS: Array<{ value: ArchivePeriod; label: string }> = [
   { value: "month", label: "이번 달" },
   { value: "year", label: "올해" },
@@ -288,6 +293,7 @@ export function ArchivePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [isAnalyzingLunch, setIsAnalyzingLunch] = useState(false);
   const [lunchAnalysisError, setLunchAnalysisError] = useState("");
+  const lunchAnalysisRequestIdRef = useRef(0);
   const activityScrollRef = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState<ArchiveFilters>({
     keyword: "",
@@ -365,7 +371,28 @@ export function ArchivePage() {
   );
   const lunchFingerprint = useMemo(() => createLunchMateFingerprint(allLunchCandidates), [allLunchCandidates]);
   const lunchCacheId = "lunch-mate:aliases";
-  const lunchCache = useLiveQuery(() => db.archiveInsightCaches.get(lunchCacheId), []);
+  const lunchCache = useLiveQuery(() => db.archiveInsightCaches.get(lunchCacheId), [], null);
+  const isLunchCacheReady = lunchCache !== null;
+  const allLunchCandidatesRef = useRef(allLunchCandidates);
+  const lunchCacheRef = useRef(lunchCache);
+  const lunchGenerationOptions = useMemo(
+    () => ({
+      temperature: clampLlmTemperature(setting.llmTemperature),
+      reasoningEffort: normalizeLlmReasoningEffort(setting.llmReasoningEffort),
+      gemmaThinkingEnabled: normalizeLlmGemmaThinkingEnabled(setting.llmGemmaThinkingEnabled),
+    }),
+    [setting.llmGemmaThinkingEnabled, setting.llmReasoningEffort, setting.llmTemperature],
+  );
+  const lunchAnalysisDateKey = getDateKey(new Date(currentTime));
+  const lunchLastAttemptedDateKey = lunchCache?.lastAttemptedAt
+    ? getDateKey(lunchCache.lastAttemptedAt)
+    : "";
+
+  useEffect(() => {
+    allLunchCandidatesRef.current = allLunchCandidates;
+    lunchCacheRef.current = lunchCache;
+  }, [allLunchCandidates, lunchCache]);
+
   const cachedLunchGroups = useMemo(
     () => parseCachedLunchMateGroups(lunchCache?.payload),
     [lunchCache?.payload],
@@ -462,65 +489,80 @@ export function ArchivePage() {
   }
 
   useEffect(() => {
-    if (allLunchCandidates.length < 2) return;
-    const todayKey = getDateKey(new Date(currentTime));
-    const lastAttemptedKey = lunchCache?.lastAttemptedAt ? getDateKey(lunchCache.lastAttemptedAt) : "";
-    if (lastAttemptedKey === todayKey) return;
+    if (!isLunchCacheReady || allLunchCandidatesRef.current.length < 2) return;
+    if (lunchLastAttemptedDateKey === lunchAnalysisDateKey) return;
 
     const controller = new AbortController();
+    const requestId = ++lunchAnalysisRequestIdRef.current;
     const attemptedAt = new Date().toISOString();
-    void Promise.resolve()
-      .then(() => {
-        if (controller.signal.aborted) return undefined;
-        setIsAnalyzingLunch(true);
-        setLunchAnalysisError("");
-        return analyzeLunchMateAliases({
-          candidates: allLunchCandidates,
-          endpoint: setting.llmEndpoint,
-          apiKey: setting.llmApiKey ?? "",
-          model: setting.llmModel,
-          generationOptions: generationOptionsFromSetting(setting),
-          signal: controller.signal,
-        });
-      })
-      .then(async (groups) => {
-        if (!groups) return;
-        const payload = JSON.stringify(groups);
-        if (new TextEncoder().encode(payload).byteLength > 500_000) {
-          throw new Error("분석 결과가 안전 저장 한도(500KB)를 초과했습니다.");
-        }
-        await db.archiveInsightCaches.put({
-          id: lunchCacheId,
-          sourceFingerprint: lunchFingerprint,
-          payload,
-          lastAttemptedAt: attemptedAt,
-          updatedAt: attemptedAt,
-        });
-      })
-      .catch(async (error: unknown) => {
-        if (controller.signal.aborted) return;
-        setLunchAnalysisError(error instanceof Error ? error.message : "점심 메이트 이름을 분석하지 못했습니다.");
-        await db.archiveInsightCaches.put({
-          id: lunchCacheId,
-          sourceFingerprint: lunchCache?.sourceFingerprint ?? lunchFingerprint,
-          payload: lunchCache?.payload ?? "[]",
-          lastAttemptedAt: attemptedAt,
-          updatedAt: attemptedAt,
-        });
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsAnalyzingLunch(false);
-      });
+    const startTimer = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
 
-    return () => controller.abort();
+      const candidates = allLunchCandidatesRef.current.map((candidate) => ({ ...candidate }));
+      const previousCache = lunchCacheRef.current;
+
+      void (async () => {
+        try {
+          setIsAnalyzingLunch(true);
+          setLunchAnalysisError("");
+          const groups = await analyzeLunchMateAliases({
+            candidates,
+            endpoint: setting.llmEndpoint,
+            apiKey: setting.llmApiKey ?? "",
+            model: setting.llmModel,
+            generationOptions: lunchGenerationOptions,
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+
+          const payload = JSON.stringify(groups);
+          if (new TextEncoder().encode(payload).byteLength > 500_000) {
+            throw new Error("분석 결과가 안전 저장 한도(500KB)를 초과했습니다.");
+          }
+          await db.archiveInsightCaches.put({
+            id: lunchCacheId,
+            sourceFingerprint: lunchFingerprint,
+            payload,
+            lastAttemptedAt: attemptedAt,
+            updatedAt: attemptedAt,
+          });
+        } catch (error: unknown) {
+          if (controller.signal.aborted) return;
+
+          const message = error instanceof Error ? error.message : "점심 메이트 이름을 분석하지 못했습니다.";
+          setLunchAnalysisError(message);
+          try {
+            await db.archiveInsightCaches.put({
+              id: lunchCacheId,
+              sourceFingerprint: previousCache?.sourceFingerprint ?? lunchFingerprint,
+              payload: previousCache?.payload ?? "[]",
+              lastAttemptedAt: attemptedAt,
+              updatedAt: attemptedAt,
+            });
+          } catch {
+            setLunchAnalysisError(`${message} 분석 오류 상태도 저장하지 못했습니다.`);
+          }
+        } finally {
+          if (lunchAnalysisRequestIdRef.current === requestId) {
+            setIsAnalyzingLunch(false);
+          }
+        }
+      })();
+    }, LUNCH_ANALYSIS_STABILIZATION_MS);
+
+    return () => {
+      window.clearTimeout(startTimer);
+      controller.abort();
+    };
   }, [
-    allLunchCandidates,
-    currentTime,
-    lunchCache?.lastAttemptedAt,
-    lunchCache?.payload,
-    lunchCache?.sourceFingerprint,
+    isLunchCacheReady,
+    lunchAnalysisDateKey,
     lunchFingerprint,
-    setting,
+    lunchGenerationOptions,
+    lunchLastAttemptedDateKey,
+    setting.llmApiKey,
+    setting.llmEndpoint,
+    setting.llmModel,
   ]);
 
   return (
