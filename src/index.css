@@ -4600,11 +4600,20 @@ textarea:focus-visible,
 }
 
 .dashboard-hero-actions {
+  --dashboard-topbar-control-height: 52px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.dashboard-hero-actions > .daily-briefing-trigger,
+.dashboard-hero-actions > .segmented-control,
+.dashboard-hero-actions > .btn {
+  height: var(--dashboard-topbar-control-height);
+  min-height: var(--dashboard-topbar-control-height);
+  align-self: center;
 }
 
 .dashboard-summary-row {
