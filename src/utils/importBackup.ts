@@ -216,8 +216,8 @@ function parseSetting(value: unknown): AppSetting {
       const action = record(raw, `settings[0].noteAiActions[${index}]`);
       return { id: id(action.id, `settings[0].noteAiActions[${index}].id`), label: text(action.label, `settings[0].noteAiActions[${index}].label`, 100), prompt: text(action.prompt, `settings[0].noteAiActions[${index}].prompt`, 4_000) };
     }),
-    noteTaskSuggestionsEnabled: item.noteTaskSuggestionsEnabled !== false,
-    relatedNoteSuggestionsEnabled: item.relatedNoteSuggestionsEnabled !== false,
+    noteTaskSuggestionsEnabled: item.noteTaskSuggestionsEnabled === true,
+    relatedNoteSuggestionsEnabled: item.relatedNoteSuggestionsEnabled === true,
     updatedAt: iso(item.updatedAt, "settings[0].updatedAt") ?? new Date().toISOString(),
   };
 }
