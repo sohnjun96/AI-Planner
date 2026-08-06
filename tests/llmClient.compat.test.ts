@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { listLlmModels, parseLlmModelList } from "../src/agent/llmClient";
+import { listLlmModels, parseLlmModelList, requestLlmResponse } from "../src/agent/llmClient";
+import { LLM_REQUEST_TIMEOUT_MS } from "../src/constants";
 
 Object.defineProperty(globalThis, "window", {
   configurable: true,
@@ -58,5 +59,47 @@ await assert.rejects(
   /모델 목록 인증에 실패했습니다/,
 );
 assert.equal(unauthorizedRequests, 1);
+
+const scheduledDelays: number[] = [];
+const originalSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
+  scheduledDelays.push(timeout ?? 0);
+  return originalSetTimeout(handler, timeout, ...args);
+}) as typeof setTimeout;
+globalThis.fetch = (async () => jsonResponse({
+  choices: [{ message: { content: "ok" } }],
+})) as typeof fetch;
+try {
+  assert.equal(
+    await requestLlmResponse({
+      messages: [{ role: "user", content: "test" }],
+      apiKey: "test-key",
+      endpoint: INTERNAL_CHAT_ENDPOINT,
+      model: "internal-model",
+    }),
+    "ok",
+  );
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+}
+assert.ok(scheduledDelays.length >= 3);
+assert.ok(scheduledDelays.every((delay) => delay === LLM_REQUEST_TIMEOUT_MS));
+
+const canceledController = new AbortController();
+canceledController.abort();
+globalThis.fetch = (async (_input, init) => {
+  if (init?.signal?.aborted) throw new DOMException("signal is aborted without reason", "AbortError");
+  return jsonResponse({ choices: [{ message: { content: "unexpected" } }] });
+}) as typeof fetch;
+await assert.rejects(
+  requestLlmResponse({
+    messages: [{ role: "user", content: "test" }],
+    apiKey: "test-key",
+    endpoint: INTERNAL_CHAT_ENDPOINT,
+    model: "internal-model",
+    signal: canceledController.signal,
+  }),
+  /AI 요청이 취소되었습니다/,
+);
 
 process.stdout.write("LLM compatibility checks passed.\n");

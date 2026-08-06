@@ -438,12 +438,16 @@ export async function requestLlmResponse(params: {
     throw new Error("동시에 처리할 수 있는 AI 요청 수를 초과했습니다. 잠시 후 다시 시도해 주세요.");
   }
   activeLlmRequests += 1;
-  const abortScope = createAbortScope(params.signal);
+  const useStream = typeof params.onToken === "function";
+  const abortScope = createAbortScope(
+    params.signal,
+    LLM_REQUEST_TIMEOUT_MS,
+    useStream ? LLM_IDLE_TIMEOUT_MS : LLM_REQUEST_TIMEOUT_MS,
+  );
   try {
     const apiKey = validateApiKey(params.apiKey);
     const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    const useStream = typeof params.onToken === "function";
     const messages = validateMessages(params.messages);
     const response = await fetch(validateLlmEndpoint(params.endpoint), {
       method: "POST",
@@ -494,6 +498,14 @@ export async function requestLlmResponse(params: {
     if (!content.trim()) throw new Error("LLM 응답에서 텍스트를 찾지 못했습니다.");
     recordBoundedUsage(promptChars, content.length, payload.usage);
     return content.trim();
+  } catch (error) {
+    if (abortScope.signal.aborted) {
+      if (params.signal?.aborted) {
+        throw new Error("AI 요청이 취소되었습니다.");
+      }
+      throw new Error("AI 요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.");
+    }
+    throw error;
   } finally {
     abortScope.cleanup();
     activeLlmRequests -= 1;
