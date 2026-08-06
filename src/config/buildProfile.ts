@@ -33,7 +33,14 @@ if (!label || label.length > 40 || /[\r\n]/.test(label)) {
 
 const chatEndpoint = validateBuildEndpoint(__PLANAI_LLM_CHAT_ENDPOINT__, "/chat/completions");
 const modelsEndpoint = validateBuildEndpoint(__PLANAI_LLM_MODELS_ENDPOINT__, "/models");
-if (new URL(chatEndpoint).origin !== new URL(modelsEndpoint).origin) {
+if (!Array.isArray(__PLANAI_LLM_MODELS_ENDPOINTS__) || __PLANAI_LLM_MODELS_ENDPOINTS__.length < 1 || __PLANAI_LLM_MODELS_ENDPOINTS__.length > 3) {
+  throw new Error("빌드 프로필의 Models Endpoint 개수가 올바르지 않습니다.");
+}
+const modelsEndpoints = __PLANAI_LLM_MODELS_ENDPOINTS__.map((endpoint) => validateBuildEndpoint(endpoint, "/models"));
+if (modelsEndpoints[0] !== modelsEndpoint || new Set(modelsEndpoints).size !== modelsEndpoints.length) {
+  throw new Error("빌드 프로필의 Models Endpoint 순서 또는 중복 설정이 올바르지 않습니다.");
+}
+if (modelsEndpoints.some((endpoint) => new URL(chatEndpoint).origin !== new URL(endpoint).origin)) {
   throw new Error("Chat과 Models Endpoint의 호스트가 일치하지 않습니다.");
 }
 
@@ -42,4 +49,5 @@ export const BUILD_PROFILE = Object.freeze({
   label,
   chatEndpoint,
   modelsEndpoint,
+  modelsEndpoints: Object.freeze(modelsEndpoints),
 });

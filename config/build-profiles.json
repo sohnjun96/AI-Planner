@@ -2,11 +2,16 @@
   "internal": {
     "label": "내부망 운영",
     "chatEndpoint": "https://llm.moip.go.kr/api/chat/completions",
-    "modelsEndpoint": "https://llm.moip.go.kr/v1/models"
+    "modelsEndpoint": "https://llm.moip.go.kr/v1/models",
+    "modelsFallbackEndpoints": [
+      "https://llm.moip.go.kr/api/v1/models",
+      "https://llm.moip.go.kr/api/models"
+    ]
   },
   "external": {
     "label": "외부망 테스트",
     "chatEndpoint": "https://api.openai.com/v1/chat/completions",
-    "modelsEndpoint": "https://api.openai.com/v1/models"
+    "modelsEndpoint": "https://api.openai.com/v1/models",
+    "modelsFallbackEndpoints": []
   }
 }

@@ -43,8 +43,19 @@ export function loadBuildProfile(rootDir, profileId) {
 
   const chatEndpoint = validateEndpoint(candidate.chatEndpoint, "/chat/completions", "Chat");
   const modelsEndpoint = validateEndpoint(candidate.modelsEndpoint, "/models", "Models");
+  const fallbackCandidates = candidate.modelsFallbackEndpoints ?? [];
+  if (!Array.isArray(fallbackCandidates) || fallbackCandidates.length > 2) {
+    throw new Error("Models 대체 Endpoint 설정이 허용 범위를 벗어났습니다.");
+  }
+  const modelsEndpoints = [
+    modelsEndpoint,
+    ...fallbackCandidates.map((value, index) => validateEndpoint(value, "/models", `Models 대체 ${index + 1}`)),
+  ];
+  if (new Set(modelsEndpoints).size !== modelsEndpoints.length) {
+    throw new Error("Models Endpoint가 중복되었습니다.");
+  }
   const origin = new URL(chatEndpoint).origin;
-  if (origin !== new URL(modelsEndpoint).origin) {
+  if (modelsEndpoints.some((endpoint) => origin !== new URL(endpoint).origin)) {
     throw new Error("Chat과 Models Endpoint의 호스트가 일치하지 않습니다.");
   }
 
@@ -53,6 +64,7 @@ export function loadBuildProfile(rootDir, profileId) {
     label,
     chatEndpoint,
     modelsEndpoint,
+    modelsEndpoints: Object.freeze(modelsEndpoints),
     origin,
     outputDirectoryName: profileId === "internal" ? "dist" : "dist-external",
     extensionNameSuffix: profileId === "internal" ? "" : " (외부망 테스트)",
@@ -65,6 +77,7 @@ export function createBuildDefines(profile) {
     __PLANAI_BUILD_PROFILE_LABEL__: JSON.stringify(profile.label),
     __PLANAI_LLM_CHAT_ENDPOINT__: JSON.stringify(profile.chatEndpoint),
     __PLANAI_LLM_MODELS_ENDPOINT__: JSON.stringify(profile.modelsEndpoint),
+    __PLANAI_LLM_MODELS_ENDPOINTS__: JSON.stringify(profile.modelsEndpoints),
   };
 }
 

@@ -123,12 +123,12 @@ async function validateBuildDirectory(buildDir, profile, excludedProfile) {
     throw new Error("빌드 매니페스트의 권한 제한이 예상과 다릅니다.");
   }
   const appBundle = await readFile(path.join(buildDir, "assets", "app.js"), "utf8");
-  if (!appBundle.includes(profile.chatEndpoint) || !appBundle.includes(profile.modelsEndpoint)) {
+  if (!appBundle.includes(profile.chatEndpoint) || profile.modelsEndpoints.some((endpoint) => !appBundle.includes(endpoint))) {
     throw new Error("빌드 번들에 선택한 AI Endpoint가 반영되지 않았습니다.");
   }
   if (
     appBundle.includes(excludedProfile.chatEndpoint) ||
-    appBundle.includes(excludedProfile.modelsEndpoint)
+    excludedProfile.modelsEndpoints.some((endpoint) => appBundle.includes(endpoint))
   ) {
     throw new Error("빌드 번들에 선택하지 않은 망의 AI Endpoint가 포함되었습니다.");
   }

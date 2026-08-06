@@ -749,9 +749,12 @@ export function SettingsPage() {
 
       setAvailableLlmModels(models);
       setLlmModelListStatus("ok");
+      const currentModel = llmModelDraft.trim();
       setLlmModelListMessage(
         models.length > 0
-          ? `${models.length}개 모델을 불러왔습니다. 목록에서 선택하거나 직접 입력할 수 있습니다.`
+          ? currentModel && !models.includes(currentModel)
+            ? `${models.length}개 모델을 불러왔습니다. 현재 모델은 서버 목록에 없으므로 사용할 모델을 선택해 주세요.`
+            : `${models.length}개 모델을 불러왔습니다. 목록에서 선택하거나 직접 입력할 수 있습니다.`
           : "조회된 모델이 없습니다. 모델명을 직접 입력해 주세요.",
       );
     } catch (modelListError) {

@@ -3,6 +3,7 @@ export interface BuildProfile {
   readonly label: string;
   readonly chatEndpoint: string;
   readonly modelsEndpoint: string;
+  readonly modelsEndpoints: readonly string[];
   readonly origin: string;
   readonly outputDirectoryName: "dist" | "dist-external";
   readonly extensionNameSuffix: string;

@@ -12,6 +12,7 @@ export const BUILD_PROFILE_ID = BUILD_PROFILE.id;
 export const BUILD_PROFILE_LABEL = BUILD_PROFILE.label;
 export const DEFAULT_LLM_CHAT_COMPLETIONS_URL = BUILD_PROFILE.chatEndpoint;
 export const DEFAULT_LLM_MODELS_URL = BUILD_PROFILE.modelsEndpoint;
+export const DEFAULT_LLM_MODELS_URLS = BUILD_PROFILE.modelsEndpoints;
 export const LLM_REQUEST_TIMEOUT_MS = 60_000;
 export const LLM_IDLE_TIMEOUT_MS = 15_000;
 export const LLM_MAX_COMPLETION_TOKENS = 4_096;

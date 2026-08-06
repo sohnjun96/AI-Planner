@@ -1,7 +1,7 @@
 import {
   clampLlmTemperature,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
-  DEFAULT_LLM_MODELS_URL,
+  DEFAULT_LLM_MODELS_URLS,
   isValidLlmModelId,
   LLM_DEFAULT_MODEL,
   LLM_IDLE_TIMEOUT_MS,
@@ -101,21 +101,23 @@ function validateApiKey(apiKey: string): string {
   return normalized;
 }
 
-function getLlmModelsEndpoint(endpoint?: string): string {
+function getLlmModelsEndpoints(endpoint?: string): readonly string[] {
   validateLlmEndpoint(endpoint);
-  return DEFAULT_LLM_MODELS_URL;
+  return DEFAULT_LLM_MODELS_URLS;
 }
 
-function parseLlmModelList(raw: string): string[] {
+class ModelListCompatibilityError extends Error {}
+
+export function parseLlmModelList(raw: string): string[] {
   let payload: unknown;
   try {
     payload = JSON.parse(raw) as unknown;
   } catch {
-    throw new Error("모델 목록의 JSON 응답 형식이 올바르지 않습니다.");
+    throw new ModelListCompatibilityError("모델 목록의 JSON 응답 형식이 올바르지 않습니다.");
   }
 
   if (!payload || typeof payload !== "object" || !Array.isArray((payload as { data?: unknown }).data)) {
-    throw new Error("모델 목록이 OpenAI 호환 형식이 아닙니다.");
+    throw new ModelListCompatibilityError("모델 목록이 OpenAI 호환 형식이 아닙니다.");
   }
 
   const data = (payload as { data: unknown[] }).data;
@@ -136,7 +138,7 @@ function parseLlmModelList(raw: string): string[] {
   }
 
   if (data.length > 0 && modelIds.size === 0) {
-    throw new Error("사용 가능한 형식의 모델 식별자를 찾지 못했습니다.");
+    throw new ModelListCompatibilityError("사용 가능한 형식의 모델 식별자를 찾지 못했습니다.");
   }
   return [...modelIds].sort((left, right) => left.localeCompare(right, "en"));
 }
@@ -354,31 +356,47 @@ export async function listLlmModels(params: {
     const apiKey = validateApiKey(params.apiKey);
     const headers: Record<string, string> = { Accept: "application/json" };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const endpoints = getLlmModelsEndpoints(params.endpoint);
+    let lastCompatibilityError: Error | undefined;
+    let emptyResult: string[] | undefined;
 
-    const response = await fetch(getLlmModelsEndpoint(params.endpoint), {
-      method: "GET",
-      headers,
-      signal: abortScope.signal,
-      cache: "no-store",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
-    });
-    abortScope.activity();
-    assertContentLength(response, response.ok ? LLM_MAX_MODEL_LIST_BYTES : LLM_MAX_ERROR_BYTES);
+    for (let index = 0; index < endpoints.length; index += 1) {
+      const response = await fetch(endpoints[index], {
+        method: "GET",
+        headers,
+        signal: abortScope.signal,
+        cache: "no-store",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+      });
+      abortScope.activity();
 
-    if (!response.ok) {
-      await readBodyWithLimit(response.body, LLM_MAX_ERROR_BYTES, abortScope.activity).catch(() => "");
-      throw new Error(`모델 목록을 불러오지 못했습니다. 상태 코드: ${response.status}`);
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        if ((response.status === 404 || response.status === 405) && index < endpoints.length - 1) {
+          lastCompatibilityError = new Error(`모델 목록 API를 찾지 못했습니다. 상태 코드: ${response.status}`);
+          continue;
+        }
+        if (response.status === 401) throw new Error("모델 목록 인증에 실패했습니다. API 키를 확인해 주세요.");
+        if (response.status === 403) throw new Error("모델 목록을 조회할 권한이 없습니다.");
+        if (response.status === 429) throw new Error("모델 목록 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.");
+        throw new Error(`모델 목록을 불러오지 못했습니다. 상태 코드: ${response.status}`);
+      }
+
+      assertContentLength(response, LLM_MAX_MODEL_LIST_BYTES);
+      const raw = await readBodyWithLimit(response.body, LLM_MAX_MODEL_LIST_BYTES, abortScope.activity);
+      try {
+        const models = parseLlmModelList(raw);
+        if (models.length > 0) return models;
+        emptyResult = models;
+      } catch (error) {
+        if (!(error instanceof ModelListCompatibilityError) || index === endpoints.length - 1) throw error;
+        lastCompatibilityError = error;
+      }
     }
 
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    if (!contentType.includes("application/json") && !contentType.includes("+json")) {
-      await response.body?.cancel().catch(() => undefined);
-      throw new Error("모델 목록 서버가 허용되지 않은 응답 형식을 반환했습니다.");
-    }
-
-    const raw = await readBodyWithLimit(response.body, LLM_MAX_MODEL_LIST_BYTES, abortScope.activity);
-    return parseLlmModelList(raw);
+    if (emptyResult) return emptyResult;
+    throw lastCompatibilityError ?? new Error("모델 목록을 불러오지 못했습니다.");
   } catch (error) {
     if (abortScope.signal.aborted && !params.signal?.aborted) {
       throw new Error("모델 목록 요청 시간이 초과되었습니다.");

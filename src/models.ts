@@ -26,6 +26,7 @@ export interface ArchiveInsightCache {
   sourceFingerprint: string;
   payload: string;
   lastAttemptedAt?: string;
+  lastError?: "request_failed";
   updatedAt: string;
 }
 

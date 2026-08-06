@@ -293,7 +293,10 @@ export function ArchivePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [isAnalyzingLunch, setIsAnalyzingLunch] = useState(false);
   const [lunchAnalysisError, setLunchAnalysisError] = useState("");
+  const [lunchRetryRequestId, setLunchRetryRequestId] = useState(0);
   const lunchAnalysisRequestIdRef = useRef(0);
+  const lunchHandledRetryRequestIdRef = useRef(0);
+  const lunchAnalysisControllerRef = useRef<AbortController | null>(null);
   const activityScrollRef = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState<ArchiveFilters>({
     keyword: "",
@@ -370,7 +373,7 @@ export function ArchivePage() {
     [periodLunchTasks, projectMap, typeMap],
   );
   const lunchFingerprint = useMemo(() => createLunchMateFingerprint(allLunchCandidates), [allLunchCandidates]);
-  const lunchCacheId = "lunch-mate:aliases";
+  const lunchCacheId = "lunch-mate:aliases:v2";
   const lunchCache = useLiveQuery(() => db.archiveInsightCaches.get(lunchCacheId), [], null);
   const isLunchCacheReady = lunchCache !== null;
   const allLunchCandidatesRef = useRef(allLunchCandidates);
@@ -393,6 +396,11 @@ export function ArchivePage() {
     lunchCacheRef.current = lunchCache;
   }, [allLunchCandidates, lunchCache]);
 
+  useEffect(() => () => {
+    lunchAnalysisControllerRef.current?.abort();
+    lunchAnalysisControllerRef.current = null;
+  }, []);
+
   const cachedLunchGroups = useMemo(
     () => parseCachedLunchMateGroups(lunchCache?.payload),
     [lunchCache?.payload],
@@ -403,6 +411,9 @@ export function ArchivePage() {
   );
   const topLunchMate = lunchGroups[0];
   const hasAiLunchAnalysis = Boolean(cachedLunchGroups);
+  const persistedLunchAnalysisError = lunchCache?.lastError === "request_failed"
+    ? "AI 정리를 완료하지 못했습니다. 설정의 모델과 API 키를 확인한 뒤 다시 시도해 주세요."
+    : "";
 
   const bestCompletionDay = useMemo(
     () => findPeakDay(periodCompletedTasks, (task) => task.completedAt ?? task.startAt),
@@ -490,13 +501,17 @@ export function ArchivePage() {
 
   useEffect(() => {
     if (!isLunchCacheReady || allLunchCandidatesRef.current.length < 2) return;
-    if (lunchLastAttemptedDateKey === lunchAnalysisDateKey) return;
+    const isManualRetry = lunchRetryRequestId > lunchHandledRetryRequestIdRef.current;
+    if (!isManualRetry && lunchLastAttemptedDateKey === lunchAnalysisDateKey) return;
+    lunchHandledRetryRequestIdRef.current = lunchRetryRequestId;
 
-    const controller = new AbortController();
-    const requestId = ++lunchAnalysisRequestIdRef.current;
     const attemptedAt = new Date().toISOString();
     const startTimer = window.setTimeout(() => {
-      if (controller.signal.aborted) return;
+      if (lunchAnalysisControllerRef.current) return;
+
+      const controller = new AbortController();
+      lunchAnalysisControllerRef.current = controller;
+      const requestId = ++lunchAnalysisRequestIdRef.current;
 
       const candidates = allLunchCandidatesRef.current.map((candidate) => ({ ...candidate }));
       const previousCache = lunchCacheRef.current;
@@ -524,6 +539,7 @@ export function ArchivePage() {
             sourceFingerprint: lunchFingerprint,
             payload,
             lastAttemptedAt: attemptedAt,
+            lastError: undefined,
             updatedAt: attemptedAt,
           });
         } catch (error: unknown) {
@@ -537,29 +553,31 @@ export function ArchivePage() {
               sourceFingerprint: previousCache?.sourceFingerprint ?? lunchFingerprint,
               payload: previousCache?.payload ?? "[]",
               lastAttemptedAt: attemptedAt,
+              lastError: "request_failed",
               updatedAt: attemptedAt,
             });
           } catch {
             setLunchAnalysisError(`${message} 분석 오류 상태도 저장하지 못했습니다.`);
           }
         } finally {
-          if (lunchAnalysisRequestIdRef.current === requestId) {
+          if (lunchAnalysisControllerRef.current === controller) {
+            lunchAnalysisControllerRef.current = null;
+          }
+          if (!controller.signal.aborted && lunchAnalysisRequestIdRef.current === requestId) {
             setIsAnalyzingLunch(false);
           }
         }
       })();
     }, LUNCH_ANALYSIS_STABILIZATION_MS);
 
-    return () => {
-      window.clearTimeout(startTimer);
-      controller.abort();
-    };
+    return () => window.clearTimeout(startTimer);
   }, [
     isLunchCacheReady,
     lunchAnalysisDateKey,
     lunchFingerprint,
     lunchGenerationOptions,
     lunchLastAttemptedDateKey,
+    lunchRetryRequestId,
     setting.llmApiKey,
     setting.llmEndpoint,
     setting.llmModel,
@@ -688,7 +706,24 @@ export function ArchivePage() {
               {topLunchMate ? `함께 점심 먹은 횟수 : ${topLunchMate.count} 번` : "함께 점심 먹은 횟수 : 0 번"}
             </p>
             {hasAiLunchAnalysis && topLunchMate && topLunchMate.aliases.length > 1 ? <small className="archive-alias-note">{topLunchMate.aliases.join(" · ")} 동일인 분석</small> : null}
-            {lunchAnalysisError ? <span className="archive-card-error" role="alert">{lunchAnalysisError}</span> : null}
+            {lunchAnalysisError || persistedLunchAnalysisError ? (
+              <span className="archive-card-error" role="alert">
+                {lunchAnalysisError || persistedLunchAnalysisError}
+              </span>
+            ) : null}
+            {lunchAnalysisError || persistedLunchAnalysisError ? (
+              <button
+                type="button"
+                className="archive-card-action"
+                disabled={isAnalyzingLunch}
+                onClick={() => {
+                  setLunchAnalysisError("");
+                  setLunchRetryRequestId((current) => current + 1);
+                }}
+              >
+                {isAnalyzingLunch ? "다시 정리 중" : "AI 정리 다시 시도"}
+              </button>
+            ) : null}
           </article>
 
           <article className="archive-record-card focus">

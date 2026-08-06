@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --mode internal",
     "dev:external": "vite --mode external",
+    "test": "node scripts/run-tests.mjs",
     "typecheck": "tsc -b",
     "build": "npm run build:internal",
     "build:internal": "npm run typecheck && node scripts/build-extension.mjs --profile internal",
