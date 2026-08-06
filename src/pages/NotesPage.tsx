@@ -123,6 +123,8 @@ export function NotesPage() {
   }, []);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [pendingEditNoteId, setPendingEditNoteId] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -219,6 +221,19 @@ export function NotesPage() {
     isOpen: historyOpen && Boolean(selectedNote),
     onClose: () => setHistoryOpen(false),
   });
+
+  // createNote 직후에는 live query가 아직 새 노트를 반영하지 않았을 수 있다.
+  // 실제 목록에 나타난 시점에 선택해야 존재하지 않는 선택으로 정리되는 경쟁 조건을 피할 수 있다.
+  useEffect(() => {
+    if (!pendingEditNoteId || !notes.some((note) => note.id === pendingEditNoteId)) {
+      return;
+    }
+    setFocusedNoteId(pendingEditNoteId);
+    setEditorEntryMode("edit");
+    setEditorEntryRevision((revision) => revision + 1);
+    setSelectedNoteId(pendingEditNoteId);
+    setPendingEditNoteId(null);
+  }, [notes, pendingEditNoteId]);
 
   // 선택 노트가 바뀔 때만 draft 로드 (live query 지연 대응)
   useEffect(() => {
@@ -594,6 +609,7 @@ export function NotesPage() {
   }, [selectedNote, aiProposal, compareVersion, isSaving]);
 
   async function handleCreateNote() {
+    if (isCreatingNote) return;
     const base: NoteFormInput = {
       title: "새 노트",
       content: "",
@@ -611,8 +627,21 @@ export function NotesPage() {
     } else if (filterNode.kind === "uncategorized") {
       base.projectId = filterNode.projectId;
     }
-    const id = await createNote(base);
-    editNoteInStack(id);
+    setIsCreatingNote(true);
+    setErrorMessage("");
+    try {
+      const id = await createNote(base);
+      setSearch("");
+      if (filterNode.kind === "archived" || filterNode.kind === "pinned" || filterNode.kind === "checklist") {
+        setFilterNode({ kind: "all" });
+      }
+      setPendingEditNoteId(id);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "노트를 만들지 못했습니다.");
+      showToast("노트를 만들지 못했습니다.");
+    } finally {
+      setIsCreatingNote(false);
+    }
   }
 
   async function handleSave(editType: NoteVersionEditType = "manual") {
@@ -1206,8 +1235,8 @@ export function NotesPage() {
             placeholder={`노트 검색 · ${listTitle} ${filteredNotes.length}개`}
             aria-label="노트 검색"
           />
-          <button type="button" className="btn btn-primary btn-compact" onClick={() => void handleCreateNote()}>
-            + 새 노트
+          <button type="button" className="btn btn-primary btn-compact" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
+            {isCreatingNote ? "생성 중" : "+ 새 노트"}
           </button>
         </div>
       ) : (
@@ -1221,8 +1250,8 @@ export function NotesPage() {
             placeholder="노트 검색"
             aria-label="노트 검색"
           />
-          <button type="button" className="btn btn-primary btn-compact" onClick={() => void handleCreateNote()}>
-            + 새 노트
+          <button type="button" className="btn btn-primary btn-compact" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
+            {isCreatingNote ? "생성 중" : "+ 새 노트"}
           </button>
           <button
             type="button"
@@ -1558,8 +1587,8 @@ export function NotesPage() {
         ) : filterNode.kind !== "checklist" ? (
           <div className="notes-empty-detail">
             <p className="empty-text">노트를 선택하거나 새 노트를 만들어 시작하세요.</p>
-            <button type="button" className="btn btn-primary notes-empty-action" onClick={() => void handleCreateNote()}>
-              + 새 노트
+            <button type="button" className="btn btn-primary notes-empty-action" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
+              {isCreatingNote ? "생성 중" : "+ 새 노트"}
             </button>
           </div>
         ) : null}
