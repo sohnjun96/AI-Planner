@@ -6173,6 +6173,84 @@ textarea:focus-visible,
   flex: 1 1 auto;
 }
 
+.settings-model-picker-card {
+  width: min(680px, 94vw);
+}
+
+.settings-model-picker-body {
+  gap: 14px;
+}
+
+.settings-model-picker-search {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.settings-model-picker-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(52vh, 480px);
+  margin: 0;
+  padding: 2px 4px 2px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.settings-model-picker-option {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  background: var(--canvas);
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-model-picker-option:hover:not(:disabled),
+.settings-model-picker-option:focus-visible {
+  border-color: rgba(37, 99, 235, 0.38);
+  background: #f8fbff;
+}
+
+.settings-model-picker-option.selected {
+  border-color: rgba(37, 99, 235, 0.46);
+  background: var(--status-not-done-surface);
+}
+
+.settings-model-picker-option:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.settings-model-picker-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.settings-model-picker-option > small {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-model-picker-card .settings-ai-modal-footer .description-text {
+  margin: 0;
+}
+
 @media (max-width: 640px) {
   .settings-ai-management-row {
     grid-template-columns: 1fr;
@@ -6215,6 +6293,10 @@ textarea:focus-visible,
 
   .settings-ai-modal-footer .btn {
     flex: 1 1 140px;
+  }
+
+  .settings-model-picker-list {
+    max-height: 48dvh;
   }
 }
 

@@ -261,6 +261,10 @@ export function SettingsPage() {
   const [llmModelListStatus, setLlmModelListStatus] = useState<LlmModelListStatus>("idle");
   const [llmModelListMessage, setLlmModelListMessage] = useState("");
   const [availableLlmModels, setAvailableLlmModels] = useState<string[]>([]);
+  const [isLlmModelPickerOpen, setIsLlmModelPickerOpen] = useState(false);
+  const [llmModelSearch, setLlmModelSearch] = useState("");
+  const [llmModelPickerError, setLlmModelPickerError] = useState("");
+  const [pendingLlmModelSelection, setPendingLlmModelSelection] = useState("");
   const [isApiKeyStorageBusy, setIsApiKeyStorageBusy] = useState(false);
   const [isApiKeyStorageDirty, setIsApiKeyStorageDirty] = useState(false);
   const [noteAiActionsDraft, setNoteAiActionsDraft] = useState<NoteAiAction[]>(
@@ -288,6 +292,14 @@ export function SettingsPage() {
     }
   }
 
+  function closeLlmModelPicker() {
+    if (!pendingLlmModelSelection) {
+      setIsLlmModelPickerOpen(false);
+      setLlmModelSearch("");
+      setLlmModelPickerError("");
+    }
+  }
+
   const importDialogRef = useDialogFocus<HTMLElement>({
     isOpen: Boolean(pendingImport),
     onClose: closePendingImport,
@@ -300,12 +312,21 @@ export function SettingsPage() {
     isOpen: activeSection === "ai" && activeAiSettingsDialog !== null,
     onClose: () => setActiveAiSettingsDialog(null),
   });
+  const llmModelPickerDialogRef = useDialogFocus<HTMLElement>({
+    isOpen: activeSection === "ai" && isLlmModelPickerOpen,
+    onClose: closeLlmModelPicker,
+  });
 
   const sortedTypes = useMemo(() => [...taskTypes].sort((a, b) => a.order - b.order), [taskTypes]);
   const aiContextMaxLength = setting.aiContextMaxLength ?? DEFAULT_AI_CONTEXT_MAX_LENGTH;
   const userContextUsedLength = Math.min(userContextDraft.length, aiContextMaxLength);
   const savedUserContextLength = Math.min(userContext.markdown.length, aiContextMaxLength);
   const isGemma4ThinkingAvailable = isGemma4ThinkingModel(llmModelDraft);
+  const filteredLlmModels = useMemo(() => {
+    const query = llmModelSearch.trim().toLocaleLowerCase("en-US");
+    if (!query) return availableLlmModels;
+    return availableLlmModels.filter((model) => model.toLocaleLowerCase("en-US").includes(query));
+  }, [availableLlmModels, llmModelSearch]);
   const savedNoteAiActions = setting.noteAiActions ?? DEFAULT_NOTE_AI_ACTIONS;
   const savedActionPreview = savedNoteAiActions
     .slice(0, 3)
@@ -339,6 +360,7 @@ export function SettingsPage() {
   useEffect(() => {
     if (activeSection !== "ai") {
       setActiveAiSettingsDialog(null);
+      setIsLlmModelPickerOpen(false);
     }
   }, [activeSection]);
 
@@ -364,6 +386,9 @@ export function SettingsPage() {
     setAvailableLlmModels([]);
     setLlmModelListStatus("idle");
     setLlmModelListMessage("");
+    setIsLlmModelPickerOpen(false);
+    setLlmModelSearch("");
+    setLlmModelPickerError("");
   }, [setting.llmApiKey, setting.llmEndpoint]);
 
   useEffect(() => {
@@ -736,6 +761,9 @@ export function SettingsPage() {
     if (llmModelListAbortRef.current) return;
     const controller = new AbortController();
     llmModelListAbortRef.current = controller;
+    setIsLlmModelPickerOpen(true);
+    setLlmModelSearch("");
+    setLlmModelPickerError("");
     setLlmModelListStatus("loading");
     setLlmModelListMessage("사용 가능한 모델 목록을 불러오는 중입니다.");
 
@@ -768,6 +796,30 @@ export function SettingsPage() {
       if (llmModelListAbortRef.current === controller) {
         llmModelListAbortRef.current = null;
       }
+    }
+  }
+
+  async function handleSelectLlmModel(model: string) {
+    if (pendingLlmModelSelection || !availableLlmModels.includes(model)) return;
+
+    setPendingLlmModelSelection(model);
+    setLlmModelPickerError("");
+    setLlmModelInputError("");
+    try {
+      await updateSetting({ llmModel: model });
+      setLlmModelDraft(model);
+      setLlmModelListStatus("ok");
+      setLlmModelListMessage(`${model} 모델을 선택했습니다.`);
+      setIsLlmModelPickerOpen(false);
+      setLlmModelSearch("");
+    } catch (modelSelectionError) {
+      const selectionError = modelSelectionError instanceof Error
+        ? modelSelectionError.message
+        : "LLM 모델명을 저장하지 못했습니다.";
+      setLlmModelPickerError(selectionError);
+      setLlmModelInputError(selectionError);
+    } finally {
+      setPendingLlmModelSelection("");
     }
   }
 
@@ -1264,7 +1316,6 @@ export function SettingsPage() {
               LLM 모델명
               <input
                 type="text"
-                list="llm-model-options"
                 value={llmModelDraft}
                 onChange={(event) => {
                   setLlmModelDraft(event.currentTarget.value);
@@ -1281,9 +1332,6 @@ export function SettingsPage() {
                 aria-invalid={Boolean(llmModelInputError)}
                 aria-describedby="llm-model-help"
               />
-              <datalist id="llm-model-options">
-                {availableLlmModels.map((model) => <option key={model} value={model} />)}
-              </datalist>
               <small id="llm-model-help" className="settings-field-help">
                 서버 목록에서 선택하거나 모델 식별자를 직접 입력할 수 있습니다.
               </small>
@@ -1729,6 +1777,127 @@ export function SettingsPage() {
         </section>
         ) : null}
       </div>
+
+      {activeSection === "ai" && isLlmModelPickerOpen ? (
+        <div className="modal-backdrop" onClick={closeLlmModelPicker}>
+          <section
+            ref={llmModelPickerDialogRef}
+            className="modal-card panel settings-ai-modal-card settings-model-picker-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="llm-model-picker-title"
+            aria-describedby="llm-model-picker-description"
+            aria-busy={llmModelListStatus === "loading"}
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header settings-ai-modal-header">
+              <div>
+                <p className="eyebrow">AVAILABLE MODELS</p>
+                <h2 id="llm-model-picker-title">LLM 모델 선택</h2>
+                <small id="llm-model-picker-description">
+                  서버에서 불러온 모델을 선택하면 AI 설정에 바로 저장됩니다.
+                </small>
+              </div>
+              <button
+                type="button"
+                className="btn btn-soft"
+                data-dialog-initial-focus={llmModelListStatus !== "ok" ? true : undefined}
+                disabled={Boolean(pendingLlmModelSelection)}
+                onClick={closeLlmModelPicker}
+              >
+                닫기
+              </button>
+            </header>
+
+            <div className="settings-ai-modal-body settings-model-picker-body">
+              {llmModelListStatus === "ok" && availableLlmModels.length > 0 ? (
+                <label className="settings-model-picker-search">
+                  모델 검색
+                  <input
+                    type="search"
+                    value={llmModelSearch}
+                    maxLength={LLM_MAX_MODEL_ID_LENGTH}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="모델명으로 검색"
+                    data-dialog-initial-focus
+                    onChange={(event) => setLlmModelSearch(event.currentTarget.value)}
+                  />
+                </label>
+              ) : null}
+
+              <p
+                className={`endpoint-status ${llmModelListStatus === "loading" ? "checking" : llmModelListStatus}`}
+                role={llmModelListStatus === "error" ? "alert" : "status"}
+                aria-live={llmModelListStatus === "error" ? "assertive" : "polite"}
+              >
+                {llmModelListMessage}
+              </p>
+
+              {llmModelPickerError ? (
+                <p className="error-text" role="alert">{llmModelPickerError}</p>
+              ) : null}
+
+              {llmModelListStatus === "ok" && filteredLlmModels.length > 0 ? (
+                <ul className="settings-model-picker-list" aria-label="사용 가능한 LLM 모델">
+                  {filteredLlmModels.map((model) => {
+                    const isSelected = model === llmModelDraft.trim();
+                    const isSaving = model === pendingLlmModelSelection;
+                    return (
+                      <li key={model}>
+                        <button
+                          type="button"
+                          className={`settings-model-picker-option ${isSelected ? "selected" : ""}`}
+                          aria-pressed={isSelected}
+                          disabled={Boolean(pendingLlmModelSelection)}
+                          onClick={() => void handleSelectLlmModel(model)}
+                        >
+                          <span>{model}</span>
+                          <small>{isSaving ? "저장 중" : isSelected ? "현재 선택" : "선택"}</small>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+
+              {llmModelListStatus === "ok" && availableLlmModels.length > 0 && filteredLlmModels.length === 0 ? (
+                <p className="empty-text">검색 조건에 맞는 모델이 없습니다.</p>
+              ) : null}
+
+              {llmModelListStatus === "ok" && availableLlmModels.length === 0 ? (
+                <p className="empty-text">서버에서 조회된 모델이 없습니다. 모델명은 입력란에 직접 입력해 주세요.</p>
+              ) : null}
+
+              {llmModelListStatus === "error" ? (
+                <div className="button-row compact">
+                  <button type="button" className="btn btn-soft" onClick={() => void handleLoadLlmModels()}>
+                    다시 불러오기
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="settings-ai-modal-footer">
+              <span className="description-text">
+                {availableLlmModels.length > 0
+                  ? `전체 ${availableLlmModels.length}개${llmModelSearch.trim() ? ` · 검색 결과 ${filteredLlmModels.length}개` : ""}`
+                  : "모델을 불러오면 여기에 표시됩니다."}
+              </span>
+              <span className="settings-ai-modal-footer-spacer" />
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={Boolean(pendingLlmModelSelection)}
+                onClick={closeLlmModelPicker}
+              >
+                닫기
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       {activeSection === "ai" && activeAiSettingsDialog ? (
         <div className="modal-backdrop" onClick={() => setActiveAiSettingsDialog(null)}>
