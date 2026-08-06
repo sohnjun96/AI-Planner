@@ -289,6 +289,7 @@ async function readSseStream(
         const data = trimmed.slice(5).trim();
         if (!data) continue;
         if (data === "[DONE]") {
+          completed = true;
           break stream;
         }
         try {
@@ -446,7 +447,10 @@ export async function requestLlmResponse(params: {
   );
   try {
     const apiKey = validateApiKey(params.apiKey);
-    const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: useStream ? "text/event-stream, application/json" : "application/json",
+    };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const messages = validateMessages(params.messages);
     const response = await fetch(validateLlmEndpoint(params.endpoint), {

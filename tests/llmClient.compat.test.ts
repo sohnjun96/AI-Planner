@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { analyzeLunchMateAliases } from "../src/agent/lunchMateAgent";
 import { listLlmModels, parseLlmModelList, requestLlmResponse } from "../src/agent/llmClient";
 import { LLM_REQUEST_TIMEOUT_MS } from "../src/constants";
 
@@ -66,9 +67,11 @@ globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: numbe
   scheduledDelays.push(timeout ?? 0);
   return originalSetTimeout(handler, timeout, ...args);
 }) as typeof setTimeout;
-globalThis.fetch = (async () => jsonResponse({
-  choices: [{ message: { content: "ok" } }],
-})) as typeof fetch;
+globalThis.fetch = (async (_input, init) => {
+  assert.equal((init?.headers as Record<string, string>).Accept, "application/json");
+  assert.equal((JSON.parse(String(init?.body)) as { stream?: unknown }).stream, false);
+  return jsonResponse({ choices: [{ message: { content: "ok" } }] });
+}) as typeof fetch;
 try {
   assert.equal(
     await requestLlmResponse({
@@ -84,6 +87,64 @@ try {
 }
 assert.ok(scheduledDelays.length >= 3);
 assert.ok(scheduledDelays.every((delay) => delay === LLM_REQUEST_TIMEOUT_MS));
+
+const streamedGroups = JSON.stringify({
+  groups: [
+    { displayName: "kim-full", aliases: ["kim", "kim-full"], confidence: 0.95 },
+    { displayName: "lee", aliases: ["lee"], confidence: 1 },
+  ],
+});
+const encodedStream = new TextEncoder().encode(
+  `data: ${JSON.stringify({ choices: [{ delta: { content: streamedGroups } }] })}\n\ndata: [DONE]\n\n`,
+);
+let streamCanceled = false;
+globalThis.fetch = (async (input, init) => {
+  assert.equal(String(input), INTERNAL_CHAT_ENDPOINT);
+  assert.equal(init?.method, "POST");
+  const headers = init?.headers as Record<string, string>;
+  assert.equal(headers.Accept, "text/event-stream, application/json");
+  const requestBody = JSON.parse(String(init?.body)) as {
+    stream?: unknown;
+    messages?: Array<{ role?: unknown; content?: unknown }>;
+  };
+  assert.equal(requestBody.stream, true);
+  assert.deepEqual(JSON.parse(String(requestBody.messages?.[1]?.content)), {
+    candidates: [
+      { name: "kim", count: 2 },
+      { name: "kim-full", count: 3 },
+      { name: "lee", count: 1 },
+    ],
+  });
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encodedStream);
+    },
+    cancel() {
+      streamCanceled = true;
+    },
+  }), {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}) as typeof fetch;
+
+assert.deepEqual(
+  await analyzeLunchMateAliases({
+    candidates: [
+      { name: "kim", count: 2 },
+      { name: "kim-full", count: 3 },
+      { name: "lee", count: 1 },
+    ],
+    endpoint: INTERNAL_CHAT_ENDPOINT,
+    apiKey: "test-key",
+    model: "internal-model",
+  }),
+  [
+    { displayName: "kim-full", aliases: ["kim", "kim-full"], count: 5, confidence: 0.95 },
+    { displayName: "lee", aliases: ["lee"], count: 1, confidence: 1 },
+  ],
+);
+assert.equal(streamCanceled, false);
 
 const canceledController = new AbortController();
 canceledController.abort();
