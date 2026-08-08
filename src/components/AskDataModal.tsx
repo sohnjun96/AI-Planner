@@ -6,6 +6,7 @@ import { runQaAgent, type QaReference } from "../agent/qaAgent";
 import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 interface AskDataModalProps {
   onClose: () => void;
@@ -97,7 +98,7 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <ModalBackdrop className="modal-backdrop" onRequestClose={onClose}>
       <section
         ref={dialogRef}
         className="modal-card ask-data-modal"
@@ -185,6 +186,6 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
           {!isRunning && trace ? <p className="ai-trace-line">🔎 {trace}</p> : null}
         </div>
       </section>
-    </div>
+    </ModalBackdrop>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Project, Task, TaskStatus, TaskType } from "../models";
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 interface ScheduleReminderModalProps {
   task: Task;
@@ -66,7 +67,10 @@ export function ScheduleReminderModal({
   }
 
   return (
-    <div className="reminder-review-backdrop" onClick={() => !isSubmitting && onClose()}>
+    <ModalBackdrop
+      className="reminder-review-backdrop"
+      onRequestClose={() => !isSubmitting && onClose()}
+    >
       <section
         ref={dialogRef}
         className="reminder-review-modal"
@@ -117,6 +121,6 @@ export function ScheduleReminderModal({
           </button>
         </footer>
       </section>
-    </div>
+    </ModalBackdrop>
   );
 }

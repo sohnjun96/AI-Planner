@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NOTE_STATUS_LABELS } from "../constants";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import type { NoteFormInput, NoteStatus, Project, ProjectSubcategory } from "../models";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 interface NoteMetaModalProps {
   draft: NoteFormInput;
@@ -46,7 +47,7 @@ export function NoteMetaModal({ draft, projects, subcategories, onApply, onClose
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <ModalBackdrop className="modal-backdrop" onRequestClose={onClose}>
       <section
         ref={dialogRef}
         className="modal-card note-meta-modal"
@@ -153,6 +154,6 @@ export function NoteMetaModal({ draft, projects, subcategories, onApply, onClose
           </button>
         </div>
       </section>
-    </div>
+    </ModalBackdrop>
   );
 }

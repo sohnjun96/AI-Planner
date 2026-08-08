@@ -1,6 +1,7 @@
-import { useId, useRef, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 interface TaskModalProps {
   title: string;
@@ -12,7 +13,6 @@ interface TaskModalProps {
 
 export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false, isBusy = false }: TaskModalProps) {
   const titleId = useId();
-  const backdropPressStartedRef = useRef(false);
 
   function requestClose() {
     const activeForm = document.querySelector<HTMLFormElement>(".task-modal-card .task-form");
@@ -30,26 +30,9 @@ export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false
   const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose: requestClose });
 
   return createPortal(
-    <div
+    <ModalBackdrop
       className="modal-backdrop task-modal-backdrop"
-      onPointerDown={(event) => {
-        backdropPressStartedRef.current =
-          event.isPrimary && event.button === 0 && event.target === event.currentTarget;
-      }}
-      onPointerUp={(event) => {
-        const shouldClose =
-          backdropPressStartedRef.current &&
-          event.isPrimary &&
-          event.button === 0 &&
-          event.target === event.currentTarget;
-        backdropPressStartedRef.current = false;
-        if (shouldClose) {
-          requestClose();
-        }
-      }}
-      onPointerCancel={() => {
-        backdropPressStartedRef.current = false;
-      }}
+      onRequestClose={requestClose}
     >
       <section
         ref={dialogRef}
@@ -76,7 +59,7 @@ export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false
         </header>
         <div className="task-modal-body">{children}</div>
       </section>
-    </div>,
+    </ModalBackdrop>,
     document.body,
   );
 }

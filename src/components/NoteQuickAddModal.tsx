@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 interface NoteQuickAddModalProps {
   onCreate: (content: string) => Promise<void>;
@@ -31,7 +32,7 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <ModalBackdrop className="modal-backdrop" onRequestClose={onClose}>
       <section
         ref={dialogRef}
         className="modal-card note-quick-add-card"
@@ -77,6 +78,6 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
           </button>
         </div>
       </section>
-    </div>
+    </ModalBackdrop>
   );
 }

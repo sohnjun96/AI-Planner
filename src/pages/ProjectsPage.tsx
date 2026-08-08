@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useSearchParams } from "../routing";
 import { ColorSelector } from "../components/ColorSelector";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
+import { ModalBackdrop } from "../components/ModalBackdrop";
 import { TaskForm, type TaskFormInteractionState } from "../components/TaskForm";
 import { TaskItem } from "../components/TaskItem";
 import { TaskModal } from "../components/TaskModal";
@@ -1038,7 +1039,11 @@ export function ProjectsPage() {
       </section>
 
       {projectSettingsModal ? (
-        <div ref={projectSettingsDialogRef} className="modal-backdrop" onClick={closeProjectSettings}>
+        <ModalBackdrop
+          ref={projectSettingsDialogRef}
+          className="modal-backdrop"
+          onRequestClose={closeProjectSettings}
+        >
           <div onClick={(event) => event.stopPropagation()}>
             <ProjectEditorPanel
               key={projectSettingsModal.mode === "create" ? "new-project" : editingProject?.id ?? "project"}
@@ -1061,7 +1066,7 @@ export function ProjectsPage() {
               onStateChange={setProjectFormInteraction}
             />
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {activeTaskModalState ? (

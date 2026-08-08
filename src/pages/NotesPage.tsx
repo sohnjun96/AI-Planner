@@ -2,6 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, ty
 import { useNavigate } from "../routing";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { ModalBackdrop } from "../components/ModalBackdrop";
 import { NoteCard } from "../components/NoteCard";
 import { NoteConnections } from "../components/NoteConnections";
 import { NoteEditor, type NoteEditorOverlay } from "../components/NoteEditor";
@@ -1614,7 +1615,7 @@ export function NotesPage() {
       ) : null}
 
       {historyOpen && selectedNote ? (
-        <div className="modal-backdrop" onClick={() => setHistoryOpen(false)}>
+        <ModalBackdrop className="modal-backdrop" onRequestClose={() => setHistoryOpen(false)}>
           <div
             ref={historyDialogRef}
             className="modal-card note-history-modal"
@@ -1635,7 +1636,7 @@ export function NotesPage() {
               onClose={() => setHistoryOpen(false)}
             />
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {aiMenu ? (

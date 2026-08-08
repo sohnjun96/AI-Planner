@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { NoteActionItem } from "../agent/notesAgent";
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 export interface ConfirmedAction {
   title: string;
@@ -70,7 +71,7 @@ export function NoteActionModal({ items, isBusy, onConfirm, onClose }: NoteActio
   const selectedCount = rows.filter((row) => row.checked).length;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <ModalBackdrop className="modal-backdrop" onRequestClose={onClose}>
       <section
         ref={dialogRef}
         className="modal-card note-action-modal"
@@ -132,6 +133,6 @@ export function NoteActionModal({ items, isBusy, onConfirm, onClose }: NoteActio
           </button>
         </div>
       </section>
-    </div>
+    </ModalBackdrop>
   );
 }

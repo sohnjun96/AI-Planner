@@ -1,4 +1,5 @@
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 interface HelpModalProps {
   onClose: () => void;
@@ -42,7 +43,7 @@ export function HelpModal({ onClose }: HelpModalProps) {
   const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose });
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <ModalBackdrop className="modal-backdrop" onRequestClose={onClose}>
       <section
         ref={dialogRef}
         className="modal-card help-modal-card"
@@ -79,6 +80,6 @@ export function HelpModal({ onClose }: HelpModalProps) {
           ))}
         </div>
       </section>
-    </div>
+    </ModalBackdrop>
   );
 }

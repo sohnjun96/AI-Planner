@@ -10,6 +10,7 @@ import { showToast } from "../utils/toast";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
 import { AskDataModal } from "./AskDataModal";
 import { HelpModal } from "./HelpModal";
+import { ModalBackdrop } from "./ModalBackdrop";
 import { NoteQuickAddModal } from "./NoteQuickAddModal";
 import { ToastHost } from "./ToastHost";
 import { WeeklyBackupReminder } from "./WeeklyBackupReminder";
@@ -334,10 +335,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <footer className="app-copyright">(c) 2026. 손준혁 All rights reserved.</footer>
 
-      <div
+      <ModalBackdrop
         className="modal-backdrop"
         hidden={!isAiAddOpen}
-        onClick={closeAiScheduleSession}
+        onRequestClose={closeAiScheduleSession}
       >
           <section
             ref={aiDialogRef}
@@ -397,7 +398,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               }}
             />
           </section>
-      </div>
+      </ModalBackdrop>
 
       {isNoteAddOpen ? (
         <NoteQuickAddModal onCreate={handleQuickCreateNote} onClose={() => setIsNoteAddOpen(false)} />

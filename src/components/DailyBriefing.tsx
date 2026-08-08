@@ -9,6 +9,7 @@ import { buildTaskConflictMap } from "../utils/taskConflicts";
 import { formatDateTime, getDateKey, toIsoNow } from "../utils/date";
 import { isTaskCanceled, isTaskDone } from "../utils/taskStatus";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 function toSnippet(content: string): string {
   return content
@@ -186,7 +187,7 @@ export function DailyBriefing() {
       </button>
 
       {isOpen ? (
-        <div className="modal-backdrop" onClick={closeModal}>
+        <ModalBackdrop className="modal-backdrop" onRequestClose={closeModal}>
           <section
             ref={dialogRef}
             className="modal-card briefing-modal-card"
@@ -237,7 +238,7 @@ export function DailyBriefing() {
               {savedNoteId ? <span className="success-text">노트로 저장했습니다.</span> : null}
             </div>
           </section>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );

@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorSelector } from "../components/ColorSelector";
+import { ModalBackdrop } from "../components/ModalBackdrop";
 import { useSearchParams } from "../routing";
 import {
   BUILD_PROFILE_LABEL,
@@ -1779,7 +1780,7 @@ export function SettingsPage() {
       </div>
 
       {activeSection === "ai" && isLlmModelPickerOpen ? (
-        <div className="modal-backdrop" onClick={closeLlmModelPicker}>
+        <ModalBackdrop className="modal-backdrop" onRequestClose={closeLlmModelPicker}>
           <section
             ref={llmModelPickerDialogRef}
             className="modal-card panel settings-ai-modal-card settings-model-picker-card"
@@ -1896,11 +1897,11 @@ export function SettingsPage() {
               </button>
             </footer>
           </section>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {activeSection === "ai" && activeAiSettingsDialog ? (
-        <div className="modal-backdrop" onClick={() => setActiveAiSettingsDialog(null)}>
+        <ModalBackdrop className="modal-backdrop" onRequestClose={() => setActiveAiSettingsDialog(null)}>
           <section
             ref={aiSettingsDialogRef}
             className={`modal-card panel settings-ai-modal-card ${activeAiSettingsDialog === "actions" ? "wide" : ""}`}
@@ -2025,11 +2026,11 @@ export function SettingsPage() {
               ) : null}
             </footer>
           </section>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {pendingImport ? (
-        <div className="modal-backdrop" onClick={closePendingImport}>
+        <ModalBackdrop className="modal-backdrop" onRequestClose={closePendingImport}>
           <section
             ref={importDialogRef}
             className="modal-card panel settings-backup-modal-card"
@@ -2098,11 +2099,11 @@ export function SettingsPage() {
               </button>
             </div>
           </section>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {isBackupListOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsBackupListOpen(false)}>
+        <ModalBackdrop className="modal-backdrop" onRequestClose={() => setIsBackupListOpen(false)}>
           <section
             ref={backupListDialogRef}
             className="modal-card panel settings-backup-modal-card"
@@ -2167,7 +2168,7 @@ export function SettingsPage() {
               </ul>
             )}
           </section>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </div>
   );
