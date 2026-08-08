@@ -42,6 +42,7 @@ import type {
   UserContextRule,
   UserContextSuggestion,
 } from "../models";
+import { areAutoBackupEntriesEqual } from "../utils/autoBackupIntegrity";
 import { toIsoNow } from "../utils/date";
 import {
   BACKUP_VERSION,
@@ -751,7 +752,10 @@ async function writeStoredAutoBackups(entries: StoredAutoBackupEntry[]): Promise
   if (storage) {
     await writeChromeStorage(storage, { [AUTO_BACKUPS_STORAGE_KEY]: safeEntries });
     const stored = await readChromeStorage(storage, AUTO_BACKUPS_STORAGE_KEY);
-    if (JSON.stringify(stored[AUTO_BACKUPS_STORAGE_KEY] ?? []) !== expected) {
+    const storedEntries = Array.isArray(stored[AUTO_BACKUPS_STORAGE_KEY])
+      ? limitStoredAutoBackups(stored[AUTO_BACKUPS_STORAGE_KEY])
+      : [];
+    if (!areAutoBackupEntriesEqual(safeEntries, storedEntries)) {
       throw new Error("자동 백업 저장 검증에 실패했습니다.");
     }
     return;
