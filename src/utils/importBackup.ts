@@ -255,6 +255,7 @@ function parseNote(value: unknown, index: number): Note {
     projectId: id(item.projectId, `notes[${index}].projectId`), subcategoryId: item.subcategoryId === undefined ? undefined : id(item.subcategoryId, `notes[${index}].subcategoryId`),
     tags: Array.from(new Set(tags)), status: oneOf(item.status, `notes[${index}].status`, ["draft", "active", "archived"]), isPinned: bool(item.isPinned, `notes[${index}].isPinned`),
     linkedTaskIds: stringIds(item.linkedTaskIds, `notes[${index}].linkedTaskIds`), aiClassifiedAt: iso(item.aiClassifiedAt, `notes[${index}].aiClassifiedAt`, true),
+    sourceNoteIds: item.sourceNoteIds === undefined ? [] : stringIds(item.sourceNoteIds, `notes[${index}].sourceNoteIds`),
     sortOrder: integer(item.sortOrder, `notes[${index}].sortOrder`, 0, 1_000_000, true), createdAt: iso(item.createdAt, `notes[${index}].createdAt`)!, updatedAt: iso(item.updatedAt, `notes[${index}].updatedAt`)!,
   };
 }
@@ -320,7 +321,15 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
     if (item.endAt && new Date(item.endAt).getTime() < new Date(item.startAt).getTime()) fail(`task ${item.id} 종료 시간이 시작 시간보다 빠릅니다.`);
   });
   projectSubcategories.forEach((item) => requireReference(projectIds, item.projectId, `subcategory ${item.id}.projectId`));
-  notes.forEach((item) => { requireReference(projectIds, item.projectId, `note ${item.id}.projectId`); requireReference(subcategoryIds, item.subcategoryId, `note ${item.id}.subcategoryId`); item.linkedTaskIds.forEach((taskId) => requireReference(taskIds, taskId, `note ${item.id}.linkedTaskIds`)); });
+  notes.forEach((item) => {
+    requireReference(projectIds, item.projectId, `note ${item.id}.projectId`);
+    requireReference(subcategoryIds, item.subcategoryId, `note ${item.id}.subcategoryId`);
+    item.linkedTaskIds.forEach((taskId) => requireReference(taskIds, taskId, `note ${item.id}.linkedTaskIds`));
+    item.sourceNoteIds?.forEach((sourceNoteId) => {
+      if (sourceNoteId === item.id) fail(`note ${item.id}.sourceNoteIds에 자기 자신을 참조할 수 없습니다.`);
+      requireReference(noteIds, sourceNoteId, `note ${item.id}.sourceNoteIds`);
+    });
+  });
   noteVersions.forEach((item) => requireReference(noteIds, item.noteId, `noteVersion ${item.id}.noteId`));
   const noteTaskPairs = new Set<string>();
   noteTaskLinks.forEach((item) => {

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { NOTE_STATUS_LABELS } from "../constants";
 import type { NoteFormInput } from "../models";
-import { MarkdownRenderer } from "./MarkdownRenderer";
+import { LiveMarkdownEditor } from "./LiveMarkdownEditor";
+import { MarkdownComposer } from "./MarkdownComposer";
 import { NoteInlineDiff } from "./NoteInlineDiff";
 
 export interface NoteEditorOverlay {
@@ -26,18 +27,15 @@ interface NoteEditorProps {
   onOpenAiMenu: (event: MouseEvent<HTMLElement>) => void;
   onChangeTitle: (value: string) => void;
   onChangeContent: (value: string) => void;
-  onToggleChecklist: (lineIndex: number, checked: boolean) => void;
   onSave: () => void;
   onOpenMeta: () => void;
-  onOpenHistory: () => void;
-  onDelete: () => void;
+  onOpenMoreMenu: (event: MouseEvent<HTMLElement>) => void;
   onContentContextMenu: (event: MouseEvent<HTMLElement>) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   isSaving: boolean;
   isDirty: boolean;
   savedMessage?: string;
   errorMessage?: string;
-  historyCount: number;
   initialMode?: "edit" | "read";
 }
 
@@ -54,18 +52,15 @@ export function NoteEditor({
   onOpenAiMenu,
   onChangeTitle,
   onChangeContent,
-  onToggleChecklist,
   onSave,
   onOpenMeta,
-  onOpenHistory,
-  onDelete,
+  onOpenMoreMenu,
   onContentContextMenu,
   textareaRef,
   isSaving,
   isDirty,
   savedMessage,
   errorMessage,
-  historyCount,
   initialMode = "read",
 }: NoteEditorProps) {
   const [mode, setMode] = useState<"edit" | "read">(initialMode);
@@ -85,7 +80,7 @@ export function NoteEditor({
   }, [onSave]);
 
   return (
-    <section className="note-editor-surface" ref={containerRef}>
+    <section className={`note-editor-surface note-editor-${mode}`} ref={containerRef}>
       <header className="note-editor-bar">
         <input
           className="note-title-input"
@@ -95,14 +90,23 @@ export function NoteEditor({
           aria-label="노트 제목"
         />
         <div className="note-editor-bar-actions">
-          <div className="note-mode-toggle" role="group" aria-label="보기 모드">
+          {isDirty && !isSaving ? (
+            <button type="button" className="note-save-action" onClick={onSave} title="지금 저장 (Ctrl+S)">
+              저장
+            </button>
+          ) : (
+            <span className="note-save-status" aria-live="polite">
+              {isSaving ? "저장 중…" : "✓ 저장됨"}
+            </span>
+          )}
+          <div className="note-mode-toggle" role="group" aria-label="편집 방식">
             <button
               type="button"
               className={mode === "edit" ? "active" : ""}
               aria-pressed={mode === "edit"}
               onClick={() => setMode("edit")}
             >
-              편집
+              원문
             </button>
             <button
               type="button"
@@ -110,16 +114,25 @@ export function NoteEditor({
               aria-pressed={mode === "read"}
               onClick={() => setMode("read")}
             >
-              읽기
+              라이브
             </button>
           </div>
-          <button type="button" className="btn btn-primary" disabled={isSaving || !isDirty} onClick={onSave} title="Ctrl+S">
-            {isSaving ? "저장 중" : isDirty ? "저장" : "저장됨"}
+          <button
+            type="button"
+            className="note-ai-button"
+            disabled={!aiEnabled || isAiRunning}
+            onClick={onOpenAiMenu}
+            aria-label="AI 편집"
+          >
+            {isAiRunning ? "AI 처리 중…" : "AI"}
+          </button>
+          <button type="button" className="note-more-button" onClick={onOpenMoreMenu} aria-label="노트 더보기" title="더보기">
+            ⋯
           </button>
         </div>
       </header>
 
-      {/* 분류 칩(왼쪽) + 도구(오른쪽)를 한 줄로 — 편집기 상단을 차분하게 유지 */}
+      {/* 분류 정보는 제목 바로 아래에 두고, 보조 작업은 더보기 메뉴로 모은다. */}
       <div className="note-toolbar">
         <button type="button" className="note-meta-chips" onClick={onOpenMeta} aria-label="분류 및 태그 수정">
           <span className="note-meta-chip project" style={{ "--note-project-color": projectColor } as React.CSSProperties}>
@@ -133,27 +146,7 @@ export function NoteEditor({
               #{tag}
             </span>
           ))}
-          <span className="note-meta-edit-hint">수정</span>
         </button>
-
-        <div className="note-toolbar-tools">
-          {isAiRunning ? <span className="note-ai-bar-status">AI 처리 중…</span> : null}
-          <button
-            type="button"
-            className="note-ai-button"
-            disabled={!aiEnabled || isAiRunning}
-            onClick={onOpenAiMenu}
-            title="AI 편집 메뉴 (본문 우클릭과 동일)"
-          >
-            ✨ AI
-          </button>
-          <button type="button" className="note-text-button" onClick={onOpenHistory}>
-            이력 {historyCount > 0 ? `(${historyCount})` : ""}
-          </button>
-          <button type="button" className="note-text-button danger" onClick={onDelete}>
-            삭제
-          </button>
-        </div>
       </div>
 
       {overlay ? (
@@ -167,29 +160,20 @@ export function NoteEditor({
           onReject={onRejectOverlay}
         />
       ) : mode === "edit" ? (
-        <textarea
-          ref={textareaRef}
-          className="note-content-textarea"
+        <MarkdownComposer
           value={draft.content}
-          onChange={(event) => onChangeContent(event.target.value)}
+          onChange={onChangeContent}
+          textareaRef={textareaRef}
           onContextMenu={onContentContextMenu}
-          placeholder={"내용을 입력하세요. 우클릭하면 AI 편집 메뉴가 열립니다."}
+          placeholder="내용을 입력하세요."
           rows={18}
         />
       ) : (
-        <div
-          className="note-read-view"
-          onContextMenu={onContentContextMenu}
-          onDoubleClick={() => setMode("edit")}
-          title="더블클릭하면 편집 모드로 전환됩니다"
-        >
-          <button type="button" className="note-read-edit-fab" onClick={() => setMode("edit")} title="편집 (더블클릭)">
-            ✎ 편집
-          </button>
-          <MarkdownRenderer
+        <div className="note-read-view" onContextMenu={onContentContextMenu}>
+          <LiveMarkdownEditor
             content={draft.content}
-            emptyText="작성된 내용이 없습니다. 더블클릭하거나 ‘편집’을 눌러 작성하세요."
-            onChecklistToggle={onToggleChecklist}
+            onChange={onChangeContent}
+            placeholder="내용을 입력하세요."
           />
         </div>
       )}

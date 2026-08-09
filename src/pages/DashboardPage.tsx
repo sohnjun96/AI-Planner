@@ -1391,9 +1391,6 @@ export function DashboardPage() {
           >
             {isTopbarExpanded ? "요약 접기" : "요약 펼치기"}
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => openCreateTask(todayKey)}>
-            일정 추가
-          </button>
         </div>
         <div
           id="dashboard-summary-panel"

@@ -140,12 +140,14 @@ export function AskDataModal({ onClose }: AskDataModalProps) {
               }
             }}
           />
+        </div>
+
+        <div className="ask-submit-row">
+          <span className="ai-composer-kbd">Enter 질문 · Shift+Enter 줄바꿈</span>
           <button type="button" className="btn btn-primary" onClick={() => void handleAsk()} disabled={isRunning || !hasApiConfig || !question.trim()}>
             {isRunning ? "찾는 중…" : "질문"}
           </button>
         </div>
-
-        <span className="ai-composer-kbd">Enter 질문 · Shift+Enter 줄바꿈</span>
 
         {!answer && !isRunning && !error ? (
           <div className="ask-examples">

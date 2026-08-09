@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 
 export interface ContextMenuItem {
   id: string;
@@ -12,6 +13,8 @@ export interface ContextMenuItem {
 interface ContextMenuProps {
   x: number;
   y: number;
+  align?: "start" | "end";
+  anchored?: boolean;
   title?: string;
   items: ContextMenuItem[];
   onClose: () => void;
@@ -20,21 +23,43 @@ interface ContextMenuProps {
 const MENU_WIDTH = 220;
 const MENU_MARGIN = 12;
 
-function getSafePosition(x: number, y: number, width = MENU_WIDTH, height = 0) {
+function getSafePosition(
+  x: number,
+  y: number,
+  width = MENU_WIDTH,
+  height = 0,
+  align: "start" | "end" = "start",
+  anchored = false,
+) {
   const maxX = Math.max(MENU_MARGIN, window.innerWidth - width - MENU_MARGIN);
+  const preferredLeft = align === "end" ? x - width : x;
+  const availableBelow = Math.max(0, window.innerHeight - y - MENU_MARGIN);
+  const availableAbove = Math.max(0, y - MENU_MARGIN);
+
+  if (anchored && height > 0) {
+    const openBelow = availableBelow >= Math.min(height, 240) || availableBelow >= availableAbove;
+    const maxHeight = openBelow ? availableBelow : availableAbove;
+    const visibleHeight = Math.min(height, maxHeight);
+
+    return {
+      left: Math.min(Math.max(MENU_MARGIN, preferredLeft), maxX),
+      top: openBelow ? Math.max(MENU_MARGIN, y) : Math.max(MENU_MARGIN, y - visibleHeight),
+      maxHeight,
+    };
+  }
+
   const maxY = Math.max(MENU_MARGIN, window.innerHeight - height - MENU_MARGIN);
   const preferredTop = height > 0 && y + height > window.innerHeight - MENU_MARGIN ? y - height : y;
 
   return {
-    // The pointer coordinates are relative to the viewport. Convert them to
-    // document coordinates so the menu scrolls together with its page.
-    left: Math.min(Math.max(MENU_MARGIN, x), maxX) + window.scrollX,
-    top: Math.min(Math.max(MENU_MARGIN, preferredTop), maxY) + window.scrollY,
+    left: Math.min(Math.max(MENU_MARGIN, preferredLeft), maxX),
+    top: Math.min(Math.max(MENU_MARGIN, preferredTop), maxY),
+    maxHeight: window.innerHeight - MENU_MARGIN * 2,
   };
 }
 
-export function ContextMenu({ x, y, title, items, onClose }: ContextMenuProps) {
-  const position = getSafePosition(x, y);
+export function ContextMenu({ x, y, align = "start", anchored = false, title, items, onClose }: ContextMenuProps) {
+  const position = getSafePosition(x, y, MENU_WIDTH, 0, align, anchored);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
@@ -45,10 +70,18 @@ export function ContextMenu({ x, y, title, items, onClose }: ContextMenuProps) {
 
     // CSS 진입 애니메이션의 scale 값에 영향을 받지 않는 실제 레이아웃 크기로
     // 화면 가장자리 충돌을 계산한다.
-    const measuredPosition = getSafePosition(x, y, menuElement.offsetWidth, menuElement.offsetHeight);
+    const measuredPosition = getSafePosition(
+      x,
+      y,
+      menuElement.offsetWidth,
+      menuElement.scrollHeight,
+      align,
+      anchored,
+    );
     menuElement.style.left = `${measuredPosition.left}px`;
     menuElement.style.top = `${measuredPosition.top}px`;
-  }, [items.length, title, x, y]);
+    menuElement.style.maxHeight = `${measuredPosition.maxHeight}px`;
+  }, [align, anchored, items.length, title, x, y]);
 
   function getEnabledMenuItems(): HTMLButtonElement[] {
     return Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
@@ -159,14 +192,14 @@ export function ContextMenu({ x, y, title, items, onClose }: ContextMenuProps) {
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       className="context-menu"
       role="menu"
       aria-label={title ? `${title} 작업 메뉴` : "작업 메뉴"}
       tabIndex={-1}
-      style={{ left: position.left, top: position.top }}
+      style={{ left: position.left, top: position.top, maxHeight: position.maxHeight }}
       onKeyDown={handleMenuKeyDown}
       onClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => {
@@ -194,6 +227,7 @@ export function ContextMenu({ x, y, title, items, onClose }: ContextMenuProps) {
           </button>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

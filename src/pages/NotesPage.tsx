@@ -1,7 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate } from "../routing";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
-import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { ModalBackdrop } from "../components/ModalBackdrop";
 import { NoteCard } from "../components/NoteCard";
 import { NoteConnections } from "../components/NoteConnections";
@@ -49,6 +48,7 @@ function noteToInput(note: Note): NoteFormInput {
     tags: [...note.tags],
     status: note.status,
     isPinned: note.isPinned,
+    sourceNoteIds: note.sourceNoteIds,
   };
 }
 
@@ -80,6 +80,7 @@ export function NotesPage() {
     projectSubcategories,
     setting,
     createNote,
+    createMergedNote,
     createTask,
     updateNote,
     applyNoteAiClassification,
@@ -95,33 +96,17 @@ export function NotesPage() {
 
   const [filterNode, setFilterNode] = useState<NoteFilterNode>({ kind: "all" });
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [focusedNoteId, setFocusedNoteId] = useState<string | null>(null);
   const [editorEntryMode, setEditorEntryMode] = useState<"edit" | "read">("read");
   const [editorEntryRevision, setEditorEntryRevision] = useState(0);
   const [draft, setDraft] = useState<NoteFormInput | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
   const [search, setSearch] = useState("");
   // 타이핑 중 전체 노트 스캔이 입력을 막지 않도록 검색어 반영을 지연시킨다
   const deferredSearch = useDeferredValue(search);
   // 노트가 수백 개여도 DOM이 무거워지지 않게 목록을 점진적으로 렌더링한다
   const [visibleLimit, setVisibleLimit] = useState(80);
-  // 탐색기 접기 — 편집에 집중할 때 본문에 전체 폭을 준다 (새로고침 후에도 유지)
-  const [explorerCollapsed, setExplorerCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem("notes_explorer_collapsed") === "1";
-    } catch {
-      return false;
-    }
-  });
-
-  const setExplorerCollapsedPersisted = useCallback((next: boolean) => {
-    setExplorerCollapsed(next);
-    try {
-      localStorage.setItem("notes_explorer_collapsed", next ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const [isMobileExplorerOpen, setIsMobileExplorerOpen] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
@@ -140,17 +125,22 @@ export function NotesPage() {
 
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [aiMenu, setAiMenu] = useState<{ x: number; y: number } | null>(null);
+  const [aiMenu, setAiMenu] = useState<{ x: number; y: number; align?: "start" | "end"; anchored?: boolean } | null>(
+    null,
+  );
+  const [editorMenu, setEditorMenu] = useState<{ x: number; y: number; align?: "start" | "end"; anchored?: boolean } | null>(
+    null,
+  );
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; noteId: string } | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const loadedNoteIdRef = useRef<string | null>(null);
   const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const abortRef = useRef<AbortController | null>(null);
   // 노트 전환/페이지 이탈 시점에 미저장 수정분을 플러시하기 위한 최신 상태 미러
   const draftRef = useRef<NoteFormInput | null>(null);
   const notesRef = useRef<Note[]>(notes);
-  const stackItemRefs = useRef(new Map<string, HTMLElement>());
   const classificationInFlightRef = useRef(false);
   const classificationAttemptedRef = useRef(new Set<string>());
 
@@ -229,7 +219,6 @@ export function NotesPage() {
     if (!pendingEditNoteId || !notes.some((note) => note.id === pendingEditNoteId)) {
       return;
     }
-    setFocusedNoteId(pendingEditNoteId);
     setEditorEntryMode("edit");
     setEditorEntryRevision((revision) => revision + 1);
     setSelectedNoteId(pendingEditNoteId);
@@ -264,9 +253,18 @@ export function NotesPage() {
   useEffect(() => {
     if (selectedNoteId && !notes.some((note) => note.id === selectedNoteId)) {
       setSelectedNoteId(null);
-      setFocusedNoteId((current) => (current === selectedNoteId ? null : current));
     }
   }, [notes, selectedNoteId]);
+
+  useEffect(() => {
+    if (!selectedNoteId) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedNoteId]);
 
   // 다른 탭(일정)에서 노트로 바로가기
   useEffect(() => {
@@ -274,8 +272,10 @@ export function NotesPage() {
       const detail = (event as CustomEvent<{ noteId?: string }>).detail;
       if (detail?.noteId) {
         setFilterNode({ kind: "all" });
-        setFocusedNoteId(detail.noteId);
+        setEditorEntryMode("read");
+        setEditorEntryRevision((revision) => revision + 1);
         setSelectedNoteId(detail.noteId);
+        setIsMobileExplorerOpen(false);
       }
     };
     window.addEventListener("ai-planner:focus-note", handleFocusNote);
@@ -449,46 +449,17 @@ export function NotesPage() {
 
   const visibleNotes = useMemo(() => filteredNotes.slice(0, visibleLimit), [filteredNotes, visibleLimit]);
 
-  // 카테고리 선택 시 노트들을 이어서 보여주는 스택 뷰 — 점진 렌더링 한도
-  const [stackLimit, setStackLimit] = useState(20);
-
-  useEffect(() => {
-    setStackLimit(20);
-  }, [filterNode]);
-
-  useEffect(() => {
-    if (!focusedNoteId) {
-      return;
-    }
-    const index = filteredNotes.findIndex((note) => note.id === focusedNoteId);
-    if (index < 0) {
-      return;
-    }
-    if (index >= stackLimit) {
-      setStackLimit(index + 1);
-      return;
-    }
-    const frame = window.requestAnimationFrame(() => {
-      stackItemRefs.current.get(focusedNoteId)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [focusedNoteId, filteredNotes, stackLimit]);
-
-  function focusNoteInStack(noteId: string) {
-    setFocusedNoteId(noteId);
-  }
-
-  function editNoteInStack(noteId: string) {
-    setFocusedNoteId(noteId);
-    setEditorEntryMode("edit");
+  function openNote(noteId: string, mode: "edit" | "read" = "read") {
+    setEditorEntryMode(mode);
     setEditorEntryRevision((revision) => revision + 1);
     setSelectedNoteId(noteId);
+    setIsMobileExplorerOpen(false);
   }
 
   // 탐색기 카드 드래그로 순서 변경 — 검색 중에는 부분 목록이라 비활성화
   const [dragNoteId, setDragNoteId] = useState<string | null>(null);
   const [dragOverNoteId, setDragOverNoteId] = useState<string | null>(null);
-  const isNoteDragEnabled = !search.trim() && filterNode.kind !== "checklist";
+  const isNoteDragEnabled = !search.trim() && filterNode.kind !== "checklist" && !selectionMode;
 
   function handleNoteDrop(targetId: string) {
     const draggedId = dragNoteId;
@@ -553,11 +524,20 @@ export function NotesPage() {
   }, [selectedNote, setting.noteTaskSuggestionsEnabled, tasks, taskMap]);
 
   const relatedNotes = useMemo(() => {
-    if (!selectedNote || !setting.relatedNoteSuggestionsEnabled) return [];
+    if (!selectedNote) return [];
     const noteMap = Object.fromEntries(notes.map((note) => [note.id, note]));
-    return suggestRelatedNotes({ note: selectedNote, notes, limit: 5 })
-      .map((item) => ({ note: noteMap[item.noteId], reason: item.reason }))
-      .filter((item): item is { note: Note; reason: string } => Boolean(item.note));
+    const originalIds = new Set(selectedNote.sourceNoteIds ?? []);
+    const originals = (selectedNote.sourceNoteIds ?? [])
+      .map((noteId) => noteMap[noteId])
+      .filter((note): note is Note => Boolean(note))
+      .map((note) => ({ note, reason: "통합 원본 노트", isOriginal: true }));
+    if (!setting.relatedNoteSuggestionsEnabled) return originals;
+
+    const suggestions = suggestRelatedNotes({ note: selectedNote, notes, limit: 5 })
+      .filter((item) => !originalIds.has(item.noteId))
+      .map((item) => ({ note: noteMap[item.noteId], reason: item.reason, isOriginal: false }))
+      .filter((item): item is { note: Note; reason: string; isOriginal: false } => Boolean(item.note));
+    return [...originals, ...suggestions];
   }, [selectedNote, setting.relatedNoteSuggestionsEnabled, notes]);
 
   const isDirty = useMemo(() => {
@@ -609,7 +589,7 @@ export function NotesPage() {
     return null;
   }, [selectedNote, aiProposal, compareVersion, isSaving]);
 
-  async function handleCreateNote() {
+  const handleCreateNote = useCallback(async () => {
     if (isCreatingNote) return;
     const base: NoteFormInput = {
       title: "새 노트",
@@ -637,13 +617,31 @@ export function NotesPage() {
         setFilterNode({ kind: "all" });
       }
       setPendingEditNoteId(id);
+      setIsMobileExplorerOpen(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "노트를 만들지 못했습니다.");
       showToast("노트를 만들지 못했습니다.");
     } finally {
       setIsCreatingNote(false);
     }
-  }
+  }, [activeProjectId, createNote, filterNode, isCreatingNote]);
+
+  useEffect(() => {
+    const handleCreateRequest = () => void handleCreateNote();
+    window.addEventListener("ai-planner:create-note", handleCreateRequest);
+    return () => window.removeEventListener("ai-planner:create-note", handleCreateRequest);
+  }, [handleCreateNote]);
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
 
   async function handleSave(editType: NoteVersionEditType = "manual") {
     if (!selectedNoteId || !draft) return;
@@ -676,7 +674,6 @@ export function NotesPage() {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
-    setFocusedNoteId(null);
     showToast("노트를 삭제했습니다.");
   }
 
@@ -701,22 +698,41 @@ export function NotesPage() {
     }
   }
 
-  function handleToggleChecklist(lineIndex: number, checked: boolean) {
-    if (!selectedNoteId) return;
-    void toggleChecklistLine(selectedNoteId, lineIndex, checked);
+  async function updateNoteMetadata(noteId: string, patch: Partial<NoteFormInput>) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    const previousInput = noteId === selectedNoteId && draft ? draft : noteToInput(note);
+    const nextInput = { ...previousInput, ...patch };
+    const isSelected = noteId === selectedNoteId;
+
+    if (isSelected) {
+      // 선택 노트의 메타데이터와 편집 초안을 동시에 맞춰, 이전 초안이
+      // 자동 저장되면서 방금 적용한 고정·상태 값을 되돌리지 않게 한다.
+      draftRef.current = nextInput;
+      setDraft(nextInput);
+    }
+
+    try {
+      await updateNote(noteId, nextInput);
+    } catch (error) {
+      if (isSelected) {
+        draftRef.current = previousInput;
+        setDraft(previousInput);
+      }
+      const message = error instanceof Error ? error.message : "노트 정보를 변경하지 못했습니다.";
+      setErrorMessage(message);
+      showToast(message);
+    }
   }
 
   async function setNoteStatus(noteId: string, status: NoteStatus) {
-    const note = notes.find((item) => item.id === noteId);
-    if (!note) return;
-    await updateNote(noteId, { ...noteToInput(note), status });
+    await updateNoteMetadata(noteId, { status });
   }
 
   async function handleDeleteNote(noteId: string) {
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     await removeNote(noteId);
     if (selectedNoteId === noteId) setSelectedNoteId(null);
-    if (focusedNoteId === noteId) setFocusedNoteId(null);
     showToast("노트를 삭제했습니다.");
   }
 
@@ -756,7 +772,7 @@ export function NotesPage() {
           "ai_full",
           "노트 요약",
         );
-        editNoteInStack(id);
+        openNote(id, "edit");
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -775,7 +791,11 @@ export function NotesPage() {
     if (!note) return [];
     const items: ContextMenuItem[] = [
       { id: "summarize", label: "AI 요약", description: "요약 노트 생성", disabled: !hasApiConfig, onSelect: () => void handleSummarizeNote(noteId) },
-      { id: "pin", label: note.isPinned ? "고정 해제" : "고정", onSelect: () => void updateNote(noteId, { ...noteToInput(note), isPinned: !note.isPinned }) },
+      {
+        id: "pin",
+        label: note.isPinned ? "고정 해제" : "고정",
+        onSelect: () => void updateNoteMetadata(noteId, { isPinned: !note.isPinned }),
+      },
     ];
     const noteIndex = filteredNotes.findIndex((item) => item.id === noteId);
     if (isNoteDragEnabled && noteIndex >= 0) {
@@ -1059,7 +1079,24 @@ export function NotesPage() {
       ? { start: textarea.selectionStart, end: textarea.selectionEnd }
       : { start: 0, end: 0 };
     const rect = event.currentTarget.getBoundingClientRect();
-    setAiMenu({ x: rect.left, y: rect.bottom + 4 });
+    setAiMenu({ x: rect.right, y: rect.bottom + 6, align: "end", anchored: true });
+  }
+
+  function handleOpenEditorMenu(event: MouseEvent<HTMLElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setEditorMenu({ x: rect.right, y: rect.bottom + 6, align: "end", anchored: true });
+  }
+
+  function buildEditorMenuItems(): ContextMenuItem[] {
+    return [
+      {
+        id: "history",
+        label: "변경 이력",
+        description: selectedVersions.length > 0 ? `${selectedVersions.length}개 버전` : "저장된 버전 없음",
+        onSelect: () => setHistoryOpen(true),
+      },
+      { id: "delete", label: "삭제", tone: "danger", onSelect: () => void handleDelete() },
+    ];
   }
 
   async function handleRestoreVersion(versionId: string) {
@@ -1113,7 +1150,8 @@ export function NotesPage() {
           "선택 노트 요약",
         );
         setCheckedIds(new Set());
-        editNoteInStack(id);
+        setSelectionMode(false);
+        openNote(id, "edit");
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -1153,7 +1191,7 @@ export function NotesPage() {
         signal: controller.signal,
       });
       if (result.proposedContent) {
-        const id = await createNote(
+        const id = await createMergedNote(
           {
             title: result.proposedTitle?.trim() || `통합 노트 (${targets.length}개)`,
             content: result.proposedContent,
@@ -1162,11 +1200,14 @@ export function NotesPage() {
             status: "active",
             isPinned: false,
           },
+          targets.map((note) => note.id),
           "ai_full",
           "선택 노트 통합",
         );
         setCheckedIds(new Set());
-        editNoteInStack(id);
+        setSelectionMode(false);
+        setFilterNode({ kind: "all" });
+        openNote(id, "edit");
       } else {
         setAiError(result.assistantMessage || "통합 결과를 만들지 못했습니다.");
       }
@@ -1191,6 +1232,18 @@ export function NotesPage() {
 
   const checkedCount = checkedIds.size;
 
+  function exitSelectionMode() {
+    setCheckedIds(new Set());
+    setSelectionMode(false);
+  }
+
+  function returnToAllNotes() {
+    setFilterNode({ kind: "all" });
+    setSelectedNoteId(null);
+    setIsMobileExplorerOpen(false);
+    exitSelectionMode();
+  }
+
   const listTitle = useMemo(() => {
     switch (filterNode.kind) {
       case "all":
@@ -1211,96 +1264,113 @@ export function NotesPage() {
   }, [filterNode, projectMap, subMap]);
 
   return (
-    <div className={`notes-workspace ${explorerCollapsed ? "explorer-collapsed" : ""}`}>
-      {explorerCollapsed ? (
-        /* 접힌 탐색기: 편집기 위 한 줄 바 — 검색을 시작하면 자동으로 펼쳐진다 */
-        <div className="notes-collapsed-bar">
-          <button
-            type="button"
-            className="notes-collapse-btn"
-            onClick={() => setExplorerCollapsedPersisted(false)}
-            title="탐색기 펼치기"
-            aria-label="탐색기 펼치기"
-          >
-            »
-          </button>
-          <input
-            className="notes-search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              if (event.target.value.trim()) {
-                setExplorerCollapsedPersisted(false);
-              }
-            }}
-            placeholder={`노트 검색 · ${listTitle} ${filteredNotes.length}개`}
-            aria-label="노트 검색"
-          />
-          <button type="button" className="btn btn-primary btn-compact" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
-            {isCreatingNote ? "생성 중" : "+ 새 노트"}
-          </button>
-        </div>
-      ) : (
-      /* 탐색기: 검색·트리·목록을 한 컬럼으로 — 편집기에 나머지 공간을 몰아준다 */
-      <aside className="notes-explorer">
-        <div className="notes-explorer-head">
-          <input
-            className="notes-search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="노트 검색"
-            aria-label="노트 검색"
-          />
-          <button type="button" className="btn btn-primary btn-compact" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
-            {isCreatingNote ? "생성 중" : "+ 새 노트"}
-          </button>
-          <button
-            type="button"
-            className="notes-collapse-btn"
-            onClick={() => setExplorerCollapsedPersisted(true)}
-            title="탐색기 접기"
-            aria-label="탐색기 접기"
-          >
-            «
-          </button>
-        </div>
+    <div className={`notes-workspace ${selectedNote ? "has-selection" : ""} ${isMobileExplorerOpen ? "mobile-explorer-open" : ""}`}>
+      {!selectedNote ? (
+        <button
+          type="button"
+          className="btn btn-soft notes-mobile-explorer-toggle"
+          aria-expanded={isMobileExplorerOpen}
+          aria-controls="notes-navigation-panel"
+          onClick={() => setIsMobileExplorerOpen((open) => !open)}
+        >
+          탐색
+        </button>
+      ) : null}
 
-        <div className="notes-explorer-tree">
-          <ProjectNoteTree
-            projects={projects}
-            subcategories={projectSubcategories}
-            notes={notes}
-            openChecklistCount={openChecklistItems.length}
-            selected={filterNode}
-            onSelect={(node) => {
-              setFilterNode(node);
-              // 카테고리를 고르면 단일 편집 대신 해당 노트들을 이어서 보여준다
-              setSelectedNoteId(null);
-              setFocusedNoteId(null);
-            }}
-            onAddSubcategory={(projectId, name) => void createSubcategory(projectId, name)}
-          />
-        </div>
+      {isMobileExplorerOpen ? (
+        <button
+          type="button"
+          className="notes-mobile-explorer-backdrop"
+          aria-label="탐색 닫기"
+          onClick={() => setIsMobileExplorerOpen(false)}
+        />
+      ) : null}
 
-        <div className="notes-explorer-label">
-          <span>{listTitle}</span>
-          <span className="notes-list-count">
-            {filterNode.kind === "checklist" ? openChecklistItems.length : filteredNotes.length}
-          </span>
+      {!selectedNote ? (
+        <div className="notes-navigation-shell">
+          <aside id="notes-navigation-panel" className="notes-navigation-panel" aria-label="노트 탐색">
+            <header className="notes-navigation-head">
+              <strong>탐색</strong>
+              <button
+                type="button"
+                className="notes-navigation-close"
+                aria-label="탐색 닫기"
+                onClick={() => setIsMobileExplorerOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <ProjectNoteTree
+              projects={projects}
+              subcategories={projectSubcategories}
+              notes={notes}
+              openChecklistCount={openChecklistItems.length}
+              selected={filterNode}
+              onSelect={(node) => {
+                setFilterNode(node);
+                setSelectedNoteId(null);
+                setIsMobileExplorerOpen(false);
+                exitSelectionMode();
+              }}
+              onAddSubcategory={(projectId, name) => void createSubcategory(projectId, name)}
+            />
+          </aside>
         </div>
+      ) : null}
 
-        {checkedCount > 0 ? (
+      <aside className="notes-list-pane" aria-label="노트 목록">
+        <header className="notes-list-head">
+          <div>
+            {selectedNote ? (
+              <button
+                type="button"
+                className="notes-list-nav-trigger"
+                aria-label="탐색 및 전체 노트로 돌아가기"
+                onClick={returnToAllNotes}
+              >
+                ☰
+              </button>
+            ) : null}
+            <h2>{listTitle}</h2>
+            <span>{filterNode.kind === "checklist" ? openChecklistItems.length : filteredNotes.length}개</span>
+          </div>
+          <div className="notes-list-actions">
+            {filterNode.kind !== "checklist" ? (
+              <button
+                type="button"
+                className="btn btn-soft btn-compact"
+                aria-pressed={selectionMode}
+                onClick={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
+              >
+                {selectionMode ? "완료" : "선택"}
+              </button>
+            ) : null}
+            <button type="button" className="btn btn-primary btn-compact" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
+              {isCreatingNote ? "생성 중" : "+ 새 노트"}
+            </button>
+          </div>
+        </header>
+        <input
+          ref={searchInputRef}
+          className="notes-search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="노트 검색"
+          aria-label="노트 검색"
+        />
+
+        {selectionMode ? (
           <div className="notes-bulk-bar">
             <span>{checkedCount}개 선택</span>
             <div className="button-row">
-              <button type="button" className="btn btn-soft btn-compact" onClick={() => void handleSummarizeSelected()} disabled={isAiRunning || !hasApiConfig}>
+              <button type="button" className="btn btn-soft btn-compact" onClick={() => void handleSummarizeSelected()} disabled={isAiRunning || checkedCount === 0 || !hasApiConfig}>
                 요약
               </button>
               <button type="button" className="btn btn-soft btn-compact" onClick={() => void handleMergeSelected()} disabled={isAiRunning || checkedCount < 2 || !hasApiConfig}>
                 통합
               </button>
-              <button type="button" className="btn btn-outline btn-compact" onClick={() => setCheckedIds(new Set())}>
-                해제
+              <button type="button" className="btn btn-outline btn-compact" onClick={exitSelectionMode}>
+                취소
               </button>
             </div>
           </div>
@@ -1325,7 +1395,7 @@ export function NotesPage() {
                     className="global-check-body"
                     onClick={() => {
                       setFilterNode({ kind: "all" });
-                      editNoteInStack(item.noteId);
+                      openNote(item.noteId);
                     }}
                     style={{ "--note-project-color": item.projectColor } as CSSProperties}
                   >
@@ -1350,10 +1420,17 @@ export function NotesPage() {
                   key={note.id}
                   note={note}
                   project={projectMap[note.projectId]}
-                  isSelected={note.id === focusedNoteId || note.id === selectedNoteId}
+                  isSelected={note.id === selectedNoteId}
                   isChecked={checkedIds.has(note.id)}
-                  onSelect={() => focusNoteInStack(note.id)}
-                  onOpenForEdit={() => editNoteInStack(note.id)}
+                  showSelection={selectionMode}
+                  timeFormat={setting.timeFormat}
+                  onSelect={() => {
+                    if (selectionMode) {
+                      toggleCheck(note.id, !checkedIds.has(note.id));
+                    } else {
+                      openNote(note.id);
+                    }
+                  }}
                   onToggleCheck={(checked) => toggleCheck(note.id, checked)}
                   onOpenMenu={(pos) => setCardMenu({ x: pos.x, y: pos.y, noteId: note.id })}
                   draggable={isNoteDragEnabled}
@@ -1395,82 +1472,35 @@ export function NotesPage() {
               </button>
             ) : null}
             {archivedMatchCount > 0 ? (
-              <button type="button" className="notes-archived-hint" onClick={() => setFilterNode({ kind: "archived" })}>
-                🗄 보관된 노트에서 {archivedMatchCount}개 일치 — 보관함에서 보기
+              <button
+                type="button"
+                className="notes-archived-hint"
+                onClick={() => {
+                  setFilterNode({ kind: "archived" });
+                  setIsMobileExplorerOpen(false);
+                }}
+              >
+                보관된 노트 {archivedMatchCount}개 보기
               </button>
             ) : null}
           </div>
         )}
         </div>
       </aside>
-      )}
 
       <section className="notes-detail-scroll" aria-label="노트 내용">
-        {filterNode.kind === "checklist" ? (
-          <section className="notes-checklist-main" aria-label="전체 체크리스트">
-            <header className="notes-stack-head">
-              <div>
-                <p className="eyebrow">CHECKLIST</p>
-                <h3>전체 체크리스트 {openChecklistItems.length}개</h3>
-              </div>
-              <span className="notes-stack-hint">체크하면 원본 노트에서도 완료 처리됩니다 · 항목을 누르면 원본 노트로 이동합니다</span>
-            </header>
-            {openChecklistItems.length === 0 ? (
-              <div className="notes-checklist-empty">미완료 체크리스트 항목이 없습니다.</div>
-            ) : (
-              <div className="notes-checklist-main-list">
-                {openChecklistItems.map((item) => (
-                  <article key={`${item.noteId}-${item.lineIndex}`} className="global-check-item global-check-item-main">
-                    <input
-                      type="checkbox"
-                      checked={false}
-                      aria-label={`${item.text} 완료`}
-                      onChange={() => void toggleChecklistLine(item.noteId, item.lineIndex, true)}
-                    />
-                    <button
-                      type="button"
-                      className="global-check-body"
-                      onClick={() => {
-                        setFilterNode({ kind: "all" });
-                        editNoteInStack(item.noteId);
-                      }}
-                      style={{ "--note-project-color": item.projectColor } as CSSProperties}
-                    >
-                      <span className="global-check-text">{item.text}</span>
-                      <small className="global-check-note">{item.noteTitle}</small>
-                    </button>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        ) : null}
-        {filterNode.kind !== "checklist" && filteredNotes.length > 0 ? (
-          <div className="notes-stack-view" aria-label={`${listTitle} 이어보기`}>
-            <header className="notes-stack-head">
-              <div>
-                <p className="eyebrow">READ ALL</p>
-                <h3>
-                  {listTitle} {filteredNotes.length}개
-                </h3>
-              </div>
-              <span className="notes-stack-hint">왼쪽 카드는 해당 위치로 이동 · 편집 버튼은 문맥을 유지한 채 바로 편집</span>
-            </header>
-            {filteredNotes.slice(0, stackLimit).map((note) => {
-              const project = projectMap[note.projectId];
-              const subName = note.subcategoryId ? subMap[note.subcategoryId]?.name : undefined;
-              const isEditing = note.id === selectedNoteId && selectedNote && draft && currentProject;
-              const commonStyle = {
-                "--note-project-color": project?.color ?? "var(--body-muted)",
-              } as CSSProperties;
-              const setStackRef = (node: HTMLElement | null) => {
-                if (node) stackItemRefs.current.set(note.id, node);
-                else stackItemRefs.current.delete(note.id);
-              };
-
-              if (isEditing) {
-                return (
-                  <article key={note.id} ref={setStackRef} className="notes-detail-pane" style={commonStyle}>
+        {selectedNote && draft && currentProject ? (
+          <article
+            className="notes-detail-pane"
+            style={{ "--note-project-color": currentProject.color } as CSSProperties}
+          >
+            <button
+              type="button"
+              className="btn btn-soft notes-mobile-detail-back"
+              onClick={returnToAllNotes}
+            >
+              ← 노트 목록
+            </button>
                     <NoteEditor
                       key={`${selectedNote.id}-${editorEntryMode}-${editorEntryRevision}`}
                       draft={draft}
@@ -1486,7 +1516,6 @@ export function NotesPage() {
                         setCompareVersion(null);
                         setAiProgress("");
                       }}
-                      onToggleChecklist={(lineIndex, checked) => void handleToggleChecklist(lineIndex, checked)}
                       onOpenAiMenu={handleOpenAiMenuButton}
                       onChangeTitle={(value) => setDraft((prev) => (prev ? { ...prev, title: value } : prev))}
                       onChangeContent={(value) =>
@@ -1499,15 +1528,13 @@ export function NotesPage() {
                       }
                       onSave={() => void handleSave("manual")}
                       onOpenMeta={() => setMetaModalOpen(true)}
-                      onOpenHistory={() => setHistoryOpen(true)}
-                      onDelete={() => void handleDelete()}
+                      onOpenMoreMenu={handleOpenEditorMenu}
                       onContentContextMenu={handleContentContextMenu}
                       textareaRef={textareaRef}
                       isSaving={isSaving}
                       isDirty={isDirty}
                       savedMessage={savedMessage}
                       errorMessage={errorMessage}
-                      historyCount={selectedVersions.length}
                       initialMode={editorEntryMode}
                     />
 
@@ -1527,72 +1554,20 @@ export function NotesPage() {
                       relatedNotes={relatedNotes}
                       timeFormat={setting.timeFormat}
                       onOpenTask={handleOpenTask}
-                      onOpenNote={(noteId) => editNoteInStack(noteId)}
+                      onOpenNote={(noteId) => openNote(noteId)}
                       onLink={(taskId) => void linkNoteToTask(selectedNote.id, taskId, "auto_suggest")}
                       onUnlink={(taskId) => void unlinkNoteFromTask(selectedNote.id, taskId)}
                       isBusy={isSaving}
                     />
-                  </article>
-                );
-              }
-
-              return (
-                <article
-                  key={note.id}
-                  ref={setStackRef}
-                  className={`notes-stack-item ${note.id === focusedNoteId ? "focused" : ""}`}
-                  style={commonStyle}
-                  onClick={() => focusNoteInStack(note.id)}
-                  onDoubleClick={() => editNoteInStack(note.id)}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setCardMenu({ x: event.clientX, y: event.clientY, noteId: note.id });
-                  }}
-                >
-                  <header className="notes-stack-item-head">
-                    <button type="button" className="notes-stack-item-title" onClick={(event) => {
-                      event.stopPropagation();
-                      focusNoteInStack(note.id);
-                    }}>
-                      {note.isPinned ? "📌 " : ""}
-                      {note.title}
-                    </button>
-                    <div className="notes-stack-item-meta">
-                      {project ? <span className="notes-stack-chip project">{project.name}</span> : null}
-                      {subName ? <span className="notes-stack-chip">{subName}</span> : null}
-                      <button type="button" className="btn btn-soft btn-compact" onClick={(event) => {
-                        event.stopPropagation();
-                        editNoteInStack(note.id);
-                      }}>
-                        편집
-                      </button>
-                    </div>
-                  </header>
-                  <div className="notes-stack-item-body">
-                    <MarkdownRenderer
-                      content={note.content}
-                      emptyText="내용이 없습니다."
-                      onChecklistToggle={(lineIndex, checked) => void toggleChecklistLine(note.id, lineIndex, checked)}
-                    />
-                  </div>
-                </article>
-              );
-            })}
-            {filteredNotes.length > stackLimit ? (
-              <button type="button" className="btn btn-soft notes-stack-more" onClick={() => setStackLimit((limit) => limit + 20)}>
-                노트 {filteredNotes.length - stackLimit}개 더 보기
-              </button>
-            ) : null}
-          </div>
-        ) : filterNode.kind !== "checklist" ? (
+          </article>
+        ) : (
           <div className="notes-empty-detail">
-            <p className="empty-text">노트를 선택하거나 새 노트를 만들어 시작하세요.</p>
+            <p className="empty-text">목록에서 노트를 선택하세요.</p>
             <button type="button" className="btn btn-primary notes-empty-action" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
               {isCreatingNote ? "생성 중" : "+ 새 노트"}
             </button>
           </div>
-        ) : null}
+        )}
       </section>
 
       {metaModalOpen && draft ? (
@@ -1643,9 +1618,23 @@ export function NotesPage() {
         <ContextMenu
           x={aiMenu.x}
           y={aiMenu.y}
+          align={aiMenu.align}
+          anchored={aiMenu.anchored}
           title="AI 편집"
           items={buildAiMenuItems()}
           onClose={() => setAiMenu(null)}
+        />
+      ) : null}
+
+      {editorMenu ? (
+        <ContextMenu
+          x={editorMenu.x}
+          y={editorMenu.y}
+          align={editorMenu.align}
+          anchored={editorMenu.anchored}
+          title="노트"
+          items={buildEditorMenuItems()}
+          onClose={() => setEditorMenu(null)}
         />
       ) : null}
 

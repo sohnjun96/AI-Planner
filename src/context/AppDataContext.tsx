@@ -115,6 +115,12 @@ interface AppDataContextValue {
   removeTask: (id: string) => Promise<void>;
   undoLastChange: () => Promise<void>;
   createNote: (input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<string>;
+  createMergedNote: (
+    input: NoteFormInput,
+    sourceNoteIds: string[],
+    editType?: NoteVersionEditType,
+    aiPrompt?: string,
+  ) => Promise<string>;
   updateNote: (id: string, input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<void>;
   applyNoteAiClassification: (id: string, projectId: string, subcategoryId?: string, expectedUpdatedAt?: string) => Promise<void>;
   removeNote: (id: string) => Promise<void>;
@@ -258,7 +264,11 @@ function normalizeNoteInput(input: NoteFormInput): NoteFormInput {
   if (!Array.isArray(input.tags) || input.tags.length > 50) throw new Error("노트 태그는 최대 50개까지 지정할 수 있습니다.");
   const tags = Array.from(new Set(input.tags.map((tag) => tag.trim()).filter(Boolean)));
   if (tags.some((tag) => tag.length > 100)) throw new Error("각 노트 태그는 100자 이하여야 합니다.");
-  return { ...input, title, tags };
+  const sourceNoteIds = Array.from(new Set(input.sourceNoteIds ?? []));
+  if (sourceNoteIds.length > 200 || sourceNoteIds.some((id) => !/^[A-Za-z0-9._:-]{1,128}$/.test(id))) {
+    throw new Error("원본 노트 연결 정보가 올바르지 않습니다.");
+  }
+  return { ...input, title, tags, sourceNoteIds };
 }
 
 function validateColor(value: string): string {
@@ -1152,6 +1162,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         status: normalized.status,
         isPinned: normalized.isPinned,
         linkedTaskIds: [],
+        sourceNoteIds: normalized.sourceNoteIds,
         createdAt: now,
         updatedAt: now,
       };
@@ -1167,6 +1178,74 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           createdAt: now,
         });
       });
+      return id;
+    },
+    [],
+  );
+
+  const createMergedNote = useCallback(
+    async (input: NoteFormInput, sourceNoteIds: string[], editType: NoteVersionEditType = "ai_full", aiPrompt?: string) => {
+      const normalized = normalizeNoteInput({ ...input, sourceNoteIds });
+      const normalizedSourceIds = normalized.sourceNoteIds ?? [];
+      if (normalizedSourceIds.length < 2) {
+        throw new Error("통합하려면 원본 노트가 2개 이상 필요합니다.");
+      }
+      if (aiPrompt && aiPrompt.length > 4_000) throw new Error("AI 편집 지시문은 4,000자 이하여야 합니다.");
+
+      await assertCapacity(db.notes.count(), 1, LIVE_QUERY_LIMITS.notes, "노트");
+      await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
+      const [project, subcategory, sourceNotes] = await Promise.all([
+        db.projects.get(normalized.projectId),
+        normalized.subcategoryId ? db.projectSubcategories.get(normalized.subcategoryId) : undefined,
+        db.notes.bulkGet(normalizedSourceIds),
+      ]);
+      if (!project || (normalized.subcategoryId && (!subcategory || subcategory.projectId !== normalized.projectId))) {
+        throw new Error("선택한 노트 분류를 찾을 수 없습니다.");
+      }
+      if (sourceNotes.some((note) => !note)) {
+        throw new Error("통합할 원본 노트 일부를 찾을 수 없습니다.");
+      }
+
+      const now = toIsoNow();
+      const id = getId("note");
+      const note: Note = {
+        id,
+        title: normalized.title,
+        content: normalized.content,
+        projectId: normalized.projectId,
+        subcategoryId: normalized.subcategoryId,
+        tags: normalized.tags,
+        status: normalized.status,
+        isPinned: normalized.isPinned,
+        linkedTaskIds: [],
+        sourceNoteIds: normalizedSourceIds,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // 통합 노트 생성과 원본 보관은 전부 성공하거나 전부 취소되도록 한 트랜잭션에서 처리한다.
+      await db.transaction("rw", [db.notes, db.noteVersions], async () => {
+        const currentSources = await db.notes.bulkGet(normalizedSourceIds);
+        if (currentSources.some((source) => !source)) {
+          throw new Error("통합 처리 중 원본 노트가 변경되었습니다.");
+        }
+        await db.notes.add(note);
+        await db.notes.bulkPut(
+          currentSources
+            .filter((source): source is Note => Boolean(source))
+            .map((source) => ({ ...source, status: "archived" as const, updatedAt: now })),
+        );
+        await db.noteVersions.add({
+          id: getId("noteversion"),
+          noteId: id,
+          title: normalized.title,
+          content: normalized.content,
+          editType,
+          aiPrompt,
+          createdAt: now,
+        });
+      });
+
       return id;
     },
     [],
@@ -1190,13 +1269,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const now = toIsoNow();
       const nextTitle = normalized.title;
       const nextTags = normalized.tags;
+      const nextSourceNoteIds = normalized.sourceNoteIds ?? [];
       const contentChanged = existing.content !== normalized.content || existing.title !== nextTitle;
       const metaChanged =
         existing.projectId !== normalized.projectId ||
         (existing.subcategoryId ?? "") !== (normalized.subcategoryId ?? "") ||
         existing.status !== normalized.status ||
         existing.isPinned !== normalized.isPinned ||
-        JSON.stringify(existing.tags) !== JSON.stringify(nextTags);
+        JSON.stringify(existing.tags) !== JSON.stringify(nextTags) ||
+        JSON.stringify(existing.sourceNoteIds ?? []) !== JSON.stringify(nextSourceNoteIds);
 
       if (!contentChanged && !metaChanged) {
         return;
@@ -1216,6 +1297,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           tags: nextTags,
           status: normalized.status,
           isPinned: normalized.isPinned,
+          sourceNoteIds: nextSourceNoteIds,
           updatedAt: now,
         });
 
@@ -1273,6 +1355,13 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       }
       await db.noteTaskLinks.where("noteId").equals(id).delete();
       await db.noteVersions.where("noteId").equals(id).delete();
+      const now = toIsoNow();
+      await db.notes
+        .filter((candidate) => candidate.id !== id && (candidate.sourceNoteIds ?? []).includes(id))
+        .modify((candidate) => {
+          candidate.sourceNoteIds = (candidate.sourceNoteIds ?? []).filter((sourceId) => sourceId !== id);
+          candidate.updatedAt = now;
+        });
       await db.notes.delete(id);
     });
   }, []);
@@ -1971,6 +2060,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       removeTask,
       undoLastChange,
       createNote,
+      createMergedNote,
       updateNote,
       applyNoteAiClassification,
       removeNote,
@@ -2021,6 +2111,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       removeTask,
       undoLastChange,
       createNote,
+      createMergedNote,
       updateNote,
       applyNoteAiClassification,
       removeNote,

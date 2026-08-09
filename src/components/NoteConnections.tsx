@@ -10,6 +10,7 @@ interface SuggestedTask {
 interface RelatedNote {
   note: Note;
   reason: string;
+  isOriginal?: boolean;
 }
 
 interface NoteConnectionsProps {
@@ -35,79 +36,70 @@ export function NoteConnections({
   onUnlink,
   isBusy,
 }: NoteConnectionsProps) {
-  // 연결·추천·관련 노트가 모두 없으면 아무것도 렌더링하지 않는다.
-  if (linkedTasks.length === 0 && suggestions.length === 0 && relatedNotes.length === 0) {
-    return null;
-  }
-
   return (
-    <section className="note-connections">
-      {linkedTasks.length > 0 ? (
-        <div className="note-connection-group">
-          <span className="note-connection-label">연결된 일정</span>
-          <div className="note-connection-chips">
-            {linkedTasks.map((task) => (
-              <span key={task.id} className="note-connection-chip linked">
-                <button type="button" className="note-connection-open" onClick={() => onOpenTask(task.id)} title="일정으로 이동">
-                  {task.title}
-                  <small>
-                    {formatDateTime(task.startAt, timeFormat)} · {STATUS_LABELS[task.status]}
-                  </small>
-                </button>
+    <section className="note-connections" aria-label="노트 관련 정보">
+      <div className="note-connection-group">
+        <span className="note-connection-label">관련 일정</span>
+        <div className="note-connection-chips">
+          {linkedTasks.length > 0
+            ? linkedTasks.map((task) => (
+                <span key={task.id} className="note-connection-chip linked">
+                  <button type="button" className="note-connection-open" onClick={() => onOpenTask(task.id)} title="일정으로 이동">
+                    {task.title}
+                    <small>
+                      {formatDateTime(task.startAt, timeFormat)} · {STATUS_LABELS[task.status]}
+                    </small>
+                  </button>
+                  <button
+                    type="button"
+                    className="note-connection-remove"
+                    aria-label="연결 해제"
+                    onClick={() => onUnlink(task.id)}
+                    disabled={isBusy}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            : null}
+          {suggestions.length > 0
+            ? suggestions.map(({ task, reason }) => (
                 <button
+                  key={task.id}
                   type="button"
-                  className="note-connection-remove"
-                  aria-label="연결 해제"
-                  onClick={() => onUnlink(task.id)}
+                  className="note-connection-chip suggestion"
+                  onClick={() => onLink(task.id)}
                   disabled={isBusy}
+                  title={`연결: ${reason}`}
                 >
-                  ×
+                  + {task.title}
+                  <small>{formatDateTime(task.startAt, timeFormat)}</small>
                 </button>
-              </span>
-            ))}
-          </div>
+              ))
+            : null}
+          {linkedTasks.length === 0 && suggestions.length === 0 ? <span className="note-connection-empty">없음</span> : null}
         </div>
-      ) : null}
+      </div>
 
-      {suggestions.length > 0 ? (
-        <div className="note-connection-group">
-          <span className="note-connection-label">추천 일정</span>
-          <div className="note-connection-chips">
-            {suggestions.map(({ task, reason }) => (
-              <button
-                key={task.id}
-                type="button"
-                className="note-connection-chip suggestion"
-                onClick={() => onLink(task.id)}
-                disabled={isBusy}
-                title={`연결: ${reason}`}
-              >
-                + {task.title}
-                <small>{formatDateTime(task.startAt, timeFormat)}</small>
-              </button>
-            ))}
-          </div>
+      <div className="note-connection-group">
+        <span className="note-connection-label">관련 노트</span>
+        <div className="note-connection-chips">
+          {relatedNotes.length > 0
+            ? relatedNotes.map(({ note, reason, isOriginal }) => (
+                <button
+                  key={note.id}
+                  type="button"
+                  className="note-connection-chip related"
+                  onClick={() => onOpenNote(note.id)}
+                  title={reason}
+                >
+                  {isOriginal ? <span className="note-connection-origin-badge">[원본]</span> : null}
+                  <span>{note.title}</span>
+                </button>
+              ))
+            : <span className="note-connection-empty">없음</span>}
         </div>
-      ) : null}
-
-      {relatedNotes.length > 0 ? (
-        <div className="note-connection-group">
-          <span className="note-connection-label">관련 노트</span>
-          <div className="note-connection-chips">
-            {relatedNotes.map(({ note, reason }) => (
-              <button
-                key={note.id}
-                type="button"
-                className="note-connection-chip related"
-                onClick={() => onOpenNote(note.id)}
-                title={reason}
-              >
-                {note.title}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      </div>
     </section>
   );
 }

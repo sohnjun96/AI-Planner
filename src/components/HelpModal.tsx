@@ -22,11 +22,21 @@ const GROUPS: ShortcutGroup[] = [
   {
     title: "노트",
     items: [
-      { keys: "더블클릭", desc: "노트 본문을 편집 모드로 전환" },
+      { keys: "라이브", desc: "렌더링된 전체 문서에서 바로 편집" },
+      { keys: "커서가 있는 블록", desc: "해당 블록의 Markdown 문법 표시" },
+      { keys: "/", desc: "줄 시작에서 블록 명령 열기" },
+      { keys: "↑ / ↓ · Enter · Esc", desc: "블록 명령 선택 · 적용 · 닫기" },
       { keys: "우클릭 (본문)", desc: "AI 편집 메뉴 (다듬기·요약·구조화 등)" },
       { keys: "우클릭 / ⋯ (카드)", desc: "열기·AI 요약·고정·상태 변경·삭제" },
       { keys: "Ctrl + S", desc: "노트 저장" },
-      { keys: "Ctrl + Enter", desc: "빠른 입력 모달에서 노트 저장" },
+      { keys: "Ctrl + B / I / K", desc: "굵게 / 기울임 / 링크" },
+      { keys: "# / ## / ### + Space", desc: "라이브 편집에서 제목 1 / 2 / 3으로 전환" },
+      { keys: "Ctrl + Alt + 1 / 2 / 3", desc: "제목 1 / 2 / 3 적용" },
+      { keys: "Ctrl + Shift + 7 / 8", desc: "번호 목록 / 글머리 목록" },
+      { keys: "Ctrl + Alt + C / T", desc: "체크리스트 / 표 삽입" },
+      { keys: "Tab / Shift + Tab", desc: "목록 들여쓰기 / 내어쓰기" },
+      { keys: "Enter", desc: "목록 계속 입력 · 빈 목록에서 한 번 더 누르면 종료" },
+      { keys: "Esc", desc: "라이브 편집 영역에서 포커스 해제" },
     ],
   },
   {

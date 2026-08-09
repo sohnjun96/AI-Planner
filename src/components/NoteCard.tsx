@@ -1,13 +1,16 @@
 import { useRef, type CSSProperties, type DragEvent, type MouseEvent } from "react";
+import { NOTE_STATUS_LABELS } from "../constants";
 import type { Note, Project } from "../models";
+import { formatDateTime } from "../utils/date";
 
 interface NoteCardProps {
   note: Note;
   project?: Project;
   isSelected: boolean;
   isChecked: boolean;
+  showSelection: boolean;
+  timeFormat: "24h" | "12h";
   onSelect: () => void;
-  onOpenForEdit: () => void;
   onToggleCheck: (checked: boolean) => void;
   onOpenMenu: (position: { x: number; y: number }) => void;
   /** 탐색기 목록에서 위아래 순서 변경용 드래그 지원 (선택적) */
@@ -26,8 +29,9 @@ export function NoteCard({
   project,
   isSelected,
   isChecked,
+  showSelection,
+  timeFormat,
   onSelect,
-  onOpenForEdit,
   onToggleCheck,
   onOpenMenu,
   draggable,
@@ -40,6 +44,12 @@ export function NoteCard({
   onDragEnd,
 }: NoteCardProps) {
   const openButtonRef = useRef<HTMLButtonElement | null>(null);
+  const snippet = note.content
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/[-*+]\s+\[[ xX]\]\s+/g, "")
+    .replace(/[*_~`>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   function isInteractiveTarget(target: EventTarget | null): boolean {
     return target instanceof Element && Boolean(target.closest("button, input, select, textarea, a[href], [role='button']"));
@@ -80,11 +90,6 @@ export function NoteCard({
           onSelect();
         }
       }}
-      onDoubleClick={(event) => {
-        if (!isInteractiveTarget(event.target)) {
-          onOpenForEdit();
-        }
-      }}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -93,15 +98,17 @@ export function NoteCard({
       }}
     >
       <div className="note-card-top">
-        <input
-          type="checkbox"
-          className="note-card-check"
-          checked={isChecked}
-          onClick={handleCheckClick}
-          onDoubleClick={handleCheckDoubleClick}
-          onChange={(event) => onToggleCheck(event.target.checked)}
-          aria-label={`${note.title} 선택`}
-        />
+        {showSelection ? (
+          <input
+            type="checkbox"
+            className="note-card-check"
+            checked={isChecked}
+            onClick={handleCheckClick}
+            onDoubleClick={handleCheckDoubleClick}
+            onChange={(event) => onToggleCheck(event.target.checked)}
+            aria-label={`${note.title} 선택`}
+          />
+        ) : null}
         <h3 className="note-card-title">
           <button
             ref={openButtonRef}
@@ -111,10 +118,6 @@ export function NoteCard({
             onClick={(event) => {
               event.stopPropagation();
               onSelect();
-            }}
-            onDoubleClick={(event) => {
-              event.stopPropagation();
-              onOpenForEdit();
             }}
             style={{
               border: 0,
@@ -142,6 +145,12 @@ export function NoteCard({
           ⋯
         </button>
       </div>
+      {snippet ? <p className="note-card-snippet">{snippet}</p> : <p className="note-card-snippet empty">내용 없음</p>}
+      <footer className="note-card-footer">
+        {project ? <span className="note-card-project">{project.name}</span> : null}
+        <span className={`note-status-badge status-${note.status}`}>{NOTE_STATUS_LABELS[note.status]}</span>
+        <time dateTime={note.updatedAt}>{formatDateTime(note.updatedAt, timeFormat)}</time>
+      </footer>
     </article>
   );
 }

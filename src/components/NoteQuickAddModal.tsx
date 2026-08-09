@@ -69,12 +69,12 @@ export function NoteQuickAddModal({ onCreate, onClose }: NoteQuickAddModalProps)
 
         {error ? <p className="error-text" role="alert">{error}</p> : null}
 
-        <div className="button-row">
-          <button type="button" className="btn btn-primary" onClick={() => void handleSubmit()} disabled={isSaving}>
-            {isSaving ? "생성 중" : "노트 만들기"}
-          </button>
+        <div className="button-row modal-footer-actions">
           <button type="button" className="btn btn-soft" onClick={onClose}>
             취소
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => void handleSubmit()} disabled={isSaving}>
+            {isSaving ? "생성 중" : "노트 만들기"}
           </button>
         </div>
       </section>

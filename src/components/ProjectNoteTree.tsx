@@ -94,7 +94,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
         className={`note-tree-row root ${selected.kind === "pinned" ? "active" : ""}`}
         onClick={() => onSelect({ kind: "pinned" })}
       >
-        <span className="note-tree-label">📌 고정됨</span>
+        <span className="note-tree-label">고정됨</span>
         <span className="note-tree-count">{counts.pinned}</span>
       </button>
       <button
@@ -102,7 +102,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
         className={`note-tree-row root ${selected.kind === "checklist" ? "active" : ""}`}
         onClick={() => onSelect({ kind: "checklist" })}
       >
-        <span className="note-tree-label">✓ 전체 체크리스트</span>
+        <span className="note-tree-label">체크리스트</span>
         <span className="note-tree-count">{openChecklistCount}</span>
       </button>
 
@@ -135,6 +135,21 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
                 <span className="note-tree-dot" />
                 <span className="note-tree-label">{project.name}</span>
                 <span className="note-tree-count">{counts.project.get(project.id) ?? 0}</span>
+              </button>
+              <button
+                type="button"
+                className="note-tree-project-more"
+                aria-label={`${project.name} 세부 항목 추가`}
+                title="세부 항목 추가"
+                onClick={() => {
+                  setAddingProjectId(project.id);
+                  setAddName("");
+                  if (!isOpen) {
+                    toggleExpand(project.id);
+                  }
+                }}
+              >
+                ⋯
               </button>
             </div>
 
@@ -185,18 +200,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
                     onBlur={() => submitAdd(project.id)}
                     placeholder="세부 항목 이름"
                   />
-                ) : (
-                  <button
-                    type="button"
-                    className="note-tree-add"
-                    onClick={() => {
-                      setAddingProjectId(project.id);
-                      setAddName("");
-                    }}
-                  >
-                    + 세부 항목
-                  </button>
-                )}
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -210,7 +214,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
         className={`note-tree-row root muted ${selected.kind === "archived" ? "active" : ""}`}
         onClick={() => onSelect({ kind: "archived" })}
       >
-        <span className="note-tree-label">🗄 보관됨</span>
+        <span className="note-tree-label">보관됨</span>
         <span className="note-tree-count">{counts.archived}</span>
       </button>
     </nav>

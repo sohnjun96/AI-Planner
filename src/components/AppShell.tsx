@@ -1,17 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { generateNoteTitleWithAi } from "../agent/noteTitleAgent";
-import { generationOptionsFromSetting } from "../agent/llmClient";
-import { DEFAULT_PROJECT_ID } from "../constants";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { NavLink, useLocation, useNavigate } from "../routing";
-import { deriveNoteTitle } from "../utils/noteTitle";
 import { showToast } from "../utils/toast";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
 import { AskDataModal } from "./AskDataModal";
 import { HelpModal } from "./HelpModal";
 import { ModalBackdrop } from "./ModalBackdrop";
-import { NoteQuickAddModal } from "./NoteQuickAddModal";
 import { ToastHost } from "./ToastHost";
 import { WeeklyBackupReminder } from "./WeeklyBackupReminder";
 
@@ -30,26 +25,18 @@ type AiScheduleOpenDetail = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { undoLastChange, projects, setting, createNote } = useAppData();
+  const { undoLastChange } = useAppData();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
   const [aiInitialDraft, setAiInitialDraft] = useState("");
   const [aiSessionRevision, setAiSessionRevision] = useState(0);
-  const [isNoteAddOpen, setIsNoteAddOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAskOpen, setIsAskOpen] = useState(false);
-  const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
-  const quickActionsRef = useRef<HTMLDivElement | null>(null);
   const aiDialogRef = useDialogFocus<HTMLElement>({
     isOpen: isAiAddOpen,
     onClose: closeAiScheduleSession,
   });
-
-  const activeProjectId = useMemo(
-    () => projects.find((project) => project.isActive)?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
-    [projects],
-  );
 
   function openAiScheduleSession(initialDraft = "") {
     setAiInitialDraft(initialDraft);
@@ -61,57 +48,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     setIsAiAddOpen(false);
   }
 
-  async function handleQuickCreateNote(content: string) {
-    const fallbackTitle = deriveNoteTitle(content) || "새 노트";
-    let title = fallbackTitle;
-    if ((setting.llmEndpoint ?? "").trim()) {
-      try {
-        title = await generateNoteTitleWithAi({
-          content,
-          endpoint: setting.llmEndpoint,
-          apiKey: setting.llmApiKey ?? "",
-          model: setting.llmModel,
-          generationOptions: generationOptionsFromSetting(setting),
-        });
-      } catch (error) {
-        console.warn("AI note title generation failed", error);
-      }
-    }
-    const id = await createNote({
-      title,
-      content,
-      projectId: activeProjectId,
-      subcategoryId: undefined,
-      tags: [],
-      status: "draft",
-      isPinned: false,
-    });
-    setIsNoteAddOpen(false);
-    showToast("노트를 만들었습니다.");
-    navigate("/notes");
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("ai-planner:focus-note", { detail: { noteId: id } }));
-    }, 80);
-  }
-
-  function rememberMobileQuickActionsTrigger() {
-    document.getElementById("top-nav-mobile-trigger")?.focus();
-  }
-
-  useEffect(() => {
-    if (!isQuickActionsOpen) {
+  const openNewNote = useCallback(() => {
+    if (location.pathname !== "/notes") {
+      navigate("/notes");
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("ai-planner:create-note")), 80);
       return;
     }
-
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !quickActionsRef.current?.contains(event.target)) {
-        setIsQuickActionsOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
-  }, [isQuickActionsOpen]);
+    window.dispatchEvent(new CustomEvent("ai-planner:create-note"));
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -121,16 +65,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       const hasVisibleMenu = Array.from(document.querySelectorAll<HTMLElement>('[role="menu"]')).some(
         (menu) => menu.getClientRects().length > 0,
       );
-      const hasVisibleQuickActions = Boolean(document.querySelector(".top-nav-mobile-panel"));
 
       if (event.key === "Escape") {
-        if (!hasVisibleDialog && !hasVisibleMenu) {
-          setIsQuickActionsOpen(false);
-        }
         return;
       }
 
-      if (hasVisibleDialog || hasVisibleMenu || hasVisibleQuickActions) {
+      if (hasVisibleDialog || hasVisibleMenu) {
         return;
       }
 
@@ -158,7 +98,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        openNewNote();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         openAiScheduleSession();
       }
@@ -171,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [undoLastChange]);
+  }, [openNewNote, undoLastChange]);
 
   useEffect(() => {
     const handleOpenAiSchedule = (event: Event) => {
@@ -231,7 +177,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               key={item.to}
               to={item.to}
               className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-              onClick={() => setIsQuickActionsOpen(false)}
             >
               {item.label}
             </NavLink>
@@ -254,75 +199,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button type="button" className="btn btn-soft" onClick={() => setIsAskOpen(true)} aria-label="내 데이터에 질문">
               질문
             </button>
-
-            <button type="button" className="btn btn-soft" onClick={() => setIsNoteAddOpen(true)} aria-label="노트 추가">
-              노트 추가
-            </button>
-
-            <button type="button" className="btn btn-primary" onClick={() => openAiScheduleSession()} aria-label="AI 일정 추가, 단축키 A 또는 Ctrl+Shift+N">
-              AI 일정 추가
-            </button>
           </div>
 
-          <div ref={quickActionsRef} className="top-nav-mobile-actions">
-            <button
-              id="top-nav-mobile-trigger"
-              type="button"
-              className="btn btn-primary top-nav-mobile-trigger"
-              aria-expanded={isQuickActionsOpen}
-              aria-controls="top-nav-quick-actions"
-              onClick={() => setIsQuickActionsOpen((open) => !open)}
-            >
-              빠른 작업
+          <div className="top-nav-primary-actions">
+            <button type="button" className="btn btn-soft" onClick={openNewNote} aria-label="노트 추가, Ctrl+N">
+              노트 추가
             </button>
-            {isQuickActionsOpen ? (
-              <div id="top-nav-quick-actions" className="top-nav-mobile-panel" aria-label="빠른 작업">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => {
-                    rememberMobileQuickActionsTrigger();
-                    setIsQuickActionsOpen(false);
-                    openAiScheduleSession();
-                  }}
-                >
-                  일정 AI 추가
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-soft"
-                  onClick={() => {
-                    rememberMobileQuickActionsTrigger();
-                    setIsQuickActionsOpen(false);
-                    setIsNoteAddOpen(true);
-                  }}
-                >
-                  노트 추가
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-soft"
-                  onClick={() => {
-                    rememberMobileQuickActionsTrigger();
-                    setIsQuickActionsOpen(false);
-                    setIsAskOpen(true);
-                  }}
-                >
-                  내 데이터 질문
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-soft"
-                  onClick={() => {
-                    rememberMobileQuickActionsTrigger();
-                    setIsQuickActionsOpen(false);
-                    setIsHelpOpen(true);
-                  }}
-                >
-                  도움말
-                </button>
-              </div>
-            ) : null}
+            <button type="button" className="btn btn-primary" onClick={() => openAiScheduleSession()}>
+              AI 일정 추가
+            </button>
           </div>
         </div>
       </header>
@@ -400,15 +285,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </section>
       </ModalBackdrop>
 
-      {isNoteAddOpen ? (
-        <NoteQuickAddModal onCreate={handleQuickCreateNote} onClose={() => setIsNoteAddOpen(false)} />
-      ) : null}
-
       {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} /> : null}
 
       {isAskOpen ? <AskDataModal onClose={() => setIsAskOpen(false)} /> : null}
 
-      <WeeklyBackupReminder />
+      <WeeklyBackupReminder compact={location.pathname === "/notes"} />
 
       <ToastHost />
     </div>
