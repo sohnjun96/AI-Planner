@@ -7615,10 +7615,6 @@ textarea:focus-visible,
   font-weight: 800;
 }
 
-.markdown-tool-italic {
-  font-style: italic;
-}
-
 .markdown-tool-strike {
   text-decoration: line-through;
 }

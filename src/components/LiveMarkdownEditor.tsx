@@ -148,23 +148,6 @@ function serializeBlocks(root: HTMLElement): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-function safeLink(value: string): string | undefined {
-  if (
-    value.length > 2_048 ||
-    Array.from(value).some((character) => {
-      const code = character.charCodeAt(0);
-      return code <= 31 || code === 127;
-    })
-  ) return undefined;
-  try {
-    const url = new URL(value);
-    if (["https:", "http:", "mailto:"].includes(url.protocol) && !url.username && !url.password) return url.href;
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
-
 export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을 입력하세요." }: LiveMarkdownEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const activeBlockRef = useRef<HTMLElement | null>(null);
@@ -309,25 +292,79 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
     updateActiveBlock();
   }
 
-  function wrapSelection(tagName: "code" | "mark") {
+  function containingMark(node: Node | null): HTMLElement | null {
+    const element = node instanceof HTMLElement ? node : node?.parentElement;
+    const mark = element?.closest<HTMLElement>("mark") ?? null;
+    return mark && editorRef.current?.contains(mark) ? mark : null;
+  }
+
+  function removeMark(mark: HTMLElement) {
+    const parent = mark.parentNode;
+    if (!parent) return;
+    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+    mark.remove();
+  }
+
+  function toggleHighlight() {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || !editorRef.current?.contains(selection.anchorNode)) return;
     const range = selection.getRangeAt(0);
-    const element = document.createElement(tagName);
-    if (range.collapsed) element.textContent = tagName === "code" ? "코드" : "강조";
-    else element.append(range.extractContents());
-    range.insertNode(element);
-    selection.selectAllChildren(element);
+    const startMark = containingMark(range.startContainer);
+    const endMark = containingMark(range.endContainer);
+
+    if (range.collapsed) {
+      if (!startMark) return;
+      removeMark(startMark);
+      emitChange();
+      updateActiveBlock();
+      return;
+    }
+
+    if (startMark && startMark === endMark) {
+      removeMark(startMark);
+      emitChange();
+      updateActiveBlock();
+      return;
+    }
+
+    if (!selection.toString()) return;
+    const root = range.commonAncestorContainer;
+    const textNodes: Text[] = [];
+    if (root instanceof Text) {
+      textNodes.push(root);
+    } else {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let current = walker.nextNode();
+      while (current) {
+        if (current instanceof Text && range.intersectsNode(current) && editorRef.current.contains(current)) {
+          textNodes.push(current);
+        }
+        current = walker.nextNode();
+      }
+    }
+
+    const marks: HTMLElement[] = [];
+    textNodes.forEach((textNode) => {
+      if (!textNode.data || containingMark(textNode)) return;
+      const start = textNode === range.startContainer ? range.startOffset : 0;
+      const end = textNode === range.endContainer ? range.endOffset : textNode.length;
+      if (start >= end) return;
+      const selectedText = start > 0 ? textNode.splitText(start) : textNode;
+      if (end - start < selectedText.length) selectedText.splitText(end - start);
+      const mark = document.createElement("mark");
+      selectedText.replaceWith(mark);
+      mark.append(selectedText);
+      marks.push(mark);
+    });
+    if (marks.length === 0) return;
+
+    selection.removeAllRanges();
+    const highlightedRange = document.createRange();
+    highlightedRange.setStartBefore(marks[0]);
+    highlightedRange.setEndAfter(marks[marks.length - 1]);
+    selection.addRange(highlightedRange);
     emitChange();
     updateActiveBlock();
-  }
-
-  function insertLink() {
-    const value = window.prompt("링크 주소를 입력하세요. (http, https, mailto)", "https://")?.trim();
-    if (!value) return;
-    const href = safeLink(value);
-    if (!href) return;
-    runCommand("createLink", href);
   }
 
   function insertBlockAtSelection(block: HTMLElement) {
@@ -664,12 +701,8 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
     if (event.key.toLowerCase() === "b") {
       event.preventDefault();
       runCommand("bold");
-    } else if (event.key.toLowerCase() === "i") {
+    } else if (["i", "k", "e"].includes(event.key.toLowerCase()) && !event.altKey) {
       event.preventDefault();
-      runCommand("italic");
-    } else if (event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      insertLink();
     } else if (event.shiftKey && event.key.toLowerCase() === "x") {
       event.preventDefault();
       runCommand("strikeThrough");
@@ -696,10 +729,7 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
     ["H2", "제목 2 (Ctrl+Alt+2)", () => runCommand("formatBlock", "H2")],
     ["H3", "제목 3 (Ctrl+Alt+3)", () => runCommand("formatBlock", "H3")],
     ["B", "굵게 (Ctrl+B)", () => runCommand("bold")],
-    ["I", "기울임 (Ctrl+I)", () => runCommand("italic")],
     ["S", "취소선 (Ctrl+Shift+X)", () => runCommand("strikeThrough")],
-    ["<>", "인라인 코드", () => wrapSelection("code")],
-    ["↗", "링크 (Ctrl+K)", insertLink],
     ["•", "글머리 목록 (Ctrl+Shift+8)", () => runCommand("insertUnorderedList")],
     ["1.", "번호 목록 (Ctrl+Shift+7)", () => runCommand("insertOrderedList")],
     ["☑", "체크리스트 (Ctrl+Alt+C)", insertChecklist],
@@ -707,7 +737,7 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
     ["```", "코드 블록", insertCodeBlock],
     ["▦", "표 삽입 (Ctrl+Alt+T)", insertTable],
     ["―", "구분선", insertDivider],
-    ["==", "하이라이트", () => wrapSelection("mark")],
+    ["==", "하이라이트 (선택 영역만)", toggleHighlight],
   ] as const;
 
   return (

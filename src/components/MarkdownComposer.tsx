@@ -76,18 +76,6 @@ export function MarkdownComposer({
     applyEdit(applyMarkdownLineStyle(value, start, end, style));
   }
 
-  function insertLink() {
-    const { start, end } = selection();
-    const selected = value.slice(start, end) || "링크 텍스트";
-    const replacement = `[${selected}](https://)`;
-    const urlStart = start + selected.length + 3;
-    applyEdit({
-      value: value.slice(0, start) + replacement + value.slice(end),
-      selectionStart: urlStart,
-      selectionEnd: urlStart + 8,
-    });
-  }
-
   function insertCodeBlock() {
     const { start, end } = selection();
     const selected = value.slice(start, end) || "코드";
@@ -116,10 +104,7 @@ export function MarkdownComposer({
     { id: "h2", label: "H2", title: "제목 2 (Ctrl+Alt+2)", run: () => lineStyle("heading2") },
     { id: "h3", label: "H3", title: "제목 3 (Ctrl+Alt+3)", run: () => lineStyle("heading3") },
     { id: "bold", label: "B", title: "굵게 (Ctrl+B)", run: () => wrap("**", "**", "굵은 글씨") },
-    { id: "italic", label: "I", title: "기울임 (Ctrl+I)", run: () => wrap("*", "*", "기울임 글씨") },
     { id: "strike", label: "S", title: "취소선 (Ctrl+Shift+X)", run: () => wrap("~~", "~~", "취소선") },
-    { id: "code", label: "<>", title: "인라인 코드 (Ctrl+E)", run: () => wrap("`", "`", "코드") },
-    { id: "link", label: "↗", title: "링크 (Ctrl+K)", run: insertLink },
     { id: "bullet", label: "•", title: "글머리 목록 (Ctrl+Shift+8)", run: () => lineStyle("bullet") },
     { id: "ordered", label: "1.", title: "번호 목록 (Ctrl+Shift+7)", run: () => lineStyle("ordered") },
     { id: "check", label: "☑", title: "체크리스트 (Ctrl+Alt+C)", run: () => lineStyle("checklist") },
@@ -163,14 +148,6 @@ export function MarkdownComposer({
       result = removeEmptyMarkdownPrefix(value, start);
     } else if (command && !event.altKey && event.key.toLowerCase() === "b") {
       result = wrapMarkdownSelection(value, start, end, "**", "**", "굵은 글씨");
-    } else if (command && !event.altKey && event.key.toLowerCase() === "i") {
-      result = wrapMarkdownSelection(value, start, end, "*", "*", "기울임 글씨");
-    } else if (command && !event.altKey && event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      insertLink();
-      return;
-    } else if (command && !event.altKey && event.key.toLowerCase() === "e") {
-      result = wrapMarkdownSelection(value, start, end, "`", "`", "코드");
     } else if (command && event.shiftKey && event.key.toLowerCase() === "x") {
       result = wrapMarkdownSelection(value, start, end, "~~", "~~", "취소선");
     } else if (command && event.altKey && ["1", "2", "3"].includes(event.key)) {
