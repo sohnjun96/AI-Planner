@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import "./DashboardPage.weekNavigation.css";
 import { useNavigate, useSearchParams } from "../routing";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { DailyBriefing } from "../components/DailyBriefing";
@@ -654,6 +655,9 @@ export function DashboardPage() {
     [calendarListGroups, todayKey],
   );
   const weekStart = useMemo(() => getWeekStart(selectedDate, setting.weekStartsOn), [selectedDate, setting.weekStartsOn]);
+  const weekStartKey = getDateKey(weekStart);
+  const weekEndKey = getDateKey(addDays(weekStart, 6));
+  const isCurrentWeek = todayKey >= weekStartKey && todayKey <= weekEndKey;
   const weekDays = useMemo(
     () =>
       Array.from({ length: 7 }, (_, index) => {
@@ -968,6 +972,18 @@ export function DashboardPage() {
     } catch {
       // 보기 변경 자체는 유지하고, 저장소를 사용할 수 없을 때만 기억 기능을 건너뛴다.
     }
+  }
+
+  function moveVisibleWeek(offset: -1 | 1) {
+    setSelectedDate(getDateKey(addDays(weekStart, offset * 7)));
+    setDatePopoverKey(null);
+    setContextMenu(null);
+  }
+
+  function showCurrentWeek() {
+    setSelectedDate(todayKey);
+    setDatePopoverKey(null);
+    setContextMenu(null);
   }
 
   function changeTaskStatus(task: Task, status: TaskStatus) {
@@ -1448,9 +1464,26 @@ export function DashboardPage() {
               <header className="schedule-view-header">
                 <div>
                   <p className="eyebrow">WEEK</p>
-                  <h3>{formatDateLabel(getDateKey(weekStart))} 시작 주간</h3>
+                  <h3 aria-live="polite">{formatDateLabel(weekStartKey)} 시작 주간</h3>
                 </div>
-                <span>{weekVisibleTaskCount}/{weekViewSourceTasks.length}개</span>
+                <div className="button-row compact week-navigation" role="group" aria-label="표시할 주간 이동">
+                  <span className="week-navigation-count">{weekVisibleTaskCount}/{weekViewSourceTasks.length}개</span>
+                  <button type="button" className="btn btn-soft" onClick={() => moveVisibleWeek(-1)} aria-label="이전 주 보기">
+                    ‹ 이전 주
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={showCurrentWeek}
+                    disabled={isCurrentWeek}
+                    aria-label={isCurrentWeek ? "현재 이번 주를 보는 중" : "이번 주로 돌아가기"}
+                  >
+                    이번 주
+                  </button>
+                  <button type="button" className="btn btn-soft" onClick={() => moveVisibleWeek(1)} aria-label="다음 주 보기">
+                    다음 주 ›
+                  </button>
+                </div>
               </header>
               {renderScheduleStatGrid(weekViewSummary)}
               <div className="week-agenda">

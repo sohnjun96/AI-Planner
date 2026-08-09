@@ -1,0 +1,26 @@
+.week-navigation {
+  justify-content: flex-end;
+}
+
+.week-navigation-count {
+  min-width: 56px;
+  color: var(--body-muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .dashboard-week-view .schedule-view-header {
+    flex-wrap: wrap;
+  }
+
+  .week-navigation {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .week-navigation-count {
+    width: 100%;
+    text-align: left;
+  }
+}

@@ -10,6 +10,8 @@ import {
 } from "../utils/date";
 import { compareProjects } from "../utils/projectOrder";
 import { findTaskConflictsForRange } from "../utils/taskConflicts";
+import { TimeSelect } from "./TimeSelect";
+import "./TaskForm.timeSelect.css";
 
 interface TaskFormProps {
   projects: Project[];
@@ -390,6 +392,12 @@ export function TaskForm({
     setSubmitError("");
   }
 
+  function clearEndDateTime() {
+    setForm((prev) => ({ ...prev, endDate: "", endTime: "" }));
+    setFieldErrors({});
+    setSubmitError("");
+  }
+
   function errorId(field: FormField) {
     return `task-form-${field}-error`;
   }
@@ -670,22 +678,22 @@ export function TaskForm({
             {renderFieldError("startDate")}
           </label>
 
-          <label className="task-form-field">
-            <span>
+          <div className="task-form-field">
+            <span id="task-form-start-time-label">
               시작 시간 <span className="task-form-required-mark" aria-hidden="true">*</span>
             </span>
-            <input
-              type="time"
+            <TimeSelect
               name="startTime"
               value={form.startTime}
-              onChange={(event) => updateFormField("startTime", event.target.value)}
-              step={900}
+              timeFormat={timeFormat}
+              labelId="task-form-start-time-label"
+              onChange={(value) => updateFormField("startTime", value)}
               required
-              aria-required="true"
-              {...errorProps("startTime")}
+              invalid={Boolean(fieldErrors.startTime)}
+              describedBy={fieldErrors.startTime ? errorId("startTime") : undefined}
             />
             {renderFieldError("startTime")}
-          </label>
+          </div>
         </div>
         {draftRange ? (
           <p className="task-form-time-preview">
@@ -709,29 +717,42 @@ export function TaskForm({
 
         <div className="task-form-advanced-content">
           <div className="form-grid two-col task-form-datetime-grid" role="group" aria-label="종료 일시">
-            <label className="task-form-field">
-              종료 날짜
-              <input
-                type="date"
-                name="endDate"
-                value={form.endDate}
-                onChange={(event) => updateFormField("endDate", event.target.value)}
-                {...errorProps("endDate")}
-              />
+            <div className="task-form-field">
+              <span id="task-form-end-date-label">종료 날짜</span>
+              <div className="task-end-date-control">
+                <input
+                  type="date"
+                  name="endDate"
+                  value={form.endDate}
+                  onChange={(event) => updateFormField("endDate", event.target.value)}
+                  aria-labelledby="task-form-end-date-label"
+                  {...errorProps("endDate")}
+                />
+                <button
+                  type="button"
+                  className="task-end-datetime-clear"
+                  onClick={clearEndDateTime}
+                  disabled={!form.endDate && !form.endTime}
+                  aria-label="종료 날짜와 시간 지우기"
+                >
+                  지우기
+                </button>
+              </div>
               {renderFieldError("endDate")}
-            </label>
-            <label className="task-form-field">
-              종료 시간
-              <input
-                type="time"
+            </div>
+            <div className="task-form-field">
+              <span id="task-form-end-time-label">종료 시간</span>
+              <TimeSelect
                 name="endTime"
                 value={form.endTime}
-                onChange={(event) => updateFormField("endTime", event.target.value)}
-                step={900}
-                {...errorProps("endTime")}
+                timeFormat={timeFormat}
+                labelId="task-form-end-time-label"
+                onChange={(value) => updateFormField("endTime", value)}
+                invalid={Boolean(fieldErrors.endTime)}
+                describedBy={fieldErrors.endTime ? errorId("endTime") : undefined}
               />
               {renderFieldError("endTime")}
-            </label>
+            </div>
           </div>
 
           {!isEdit ? (
