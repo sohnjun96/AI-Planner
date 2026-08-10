@@ -4,6 +4,43 @@ export interface MarkdownEditResult {
   selectionEnd: number;
 }
 
+export type MarkdownListShortcut =
+  | { kind: "unordered"; body: string }
+  | { kind: "ordered"; body: string; start: number }
+  | { kind: "checklist"; body: string; checked: boolean };
+
+export function parseMarkdownListShortcut(value: string): MarkdownListShortcut | null {
+  const checklist = value.match(/^[-*+][ \u00a0]+\[([ xX])\][ \u00a0]+([^\r\n]*)$/);
+  if (checklist) {
+    return { kind: "checklist", body: checklist[2], checked: checklist[1].toLowerCase() === "x" };
+  }
+  const ordered = value.match(/^(\d{1,6})[.)][ \u00a0]+([^\r\n]*)$/);
+  if (ordered) {
+    return { kind: "ordered", body: ordered[2], start: Math.min(1_000_000, Math.max(1, Number(ordered[1]))) };
+  }
+  const unordered = value.match(/^[-*+][ \u00a0]+([^\r\n]*)$/);
+  return unordered ? { kind: "unordered", body: unordered[1] } : null;
+}
+
+export function parseMarkdownChecklistItemShortcut(value: string): { body: string; checked: boolean } | null {
+  const match = value.match(/^\[([ xX])\][ \u00a0]+([^\r\n]*)$/);
+  return match ? { body: match[2], checked: match[1].toLowerCase() === "x" } : null;
+}
+
+export function nextMarkdownListDepth(
+  currentDepth: number,
+  previousDepth: number | undefined,
+  outdent: boolean,
+  maxDepth = 4,
+): number {
+  const safeMax = Math.min(8, Math.max(1, Math.trunc(maxDepth) || 4));
+  const current = Math.min(safeMax, Math.max(0, Math.trunc(currentDepth) || 0));
+  if (outdent) return Math.max(0, current - 1);
+  if (previousDepth === undefined) return current;
+  const previous = Math.min(safeMax, Math.max(0, Math.trunc(previousDepth) || 0));
+  return Math.min(safeMax, current + 1, previous + 1);
+}
+
 export type MarkdownLineStyle = "heading1" | "heading2" | "heading3" | "bullet" | "ordered" | "checklist" | "quote";
 
 function replaceRange(value: string, start: number, end: number, replacement: string, selectionOffset = replacement.length): MarkdownEditResult {

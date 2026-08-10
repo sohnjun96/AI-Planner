@@ -39,6 +39,8 @@ interface AiProposal {
   headline: string;
 }
 
+const NOTE_AUTOSAVE_IDLE_MS = 15_000;
+
 function noteToInput(note: Note): NoteFormInput {
   return {
     title: note.title,
@@ -67,8 +69,6 @@ function isDraftDifferentFromNote(note: Note, draft: NoteFormInput): boolean {
     !tagsEqual(note.tags, draft.tags)
   );
 }
-
-const AUTOSAVE_DELAY_MS = 1000;
 
 export function NotesPage() {
   const {
@@ -141,6 +141,7 @@ export function NotesPage() {
   // 노트 전환/페이지 이탈 시점에 미저장 수정분을 플러시하기 위한 최신 상태 미러
   const draftRef = useRef<NoteFormInput | null>(null);
   const notesRef = useRef<Note[]>(notes);
+  const idleAutosaveTimerRef = useRef<number | null>(null);
   const classificationInFlightRef = useRef(false);
   const classificationAttemptedRef = useRef(new Set<string>());
 
@@ -152,8 +153,16 @@ export function NotesPage() {
     notesRef.current = notes;
   }, [notes]);
 
+  const clearIdleAutosaveTimer = useCallback(() => {
+    if (idleAutosaveTimerRef.current !== null) {
+      window.clearTimeout(idleAutosaveTimerRef.current);
+      idleAutosaveTimerRef.current = null;
+    }
+  }, []);
+
   // 미저장 수정분이 있으면 조용히 자동 저장한다 (전환·이탈로 인한 유실 방지)
   const flushPendingDraft = useCallback(() => {
+    clearIdleAutosaveTimer();
     const pendingId = loadedNoteIdRef.current;
     const pendingDraft = draftRef.current;
     if (!pendingId || !pendingDraft) {
@@ -163,7 +172,7 @@ export function NotesPage() {
     if (pendingNote && isDraftDifferentFromNote(pendingNote, pendingDraft)) {
       void updateNote(pendingId, pendingDraft, "autosave");
     }
-  }, [updateNote]);
+  }, [clearIdleAutosaveTimer, updateNote]);
 
   // 노트 탭을 떠날 때(언마운트) 마지막 수정분 저장
   useEffect(() => {
@@ -449,6 +458,14 @@ export function NotesPage() {
 
   const visibleNotes = useMemo(() => filteredNotes.slice(0, visibleLimit), [filteredNotes, visibleLimit]);
 
+  // 검색 결과에서 현재 노트가 제외되면 숨겨진 노트를 계속 편집하지 않도록 선택을 해제한다.
+  useEffect(() => {
+    if (!selectedNoteId || !deferredSearch.trim()) return;
+    if (!filteredNotes.some((note) => note.id === selectedNoteId)) {
+      setSelectedNoteId(null);
+    }
+  }, [deferredSearch, filteredNotes, selectedNoteId]);
+
   function openNote(noteId: string, mode: "edit" | "read" = "read") {
     setEditorEntryMode(mode);
     setEditorEntryRevision((revision) => revision + 1);
@@ -545,24 +562,39 @@ export function NotesPage() {
     return isDraftDifferentFromNote(selectedNote, draft);
   }, [selectedNote, draft]);
 
-  // 입력이 멈추면 자동 저장 — 저장 버튼을 안 눌러도 수정분이 유실되지 않는다
+  // 마지막 입력 후 15초 동안 추가 수정이 없을 때 한 번만 자동 저장한다.
   useEffect(() => {
-    if (!selectedNoteId || !draft || !isDirty || isSaving) {
+    clearIdleAutosaveTimer();
+    if (!selectedNoteId || !draft || !isDirty) {
       return;
     }
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          await updateNote(selectedNoteId, draft, "autosave");
-          setSavedMessage("자동 저장됨");
-          window.setTimeout(() => setSavedMessage(""), 1500);
-        } catch {
-          // 자동 저장 실패는 조용히 넘기고 다음 변경/수동 저장에서 재시도한다
-        }
-      })();
-    }, AUTOSAVE_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [selectedNoteId, draft, isDirty, isSaving, updateNote]);
+
+    const noteId = selectedNoteId;
+    idleAutosaveTimerRef.current = window.setTimeout(() => {
+      idleAutosaveTimerRef.current = null;
+      const latestDraft = draftRef.current;
+      const latestNote = notesRef.current.find((note) => note.id === noteId);
+      if (loadedNoteIdRef.current !== noteId || !latestDraft || !latestNote || !isDraftDifferentFromNote(latestNote, latestDraft)) {
+        return;
+      }
+
+      setIsSaving(true);
+      setErrorMessage("");
+      void updateNote(noteId, latestDraft, "autosave")
+        .then(() => {
+          setSavedMessage("자동 저장했습니다.");
+          window.setTimeout(() => setSavedMessage(""), 2000);
+        })
+        .catch((error: unknown) => {
+          setErrorMessage(error instanceof Error ? error.message : "자동 저장에 실패했습니다.");
+        })
+        .finally(() => {
+          setIsSaving(false);
+        });
+    }, NOTE_AUTOSAVE_IDLE_MS);
+
+    return clearIdleAutosaveTimer;
+  }, [clearIdleAutosaveTimer, draft, isDirty, selectedNoteId, updateNote]);
 
   const currentSubcategoryName = draft?.subcategoryId ? subMap[draft.subcategoryId]?.name : undefined;
   const currentProject = draft ? projectMap[draft.projectId] : undefined;
@@ -645,6 +677,7 @@ export function NotesPage() {
 
   async function handleSave(editType: NoteVersionEditType = "manual") {
     if (!selectedNoteId || !draft) return;
+    clearIdleAutosaveTimer();
     setIsSaving(true);
     setErrorMessage("");
     try {
@@ -660,6 +693,7 @@ export function NotesPage() {
 
   async function handleApplyMeta(patch: Partial<NoteFormInput>) {
     if (!selectedNoteId || !draft) return;
+    clearIdleAutosaveTimer();
     const nextInput: NoteFormInput = { ...draft, ...patch };
     setDraft(nextInput);
     try {
@@ -672,6 +706,7 @@ export function NotesPage() {
   async function handleDelete() {
     if (!selectedNoteId) return;
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
+    clearIdleAutosaveTimer();
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
     showToast("노트를 삭제했습니다.");
@@ -689,6 +724,7 @@ export function NotesPage() {
     lines[lineIndex] = replaced;
     const nextContent = lines.join("\n");
     if (noteId === selectedNoteId && draft) {
+      clearIdleAutosaveTimer();
       setDraft({ ...draft, content: nextContent });
     }
     try {
@@ -706,6 +742,7 @@ export function NotesPage() {
     const isSelected = noteId === selectedNoteId;
 
     if (isSelected) {
+      clearIdleAutosaveTimer();
       // 선택 노트의 메타데이터와 편집 초안을 동시에 맞춰, 이전 초안이
       // 자동 저장되면서 방금 적용한 고정·상태 값을 되돌리지 않게 한다.
       draftRef.current = nextInput;
@@ -940,6 +977,7 @@ export function NotesPage() {
 
   async function acceptProposal() {
     if (!selectedNoteId || !draft || !aiProposal) return;
+    clearIdleAutosaveTimer();
     const nextInput: NoteFormInput = {
       ...draft,
       content: aiProposal.content,
@@ -1100,11 +1138,32 @@ export function NotesPage() {
   }
 
   async function handleRestoreVersion(versionId: string) {
-    if (!selectedNoteId) return;
-    await restoreNoteVersion(selectedNoteId, versionId);
-    loadedNoteIdRef.current = null;
-    setCompareVersion(null);
-    setHistoryOpen(false);
+    if (!selectedNoteId || !selectedNote) return;
+    const version = selectedVersions.find((item) => item.id === versionId);
+    if (!version) return;
+    const noteId = selectedNoteId;
+    const restoredInput: NoteFormInput = {
+      ...noteToInput(selectedNote),
+      title: version.title,
+      content: version.content,
+    };
+    clearIdleAutosaveTimer();
+    setIsSaving(true);
+    setErrorMessage("");
+    try {
+      await restoreNoteVersion(noteId, versionId);
+      draftRef.current = restoredInput;
+      loadedNoteIdRef.current = noteId;
+      setDraft(restoredInput);
+      setCompareVersion(null);
+      setHistoryOpen(false);
+      setSavedMessage("이전 버전을 복원했습니다.");
+      window.setTimeout(() => setSavedMessage(""), 2000);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "버전을 복원하지 못했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function handleOpenTask(taskId: string) {

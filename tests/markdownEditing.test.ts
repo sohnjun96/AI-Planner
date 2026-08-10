@@ -5,6 +5,9 @@ import {
   filterMarkdownSlashCommands,
   indentMarkdownLines,
   insertMarkdownTable,
+  nextMarkdownListDepth,
+  parseMarkdownChecklistItemShortcut,
+  parseMarkdownListShortcut,
   removeEmptyMarkdownPrefix,
   wrapMarkdownSelection,
 } from "../src/utils/markdownEditing";
@@ -25,6 +28,16 @@ assert.equal(continueMarkdownLine("- [x] 완료", 8, 8)?.value, "- [x] 완료\n-
 assert.equal(continueMarkdownLine("3. 셋째", 5, 5)?.value, "3. 셋째\n4. ");
 assert.equal(removeEmptyMarkdownPrefix("문장\n  - ", 7)?.value, "문장\n");
 assert.equal(indentMarkdownLines("- 하나\n- 둘", 0, 8, false).value, "  - 하나\n  - 둘");
+assert.equal(nextMarkdownListDepth(0, undefined, false), 0);
+assert.equal(nextMarkdownListDepth(0, 0, false), 1);
+assert.equal(nextMarkdownListDepth(1, 0, false), 1);
+assert.equal(nextMarkdownListDepth(2, 1, true), 1);
+assert.equal(nextMarkdownListDepth(8, 8, false), 4);
+assert.deepEqual(parseMarkdownListShortcut("- "), { kind: "unordered", body: "" });
+assert.deepEqual(parseMarkdownListShortcut("3. 항목"), { kind: "ordered", body: "항목", start: 3 });
+assert.deepEqual(parseMarkdownListShortcut("- [x] 완료"), { kind: "checklist", body: "완료", checked: true });
+assert.deepEqual(parseMarkdownChecklistItemShortcut("[ ] 할 일"), { body: "할 일", checked: false });
+assert.equal(parseMarkdownListShortcut("일반 문장"), null);
 assert.equal(applyMarkdownLineStyle("하나\n둘", 0, 4, "ordered").value, "1. 하나\n2. 둘");
 assert.equal(applyMarkdownLineStyle("제목", 0, 2, "heading3").value, "### 제목");
 assert.equal(wrapMarkdownSelection("강조", 0, 2, "**", "**", "굵게").value, "**강조**");

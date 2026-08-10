@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
-import { filterMarkdownSlashCommands } from "../utils/markdownEditing";
+import {
+  filterMarkdownSlashCommands,
+  nextMarkdownListDepth,
+  parseMarkdownChecklistItemShortcut,
+  parseMarkdownListShortcut,
+} from "../utils/markdownEditing";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface LiveMarkdownEditorProps {
@@ -78,16 +83,30 @@ function listMarkdown(list: HTMLElement, depth = 0): string {
   const ordered = list.tagName === "OL";
   const start = Number(list.getAttribute("start") ?? "1") || 1;
   const lines: string[] = [];
-  const items = Array.from(list.children).filter((child): child is HTMLLIElement => child instanceof HTMLLIElement);
-  items.forEach((item, index) => {
+  let itemIndex = 0;
+  Array.from(list.children).forEach((child) => {
+    if (!(child instanceof HTMLLIElement)) {
+      if (child instanceof HTMLElement && ["UL", "OL"].includes(child.tagName)) {
+        const nested = listMarkdown(child, depth + 1);
+        if (nested) lines.push(nested);
+      }
+      return;
+    }
+    const item = child;
+    const visualDepth = Math.min(4, Math.max(0, Math.round((Number.parseFloat(item.style.marginLeft) || 0) / 16)));
+    const itemDepth = depth + visualDepth;
     const checkbox = Array.from(item.children).find(
       (child): child is HTMLInputElement => child instanceof HTMLInputElement && child.type === "checkbox",
     );
-    const prefix = checkbox ? `- [${checkbox.checked ? "x" : " "}] ` : ordered ? `${start + index}. ` : "- ";
-    lines.push(`${"  ".repeat(depth)}${prefix}${directInlineMarkdown(item)}`.trimEnd());
+    const prefix = checkbox ? `- [${checkbox.checked ? "x" : " "}] ` : ordered ? `${start + itemIndex}. ` : "- ";
+    lines.push(`${"  ".repeat(itemDepth)}${prefix}${directInlineMarkdown(item)}`.trimEnd());
     Array.from(item.children)
       .filter((child): child is HTMLElement => child instanceof HTMLElement && ["UL", "OL"].includes(child.tagName))
-      .forEach((nested) => lines.push(listMarkdown(nested, depth + 1)));
+      .forEach((nested) => {
+        const nestedMarkdown = listMarkdown(nested, itemDepth + 1);
+        if (nestedMarkdown) lines.push(nestedMarkdown);
+      });
+    itemIndex += 1;
   });
   return lines.join("\n");
 }
@@ -288,6 +307,24 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
   function runCommand(command: string, value?: string) {
     editorRef.current?.focus();
     document.execCommand(command, false, value);
+    emitChange();
+    updateActiveBlock();
+  }
+
+  function listItemDepth(item: HTMLLIElement): number {
+    return Math.min(4, Math.max(0, Math.round((Number.parseFloat(item.style.marginLeft) || 0) / 16)));
+  }
+
+  function changeListItemDepth(item: HTMLLIElement, outdent: boolean) {
+    const previous = item.previousElementSibling instanceof HTMLLIElement ? item.previousElementSibling : undefined;
+    const nextDepth = nextMarkdownListDepth(
+      listItemDepth(item),
+      previous ? listItemDepth(previous) : undefined,
+      outdent,
+    );
+    if (nextDepth === listItemDepth(item)) return;
+    if (nextDepth === 0) item.style.removeProperty("margin-left");
+    else item.style.marginLeft = `${nextDepth * 16}px`;
     emitChange();
     updateActiveBlock();
   }
@@ -523,6 +560,71 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
     return true;
   }
 
+  function transformMarkdownListShortcut(): boolean {
+    const selection = window.getSelection();
+    const anchorNode = selection?.anchorNode;
+    if (!selection || !selection.isCollapsed || !anchorNode || !editorRef.current?.contains(anchorNode)) return false;
+    const anchorElement = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement;
+    const paragraph = anchorElement?.closest<HTMLParagraphElement>("p");
+    if (!paragraph || !editorRef.current.contains(paragraph) || paragraph.closest("li, blockquote, td, th")) return false;
+    const shortcut = parseMarkdownListShortcut(paragraph.textContent ?? "");
+    if (!shortcut) return false;
+
+    const list = document.createElement(shortcut.kind === "ordered" ? "ol" : "ul");
+    if (shortcut.kind === "ordered" && shortcut.start !== 1) list.setAttribute("start", String(shortcut.start));
+    if (shortcut.kind === "checklist") list.className = "markdown-checklist";
+    const item = document.createElement("li");
+    let contentContainer: HTMLElement = item;
+    if (shortcut.kind === "checklist") {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = shortcut.checked;
+      checkbox.contentEditable = "false";
+      const text = document.createElement("span");
+      item.append(checkbox, text);
+      contentContainer = text;
+    }
+    contentContainer.textContent = shortcut.body;
+    ensureEditableLine(contentContainer);
+    list.append(item);
+    paragraph.replaceWith(list);
+    if (shortcut.body) placeCaretAtEnd(contentContainer);
+    else placeCaretAtStart(contentContainer);
+    return true;
+  }
+
+  function transformMarkdownChecklistItemShortcut(): boolean {
+    const selection = window.getSelection();
+    const anchorNode = selection?.anchorNode;
+    if (!selection || !selection.isCollapsed || !anchorNode || !editorRef.current?.contains(anchorNode)) return false;
+    const anchorElement = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement;
+    const item = anchorElement?.closest<HTMLLIElement>("li");
+    const list = item?.parentElement;
+    if (!item || !list || list.tagName !== "UL" || !editorRef.current.contains(item)) return false;
+    if (item.querySelector(":scope > input[type='checkbox']")) return false;
+    const shortcut = parseMarkdownChecklistItemShortcut(directInlineMarkdown(item));
+    if (!shortcut) return false;
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = shortcut.checked;
+    checkbox.contentEditable = "false";
+    const text = document.createElement("span");
+    text.textContent = shortcut.body;
+    ensureEditableLine(text);
+    item.replaceChildren(checkbox, text);
+    list.classList.add("markdown-checklist");
+    if (shortcut.body) placeCaretAtEnd(text);
+    else placeCaretAtStart(text);
+    return true;
+  }
+
+  function transformMarkdownTypingShortcut() {
+    if (transformMarkdownHeadingShortcut()) return;
+    if (transformMarkdownListShortcut()) return;
+    transformMarkdownChecklistItemShortcut();
+  }
+
   function splitAtSelection(container: HTMLElement, selection: Selection): DocumentFragment {
     const range = selection.getRangeAt(0);
     if (!range.collapsed) range.deleteContents();
@@ -561,6 +663,7 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
       }
 
       const nextItem = document.createElement("li");
+      if (item.style.marginLeft) nextItem.style.marginLeft = item.style.marginLeft;
       let nextContainer: HTMLElement = nextItem;
       if (checkbox) {
         const nextCheckbox = document.createElement("input");
@@ -690,10 +793,10 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
     }
     if (event.key === "Enter" && handleStructuredEnter(event)) return;
     if (event.key === "Tab") {
-      const item = (window.getSelection()?.anchorNode as Node | null)?.parentElement?.closest("li");
-      if (item) {
+      const item = selectionElement()?.closest("li");
+      if (item instanceof HTMLLIElement && editorRef.current?.contains(item)) {
         event.preventDefault();
-        runCommand(event.shiftKey ? "outdent" : "indent");
+        changeListItemDepth(item, event.shiftKey);
       }
       return;
     }
@@ -773,7 +876,7 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
         data-empty={isEmpty ? "true" : "false"}
         data-placeholder={placeholder}
         onInput={() => {
-          if (!isComposingRef.current) transformMarkdownHeadingShortcut();
+          if (!isComposingRef.current) transformMarkdownTypingShortcut();
           updateActiveBlock();
           updateSlashMenu();
           emitChange();
@@ -806,7 +909,7 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
         }}
         onCompositionEnd={() => {
           isComposingRef.current = false;
-          transformMarkdownHeadingShortcut();
+          transformMarkdownTypingShortcut();
           updateActiveBlock();
           updateSlashMenu();
           emitChange();

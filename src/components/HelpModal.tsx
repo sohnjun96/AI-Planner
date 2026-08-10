@@ -29,6 +29,8 @@ const GROUPS: ShortcutGroup[] = [
       { keys: "우클릭 (본문)", desc: "AI 편집 메뉴 (다듬기·요약·구조화 등)" },
       { keys: "우클릭 / ⋯ (카드)", desc: "열기·AI 요약·고정·상태 변경·삭제" },
       { keys: "Ctrl + S", desc: "노트 저장" },
+      { keys: "자동 저장", desc: "15초간 수정이 없거나 다른 노트·페이지로 이동할 때 저장" },
+      { keys: "Ctrl + Z / Ctrl + Shift + Z", desc: "노트 편집 실행 취소 / 다시 실행" },
       { keys: "Ctrl + B", desc: "굵게" },
       { keys: "라이브 하이라이트", desc: "선택 영역에 적용 · 커서 안에서 다시 누르면 해제" },
       { keys: "# / ## / ### + Space", desc: "라이브 편집에서 제목 1 / 2 / 3으로 전환" },
@@ -43,7 +45,7 @@ const GROUPS: ShortcutGroup[] = [
   {
     title: "공통",
     items: [
-      { keys: "Ctrl + Z", desc: "마지막 일정 변경 실행 취소" },
+      { keys: "Ctrl + Z", desc: "입력 영역 밖에서 마지막 일정 변경 실행 취소" },
       { keys: "?", desc: "이 도움말 열기" },
       { keys: "Esc", desc: "모달·메뉴 닫기" },
     ],

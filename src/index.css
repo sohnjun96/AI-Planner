@@ -8696,12 +8696,6 @@ textarea:focus-visible,
   overflow-y: auto;
 }
 
-/* The explorer keeps the count and filter, while the actual checklist is
-   intentionally rendered in the reading pane. */
-.notes-explorer-list .notes-checklist-view {
-  display: none;
-}
-
 .notes-checklist-main {
   display: flex;
   flex-direction: column;
