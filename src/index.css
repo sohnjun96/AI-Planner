@@ -1194,7 +1194,8 @@ textarea:focus-visible,
   list-style: decimal;
 }
 
-.markdown-renderer strong {
+.markdown-renderer strong,
+.markdown-renderer b {
   font-weight: 700;
   color: var(--link-blue);
 }
@@ -7689,6 +7690,8 @@ textarea:focus-visible,
 .live-markdown-surface blockquote.markdown-active-block::before,
 .live-markdown-surface .markdown-active-block strong::before,
 .live-markdown-surface .markdown-active-block strong::after,
+.live-markdown-surface .markdown-active-block b::before,
+.live-markdown-surface .markdown-active-block b::after,
 .live-markdown-surface .markdown-active-block em::before,
 .live-markdown-surface .markdown-active-block em::after,
 .live-markdown-surface .markdown-active-block del::before,
@@ -7718,7 +7721,9 @@ textarea:focus-visible,
 .live-markdown-surface h6.markdown-active-block::before { content: "###### "; }
 .live-markdown-surface blockquote.markdown-active-block::before { content: "> "; }
 .live-markdown-surface .markdown-active-block strong::before,
-.live-markdown-surface .markdown-active-block strong::after { content: "**"; }
+.live-markdown-surface .markdown-active-block strong::after,
+.live-markdown-surface .markdown-active-block b::before,
+.live-markdown-surface .markdown-active-block b::after { content: "**"; }
 .live-markdown-surface .markdown-active-block em::before,
 .live-markdown-surface .markdown-active-block em::after { content: "*"; }
 .live-markdown-surface .markdown-active-block del::before,

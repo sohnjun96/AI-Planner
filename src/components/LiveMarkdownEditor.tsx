@@ -15,6 +15,7 @@ interface LiveMarkdownEditorProps {
 
 const MAX_NOTE_CHARACTERS = 500_000;
 const SLASH_MENU_ID = "live-markdown-slash-menu";
+const REMOVABLE_INLINE_MARKER_SELECTOR = "strong, b, del, s, strike, mark, em, i, a:not(.markdown-image-link), code";
 
 interface SlashMenuState {
   query: string;
@@ -537,6 +538,150 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
     }
   }
 
+  function caretIsAtStartOf(element: HTMLElement, selection: Selection): boolean {
+    if (!selection.isCollapsed || selection.rangeCount === 0) return false;
+    const range = selection.getRangeAt(0);
+    if (!element.contains(range.startContainer)) return false;
+    const beforeCaret = document.createRange();
+    beforeCaret.selectNodeContents(element);
+    beforeCaret.setEnd(range.startContainer, range.startOffset);
+    return beforeCaret.toString().length === 0;
+  }
+
+  function caretIsAtEndOf(element: HTMLElement, selection: Selection): boolean {
+    if (!selection.isCollapsed || selection.rangeCount === 0) return false;
+    const range = selection.getRangeAt(0);
+    if (!element.contains(range.endContainer)) return false;
+    const afterCaret = document.createRange();
+    afterCaret.selectNodeContents(element);
+    afterCaret.setStart(range.endContainer, range.endOffset);
+    return afterCaret.toString().length === 0;
+  }
+
+  function unwrapInlineElement(element: HTMLElement, caretAtEnd: boolean) {
+    const parent = element.parentNode;
+    if (!parent) return;
+    const children = Array.from(element.childNodes);
+    const fallback = document.createTextNode("");
+    const first = children[0] ?? fallback;
+    const last = children.at(-1) ?? fallback;
+    if (children.length === 0) parent.insertBefore(fallback, element);
+    else children.forEach((child) => parent.insertBefore(child, element));
+    element.remove();
+
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    if (caretAtEnd) range.setStartAfter(last);
+    else range.setStartBefore(first);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function isRemovableInlineMarker(element: Node | null): element is HTMLElement {
+    return Boolean(
+      element instanceof HTMLElement &&
+      element.matches(REMOVABLE_INLINE_MARKER_SELECTOR) &&
+      !(element.tagName === "CODE" && element.closest("pre")),
+    );
+  }
+
+  function adjacentInlineMarker(selection: Selection, backward: boolean): HTMLElement | null {
+    if (!selection.isCollapsed || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    const container = range.startContainer;
+    let candidate: ChildNode | null = null;
+
+    if (container instanceof Text) {
+      if (backward && range.startOffset === 0) candidate = container.previousSibling;
+      else if (!backward && range.startOffset === container.length) candidate = container.nextSibling;
+    } else {
+      const index = backward ? range.startOffset - 1 : range.startOffset;
+      candidate = index >= 0 ? container.childNodes.item(index) : null;
+    }
+
+    while (candidate instanceof Text && candidate.length === 0) {
+      candidate = backward ? candidate.previousSibling : candidate.nextSibling;
+    }
+    return isRemovableInlineMarker(candidate) ? candidate : null;
+  }
+
+  function handleInlineMarkerRemoval(event: KeyboardEvent<HTMLDivElement>): boolean {
+    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    const selection = window.getSelection();
+    const anchorNode = selection?.anchorNode;
+    if (!selection || !anchorNode || !editorRef.current?.contains(anchorNode)) return false;
+    const anchorElement = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement;
+    const containingMarker = anchorElement?.closest(REMOVABLE_INLINE_MARKER_SELECTOR) ?? null;
+    let inlineMarker = isRemovableInlineMarker(containingMarker) ? containingMarker : null;
+    let caretAtEnd = false;
+
+    if (inlineMarker) {
+      const isAtStart = caretIsAtStartOf(inlineMarker, selection);
+      const isAtEnd = caretIsAtEndOf(inlineMarker, selection);
+      if (!isAtStart && !isAtEnd) inlineMarker = null;
+      else caretAtEnd = isAtEnd && !isAtStart;
+    }
+
+    if (!inlineMarker) {
+      const backward = event.key === "Backspace";
+      inlineMarker = adjacentInlineMarker(selection, backward);
+      caretAtEnd = backward;
+    }
+    if (!inlineMarker || !editorRef.current.contains(inlineMarker)) return false;
+
+    event.preventDefault();
+    unwrapInlineElement(inlineMarker, caretAtEnd);
+    emitChange();
+    updateActiveBlock();
+    scheduleEditorUiSync();
+    return true;
+  }
+
+  function replaceTextBlockTag(block: HTMLElement, tagName: string): HTMLElement {
+    const replacement = document.createElement(tagName);
+    while (block.firstChild) replacement.append(block.firstChild);
+    ensureEditableLine(replacement);
+    block.replaceWith(replacement);
+    placeCaretAtStart(replacement);
+    return replacement;
+  }
+
+  function handleMarkdownMarkerBackspace(event: KeyboardEvent<HTMLDivElement>): boolean {
+    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    const selection = window.getSelection();
+    const anchorNode = selection?.anchorNode;
+    if (!selection || !anchorNode || !editorRef.current?.contains(anchorNode)) return false;
+    const anchorElement = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement;
+    if (!anchorElement) return false;
+
+    const heading = anchorElement.closest<HTMLElement>("h1, h2, h3, h4, h5, h6");
+    if (heading && editorRef.current.contains(heading) && caretIsAtStartOf(heading, selection)) {
+      event.preventDefault();
+      const level = Number(heading.tagName.slice(1));
+      clearActiveBlock();
+      replaceTextBlockTag(heading, level > 1 ? `h${level - 1}` : "p");
+      emitChange();
+      updateActiveBlock();
+      scheduleEditorUiSync();
+      return true;
+    }
+
+    const quote = anchorElement.closest<HTMLElement>("blockquote");
+    if (quote && editorRef.current.contains(quote) && caretIsAtStartOf(quote, selection)) {
+      event.preventDefault();
+      clearActiveBlock();
+      replaceTextBlockTag(quote, "p");
+      emitChange();
+      updateActiveBlock();
+      scheduleEditorUiSync();
+      return true;
+    }
+
+    return false;
+  }
+
   function transformMarkdownHeadingShortcut(): boolean {
     const selection = window.getSelection();
     const anchorNode = selection?.anchorNode;
@@ -791,6 +936,8 @@ export function LiveMarkdownEditor({ content, onChange, placeholder = "내용을
       editorRef.current?.blur();
       return;
     }
+    if (["Backspace", "Delete"].includes(event.key) && handleInlineMarkerRemoval(event)) return;
+    if (event.key === "Backspace" && handleMarkdownMarkerBackspace(event)) return;
     if (event.key === "Enter" && handleStructuredEnter(event)) return;
     if (event.key === "Tab") {
       const item = selectionElement()?.closest("li");
