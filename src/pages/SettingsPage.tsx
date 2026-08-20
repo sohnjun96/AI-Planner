@@ -417,8 +417,8 @@ export function SettingsPage() {
               setError("");
               setMessage(
                 apiKey.trim()
-                  ? "API 키를 Chrome에 자동 저장하고 검증했습니다."
-                  : "Chrome에 저장된 API 키를 삭제했습니다.",
+                  ? "API 키를 브라우저 저장소에 자동 저장하고 검증했습니다."
+                  : "브라우저 저장소에서 API 키를 삭제했습니다.",
               );
               setIsApiKeyStorageDirty(false);
             }
@@ -870,7 +870,7 @@ export function SettingsPage() {
     try {
       await apiKeySaveQueueRef.current.catch(() => undefined);
       await updateSetting({ llmApiKey: "", rememberLlmApiKey: false });
-      setMessage("메모리와 Chrome 저장소에서 API 키를 삭제했습니다.");
+      setMessage("메모리와 브라우저 저장소에서 API 키를 삭제했습니다.");
     } catch (storageError) {
       setError(storageError instanceof Error ? storageError.message : "API 키를 삭제하지 못했습니다.");
     } finally {
@@ -1381,7 +1381,7 @@ export function SettingsPage() {
 
           {isApiKeyStorageBusy || isApiKeyStorageDirty ? (
             <p className="description-text" role="status">
-              {isApiKeyStorageBusy ? "API 키를 Chrome 저장소에 저장하고 검증하는 중입니다." : "입력이 끝나면 API 키를 자동 저장합니다."}
+              {isApiKeyStorageBusy ? "API 키를 브라우저 저장소에 저장하고 검증하는 중입니다." : "입력이 끝나면 API 키를 자동 저장합니다."}
             </p>
           ) : null}
           {credentialStorageError ? (

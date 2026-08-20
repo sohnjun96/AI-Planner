@@ -10,7 +10,7 @@ import { ModalBackdrop } from "./ModalBackdrop";
 import { ToastHost } from "./ToastHost";
 import { WeeklyBackupReminder } from "./WeeklyBackupReminder";
 
-const planaiLogo = "./icon.svg";
+const planaiLogo = __PLANAI_APP_ICON_URL__;
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },

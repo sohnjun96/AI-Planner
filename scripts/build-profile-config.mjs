@@ -78,6 +78,7 @@ export function createBuildDefines(profile) {
     __PLANAI_LLM_CHAT_ENDPOINT__: JSON.stringify(profile.chatEndpoint),
     __PLANAI_LLM_MODELS_ENDPOINT__: JSON.stringify(profile.modelsEndpoint),
     __PLANAI_LLM_MODELS_ENDPOINTS__: JSON.stringify(profile.modelsEndpoints),
+    __PLANAI_APP_ICON_URL__: JSON.stringify("./icon.svg"),
   };
 }
 

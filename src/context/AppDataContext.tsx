@@ -647,42 +647,72 @@ function normalizeStoredApiKey(value: unknown): string | undefined {
   return normalized;
 }
 
+function getSecureWebStorage(): Storage | null {
+  if (typeof window === "undefined" || !window.isSecureContext) return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 async function readRememberedLlmApiKey(): Promise<string | undefined> {
   const storage = getChromeStorageLocal();
-  if (!storage) return undefined;
-  const items = await readChromeStorage(storage, LLM_CREDENTIAL_STORAGE_KEY);
-  const raw = items[LLM_CREDENTIAL_STORAGE_KEY];
+  const webStorage = getSecureWebStorage();
+  const raw = storage
+    ? (await readChromeStorage(storage, LLM_CREDENTIAL_STORAGE_KEY))[LLM_CREDENTIAL_STORAGE_KEY]
+    : (() => {
+        const serialized = webStorage?.getItem(LLM_CREDENTIAL_STORAGE_KEY);
+        if (!serialized) return undefined;
+        if (serialized.length > LLM_MAX_API_KEY_LENGTH + 256) {
+          throw new Error("브라우저에 저장된 API 키 데이터가 허용 크기를 초과했습니다.");
+        }
+        try {
+          return JSON.parse(serialized) as unknown;
+        } catch {
+          throw new Error("브라우저에 저장된 API 키 데이터 형식이 올바르지 않습니다.");
+        }
+      })();
   if (raw === undefined) return undefined;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error("Chrome에 저장된 API 키 데이터 형식이 올바르지 않습니다.");
+    throw new Error("브라우저에 저장된 API 키 데이터 형식이 올바르지 않습니다.");
   }
   const credential = raw as Record<string, unknown>;
   const apiKey = normalizeStoredApiKey(credential.apiKey);
   if (credential.version !== 1 || !apiKey) {
-    throw new Error("Chrome에 저장된 API 키 데이터가 손상되었습니다.");
+    throw new Error("브라우저에 저장된 API 키 데이터가 손상되었습니다.");
   }
   return apiKey;
 }
 
 async function writeRememberedLlmApiKey(apiKey: string): Promise<void> {
   const storage = getChromeStorageLocal();
-  if (!storage) throw new Error("API 키 영구 저장은 Chrome 확장 프로그램에서만 사용할 수 있습니다.");
+  const webStorage = getSecureWebStorage();
+  if (!storage && !webStorage) {
+    throw new Error("API 키 저장은 Chrome 확장 프로그램 또는 안전한 HTTPS 환경에서만 사용할 수 있습니다.");
+  }
   const normalized = normalizeStoredApiKey(apiKey);
   if (!normalized) throw new Error("저장할 API 키를 먼저 입력해 주세요.");
-  await writeChromeStorage(storage, {
-    [LLM_CREDENTIAL_STORAGE_KEY]: { version: 1, apiKey: normalized, savedAt: toIsoNow() },
-  });
+  const credential = { version: 1, apiKey: normalized, savedAt: toIsoNow() };
+  if (storage) {
+    await writeChromeStorage(storage, { [LLM_CREDENTIAL_STORAGE_KEY]: credential });
+  } else {
+    webStorage!.setItem(LLM_CREDENTIAL_STORAGE_KEY, JSON.stringify(credential));
+  }
   if ((await readRememberedLlmApiKey()) !== normalized) {
-    throw new Error("Chrome API 키 저장 검증에 실패했습니다.");
+    throw new Error("브라우저 API 키 저장 검증에 실패했습니다.");
   }
 }
 
 async function deleteRememberedLlmApiKey(): Promise<void> {
   const storage = getChromeStorageLocal();
-  if (!storage) return;
-  await removeChromeStorage(storage, LLM_CREDENTIAL_STORAGE_KEY);
+  if (storage) {
+    await removeChromeStorage(storage, LLM_CREDENTIAL_STORAGE_KEY);
+  } else {
+    getSecureWebStorage()?.removeItem(LLM_CREDENTIAL_STORAGE_KEY);
+  }
   if ((await readRememberedLlmApiKey()) !== undefined) {
-    throw new Error("Chrome API 키 삭제 검증에 실패했습니다.");
+    throw new Error("브라우저 API 키 삭제 검증에 실패했습니다.");
   }
 }
 
@@ -880,12 +910,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (!getChromeStorageLocal()) {
-          throw new Error("Chrome 확장 프로그램 저장소를 사용할 수 없습니다.");
-        }
         const rememberedApiKey = await readRememberedLlmApiKey();
         if (!rememberedApiKey) {
-          throw new Error("Chrome에 저장된 API 키가 없습니다.");
+          throw new Error("브라우저에 저장된 API 키가 없습니다.");
         }
         if (isMounted) {
           setLlmApiKey(rememberedApiKey);
