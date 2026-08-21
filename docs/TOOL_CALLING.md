@@ -21,7 +21,7 @@ sequenceDiagram
     alt 조회가 필요한 경우
         A->>A: 허용 목록·형식·호출 예산 검증
         A->>T: 로컬 데이터 조회
-        T-->>A: 제한된 toolResults
+        T-->>A: toolResults
         A->>L: toolResults를 포함해 재요청
         L-->>A: 최종 JSON
     end
