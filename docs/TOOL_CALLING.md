@@ -71,14 +71,14 @@ LLM 클라이언트는 `model`, `messages`, `stream`, `temperature`, `max_tokens
 }
 ```
 
-### 에이전트별 호출 형식과 예산
+### 에이전트별 허용 도구
 
-| 에이전트 / 화면 | 허용 도구 | 파싱 형식 | 최대 라운드 / 라운드당 호출 |
-| --- | --- | --- | --- |
-| 일정 AI (`scheduleAgent`) | `list_projects`, `list_task_types`, `search_tasks`, `get_task` | `toolCalls`의 엄격한 `tool` / 객체형 `args` | 5 / 3 |
-| 데이터 질문 (`qaAgent`) | `search_notes`, `get_note`, `search_tasks`, `get_task` | `toolCalls`, `tool_calls`, `actions`; `tool`·`name`·`tool_name`·`function.name` 및 여러 인자 별칭 호환 | 3 / 2 |
-| 노트 AI (`notesAgent`) 검색 모드 | `search_notes`, `get_note`, `list_note_versions`, `get_linked_tasks` | `toolCalls`의 엄격한 `tool` / 객체형 `args` | 3 / 2 |
-| 브리핑·빠른 노트 제목 | 없음 | 해당 없음 | 해당 없음 |
+| 에이전트 / 화면 | 허용 도구 |
+| --- | --- |
+| 일정 AI (`scheduleAgent`) | - `list_projects`: 프로젝트 목록과 설명·활성 여부 조회<br>- `list_task_types`: 일정 종류 목록과 활성 여부 조회<br>- `search_tasks`: 키워드·상태·날짜·프로젝트 조건에 따른 일정 검색<br>- `get_task`: 특정 일정의 상세 내용 조회 |
+| 데이터 질문 (`qaAgent`) | - `search_notes`: 키워드·프로젝트·태그·상태 조건에 따른 노트 검색<br>- `get_note`: 특정 노트의 본문·태그·상태·연결 일정 등 상세 조회<br>- `search_tasks`: 키워드·상태·날짜·프로젝트 조건에 따른 일정 검색<br>- `get_task`: 특정 일정의 상세 내용 조회 |
+| 노트 AI (`notesAgent`) 검색 모드 | - `search_notes`: 키워드·프로젝트·태그·상태 조건에 따른 노트 검색<br>- `get_note`: 특정 노트의 본문·태그·상태·연결 일정 등 상세 조회<br>- `list_note_versions`: 노트 버전 이력 대신 히스토리 패널 이용 안내<br>- `get_linked_tasks`: 특정 노트에 연결된 일정 조회 |
+| 브리핑·빠른 노트 제목 | 없음: 별도 조회 도구를 호출하지 않고 전달된 데이터만으로 처리 |
 
 데이터 질문은 세 번째 라운드에서 이미 조회 결과가 있으면 추가 도구 호출을 막고, 지금까지의 결과로 답변을 작성하라고 알립니다. 일정·노트 AI는 라운드 예산을 초과하면 조회를 완료하지 못했다는 안내로 종료합니다. 따라서 모델은 가능한 한 적은 호출로 한 라운드에 필요한 조회를 묶어야 합니다.
 
