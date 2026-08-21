@@ -11,8 +11,8 @@ sequenceDiagram
     participant U as 사용자
     participant UI as AI 화면
     participant A as 에이전트
-    participant L as 승인된 LLM 엔드포인트
-    participant T as 로컬 조회 도구
+    participant L as 내부망 LLM
+    participant T as 일정,노트 DB
 
     U->>UI: 자연어 요청
     UI->>A: 현재 데이터 스냅샷과 요청 전달
