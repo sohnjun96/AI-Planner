@@ -35,11 +35,14 @@ export function MarkdownMemo({ content, savedMessage, errorMessage, onSave, onEd
   async function handleToggleChecklist(lineIndex: number, checked: boolean) {
     const lines = content.replace(/\r\n/g, "\n").split("\n");
     const currentLine = lines[lineIndex];
-    if (!currentLine || !/^(\s*-\s+\[)([ xX])(\]\s+.+)$/.test(currentLine)) {
+    if (!currentLine || !/^(\s*[-*+]\s+\[)([ xX])(\](?:\s+.*)?$)/.test(currentLine)) {
       return;
     }
 
-    lines[lineIndex] = currentLine.replace(/^(\s*-\s+\[)([ xX])(\]\s+.+)$/, `$1${checked ? "x" : " "}$3`);
+    lines[lineIndex] = currentLine.replace(
+      /^(\s*[-*+]\s+\[)([ xX])(\](?:\s+.*)?$)/,
+      `$1${checked ? "x" : " "}$3`,
+    );
 
     setIsSaving(true);
     try {

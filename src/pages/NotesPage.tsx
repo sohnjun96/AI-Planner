@@ -30,8 +30,12 @@ import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import type { Note, NoteAiAction, NoteFormInput, NoteStatus, NoteVersion, NoteVersionEditType } from "../models";
 import { deriveNoteTitle, isAutoTitle, isFollowingTitle } from "../utils/noteTitle";
+import { downloadNoteMarkdown, downloadNotesArchive } from "../utils/noteMarkdownExport";
 
 interface AiProposal {
+  noteId: string;
+  baseRevision: number;
+  baseContent: string;
   content: string;
   title?: string;
   editType: NoteVersionEditType;
@@ -39,11 +43,16 @@ interface AiProposal {
   headline: string;
 }
 
-const NOTE_AUTOSAVE_IDLE_MS = 15_000;
+const NOTE_AUTOSAVE_IDLE_MS = 2_000;
 
 function noteToInput(note: Note): NoteFormInput {
+  const derivedTitle = deriveNoteTitle(note.content);
+  // 이전 라이브 편집기는 본문의 HTML 공백 엔터티를 제목에 문자 그대로
+  // 저장할 수 있었다. 자동으로 본문을 따라가던 제목일 때만 화면에서 즉시
+  // 정규화해 다음 저장으로 기존 데이터도 함께 복구한다.
+  const title = derivedTitle && isFollowingTitle(note.title, note.content) ? derivedTitle : note.title;
   return {
-    title: note.title,
+    title,
     content: note.content,
     projectId: note.projectId,
     subcategoryId: note.subcategoryId,
@@ -54,8 +63,30 @@ function noteToInput(note: Note): NoteFormInput {
   };
 }
 
+function normalizeNoteDraftSnapshot(input: NoteFormInput): NoteFormInput {
+  return {
+    ...input,
+    title: input.title.trim() || "제목 없는 노트",
+    tags: Array.from(new Set(input.tags.map((tag) => tag.trim()).filter(Boolean))),
+    sourceNoteIds: Array.from(new Set(input.sourceNoteIds ?? [])),
+  };
+}
+
 function tagsEqual(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((tag, index) => tag === b[index]);
+}
+
+function draftsEqual(a: NoteFormInput, b: NoteFormInput): boolean {
+  return (
+    a.title === b.title &&
+    a.content === b.content &&
+    a.projectId === b.projectId &&
+    (a.subcategoryId ?? "") === (b.subcategoryId ?? "") &&
+    a.status === b.status &&
+    a.isPinned === b.isPinned &&
+    tagsEqual(a.tags, b.tags) &&
+    tagsEqual(a.sourceNoteIds ?? [], b.sourceNoteIds ?? [])
+  );
 }
 
 function isDraftDifferentFromNote(note: Note, draft: NoteFormInput): boolean {
@@ -83,6 +114,7 @@ export function NotesPage() {
     createMergedNote,
     createTask,
     updateNote,
+    updateNoteTitleIfUnchanged,
     applyNoteAiClassification,
     removeNote,
     restoreNoteVersion,
@@ -96,8 +128,6 @@ export function NotesPage() {
 
   const [filterNode, setFilterNode] = useState<NoteFilterNode>({ kind: "all" });
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [editorEntryMode, setEditorEntryMode] = useState<"edit" | "read">("read");
-  const [editorEntryRevision, setEditorEntryRevision] = useState(0);
   const [draft, setDraft] = useState<NoteFormInput | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -110,6 +140,7 @@ export function NotesPage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [isExportingNotes, setIsExportingNotes] = useState(false);
   const [pendingEditNoteId, setPendingEditNoteId] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -133,21 +164,41 @@ export function NotesPage() {
   );
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; noteId: string } | null>(null);
 
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const loadedNoteIdRef = useRef<string | null>(null);
   const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const abortRef = useRef<AbortController | null>(null);
   // 노트 전환/페이지 이탈 시점에 미저장 수정분을 플러시하기 위한 최신 상태 미러
   const draftRef = useRef<NoteFormInput | null>(null);
+  const draftRevisionRef = useRef(0);
   const notesRef = useRef<Note[]>(notes);
   const idleAutosaveTimerRef = useRef<number | null>(null);
   const classificationInFlightRef = useRef(false);
   const classificationAttemptedRef = useRef(new Set<string>());
+  const noteSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const savingCountRef = useRef(0);
 
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  const commitDraft = useCallback((nextDraft: NoteFormInput | null) => {
+    draftRef.current = nextDraft;
+    draftRevisionRef.current += 1;
+    setDraft(nextDraft);
+  }, []);
+
+  const beginSaving = useCallback(() => {
+    savingCountRef.current += 1;
+    setIsSaving(true);
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      savingCountRef.current = Math.max(0, savingCountRef.current - 1);
+      setIsSaving(savingCountRef.current > 0);
+    };
+  }, []);
 
   useEffect(() => {
     notesRef.current = notes;
@@ -160,6 +211,17 @@ export function NotesPage() {
     }
   }, []);
 
+  const enqueueNoteUpdate = useCallback(
+    (id: string, input: NoteFormInput, editType: NoteVersionEditType = "manual", aiPrompt?: string) => {
+      const pending = noteSaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => updateNote(id, input, editType, aiPrompt));
+      noteSaveQueueRef.current = pending.catch(() => undefined);
+      return pending;
+    },
+    [updateNote],
+  );
+
   // 미저장 수정분이 있으면 조용히 자동 저장한다 (전환·이탈로 인한 유실 방지)
   const flushPendingDraft = useCallback(() => {
     clearIdleAutosaveTimer();
@@ -170,14 +232,27 @@ export function NotesPage() {
     }
     const pendingNote = notesRef.current.find((note) => note.id === pendingId);
     if (pendingNote && isDraftDifferentFromNote(pendingNote, pendingDraft)) {
-      void updateNote(pendingId, pendingDraft, "autosave");
+      void enqueueNoteUpdate(pendingId, normalizeNoteDraftSnapshot(pendingDraft), "autosave");
     }
-  }, [clearIdleAutosaveTimer, updateNote]);
+  }, [clearIdleAutosaveTimer, enqueueNoteUpdate]);
 
   // 노트 탭을 떠날 때(언마운트) 마지막 수정분 저장
   useEffect(() => {
     return () => {
       flushPendingDraft();
+    };
+  }, [flushPendingDraft]);
+
+  useEffect(() => {
+    const handlePageHide = () => flushPendingDraft();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushPendingDraft();
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [flushPendingDraft]);
 
@@ -228,8 +303,6 @@ export function NotesPage() {
     if (!pendingEditNoteId || !notes.some((note) => note.id === pendingEditNoteId)) {
       return;
     }
-    setEditorEntryMode("edit");
-    setEditorEntryRevision((revision) => revision + 1);
     setSelectedNoteId(pendingEditNoteId);
     setPendingEditNoteId(null);
   }, [notes, pendingEditNoteId]);
@@ -240,14 +313,18 @@ export function NotesPage() {
       // 선택 해제 시에도 미저장분이 있으면 저장 (삭제된 노트는 flush 내부에서 걸러진다)
       flushPendingDraft();
       loadedNoteIdRef.current = null;
-      setDraft(null);
+      commitDraft(null);
+      selectionRef.current = { start: 0, end: 0 };
       return;
     }
     if (loadedNoteIdRef.current !== selectedNote.id) {
       // 다른 노트로 전환: 이전 노트의 수정분을 먼저 자동 저장해 유실을 막는다
       flushPendingDraft();
+      abortRef.current?.abort();
       loadedNoteIdRef.current = selectedNote.id;
-      setDraft(noteToInput(selectedNote));
+      commitDraft(noteToInput(selectedNote));
+      selectionRef.current = { start: 0, end: 0 };
+      setIsAiRunning(false);
       setAiProposal(null);
       setCompareVersion(null);
       setMetaModalOpen(false);
@@ -257,7 +334,7 @@ export function NotesPage() {
       setAiError("");
       setAiProgress("");
     }
-  }, [selectedNote, flushPendingDraft]);
+  }, [selectedNote, flushPendingDraft, commitDraft]);
 
   useEffect(() => {
     if (selectedNoteId && !notes.some((note) => note.id === selectedNoteId)) {
@@ -281,8 +358,6 @@ export function NotesPage() {
       const detail = (event as CustomEvent<{ noteId?: string }>).detail;
       if (detail?.noteId) {
         setFilterNode({ kind: "all" });
-        setEditorEntryMode("read");
-        setEditorEntryRevision((revision) => revision + 1);
         setSelectedNoteId(detail.noteId);
         setIsMobileExplorerOpen(false);
       }
@@ -303,14 +378,14 @@ export function NotesPage() {
           if (isAutoTitle(note.title)) {
             const derived = deriveNoteTitle(note.content);
             if (derived && derived !== note.title) {
-              await updateNote(note.id, { ...noteToInput(note), title: derived });
+              await updateNoteTitleIfUnchanged(note.id, derived, note.updatedAt);
             }
           }
         }
       })();
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [notes, selectedNoteId, updateNote]);
+  }, [notes, selectedNoteId, updateNoteTitleIfUnchanged]);
 
   // 본문이 작성된 노트는 선택이 끝난 뒤 AI로 프로젝트/세부 항목을 최초 1회만 분류한다.
   useEffect(() => {
@@ -466,11 +541,23 @@ export function NotesPage() {
     }
   }, [deferredSearch, filteredNotes, selectedNoteId]);
 
-  function openNote(noteId: string, mode: "edit" | "read" = "read") {
-    setEditorEntryMode(mode);
-    setEditorEntryRevision((revision) => revision + 1);
+  function openNote(noteId: string) {
     setSelectedNoteId(noteId);
     setIsMobileExplorerOpen(false);
+  }
+
+  function handleDraftTitleChange(value: string) {
+    const current = draftRef.current;
+    if (!current || current.title === value) return;
+    commitDraft({ ...current, title: value });
+  }
+
+  function handleDraftContentChange(value: string) {
+    const current = draftRef.current;
+    if (!current || current.content === value) return;
+    const following = isFollowingTitle(current.title, current.content);
+    const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : current.title;
+    commitDraft({ ...current, content: value, title: nextTitle });
   }
 
   // 탐색기 카드 드래그로 순서 변경 — 검색 중에는 부분 목록이라 비활성화
@@ -562,7 +649,7 @@ export function NotesPage() {
     return isDraftDifferentFromNote(selectedNote, draft);
   }, [selectedNote, draft]);
 
-  // 마지막 입력 후 15초 동안 추가 수정이 없을 때 한 번만 자동 저장한다.
+  // 마지막 입력 후 2초 동안 추가 수정이 없을 때 한 번만 자동 저장한다.
   useEffect(() => {
     clearIdleAutosaveTimer();
     if (!selectedNoteId || !draft || !isDirty) {
@@ -578,9 +665,11 @@ export function NotesPage() {
         return;
       }
 
-      setIsSaving(true);
+      const snapshot = normalizeNoteDraftSnapshot(latestDraft);
+      if (!draftsEqual(snapshot, latestDraft)) commitDraft(snapshot);
+      const finishSaving = beginSaving();
       setErrorMessage("");
-      void updateNote(noteId, latestDraft, "autosave")
+      void enqueueNoteUpdate(noteId, snapshot, "autosave")
         .then(() => {
           setSavedMessage("자동 저장했습니다.");
           window.setTimeout(() => setSavedMessage(""), 2000);
@@ -589,12 +678,12 @@ export function NotesPage() {
           setErrorMessage(error instanceof Error ? error.message : "자동 저장에 실패했습니다.");
         })
         .finally(() => {
-          setIsSaving(false);
+          finishSaving();
         });
     }, NOTE_AUTOSAVE_IDLE_MS);
 
     return clearIdleAutosaveTimer;
-  }, [clearIdleAutosaveTimer, draft, isDirty, selectedNoteId, updateNote]);
+  }, [beginSaving, clearIdleAutosaveTimer, commitDraft, draft, enqueueNoteUpdate, isDirty, selectedNoteId]);
 
   const currentSubcategoryName = draft?.subcategoryId ? subMap[draft.subcategoryId]?.name : undefined;
   const currentProject = draft ? projectMap[draft.projectId] : undefined;
@@ -603,7 +692,7 @@ export function NotesPage() {
     if (!selectedNote) return null;
     if (aiProposal) {
       return {
-        previous: selectedNote.content,
+        previous: aiProposal.baseContent,
         next: aiProposal.content,
         headline: aiProposal.headline,
         mode: "proposal",
@@ -613,13 +702,13 @@ export function NotesPage() {
     if (compareVersion) {
       return {
         previous: compareVersion.content,
-        next: selectedNote.content,
+        next: draft?.content ?? selectedNote.content,
         headline: "선택 버전 → 현재",
         mode: "compare",
       };
     }
     return null;
-  }, [selectedNote, aiProposal, compareVersion, isSaving]);
+  }, [selectedNote, draft, aiProposal, compareVersion, isSaving]);
 
   const handleCreateNote = useCallback(async () => {
     if (isCreatingNote) return;
@@ -666,6 +755,13 @@ export function NotesPage() {
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchInputRef.current?.focus();
@@ -678,26 +774,28 @@ export function NotesPage() {
   async function handleSave(editType: NoteVersionEditType = "manual") {
     if (!selectedNoteId || !draft) return;
     clearIdleAutosaveTimer();
-    setIsSaving(true);
+    const snapshot = normalizeNoteDraftSnapshot(draft);
+    if (!draftsEqual(snapshot, draft)) commitDraft(snapshot);
+    const finishSaving = beginSaving();
     setErrorMessage("");
     try {
-      await updateNote(selectedNoteId, draft, editType);
+      await enqueueNoteUpdate(selectedNoteId, snapshot, editType);
       setSavedMessage("저장했습니다.");
       window.setTimeout(() => setSavedMessage(""), 2000);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "저장에 실패했습니다.");
     } finally {
-      setIsSaving(false);
+      finishSaving();
     }
   }
 
   async function handleApplyMeta(patch: Partial<NoteFormInput>) {
     if (!selectedNoteId || !draft) return;
     clearIdleAutosaveTimer();
-    const nextInput: NoteFormInput = { ...draft, ...patch };
-    setDraft(nextInput);
+    const nextInput = normalizeNoteDraftSnapshot({ ...draft, ...patch });
+    commitDraft(nextInput);
     try {
-      await updateNote(selectedNoteId, nextInput);
+      await enqueueNoteUpdate(selectedNoteId, nextInput);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "저장에 실패했습니다.");
     }
@@ -707,6 +805,8 @@ export function NotesPage() {
     if (!selectedNoteId) return;
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없습니다.")) return;
     clearIdleAutosaveTimer();
+    abortRef.current?.abort();
+    await noteSaveQueueRef.current.catch(() => undefined);
     await removeNote(selectedNoteId);
     setSelectedNoteId(null);
     showToast("노트를 삭제했습니다.");
@@ -716,7 +816,8 @@ export function NotesPage() {
   async function toggleChecklistLine(noteId: string, lineIndex: number, checked: boolean) {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return;
-    const lines = note.content.replace(/\r\n/g, "\n").split("\n");
+    const baseInput = noteId === selectedNoteId && draft ? draft : noteToInput(note);
+    const lines = baseInput.content.replace(/\r\n/g, "\n").split("\n");
     const line = lines[lineIndex];
     if (line == null) return;
     const replaced = line.replace(/^(\s*[-*+]\s+\[)[ xX](\]\s+)/, `$1${checked ? "x" : " "}$2`);
@@ -725,10 +826,10 @@ export function NotesPage() {
     const nextContent = lines.join("\n");
     if (noteId === selectedNoteId && draft) {
       clearIdleAutosaveTimer();
-      setDraft({ ...draft, content: nextContent });
+      commitDraft({ ...draft, content: nextContent });
     }
     try {
-      await updateNote(noteId, { ...noteToInput(note), content: nextContent });
+      await enqueueNoteUpdate(noteId, { ...baseInput, content: nextContent });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "저장에 실패했습니다.");
     }
@@ -745,16 +846,14 @@ export function NotesPage() {
       clearIdleAutosaveTimer();
       // 선택 노트의 메타데이터와 편집 초안을 동시에 맞춰, 이전 초안이
       // 자동 저장되면서 방금 적용한 고정·상태 값을 되돌리지 않게 한다.
-      draftRef.current = nextInput;
-      setDraft(nextInput);
+      commitDraft(nextInput);
     }
 
     try {
-      await updateNote(noteId, nextInput);
+      await enqueueNoteUpdate(noteId, nextInput);
     } catch (error) {
       if (isSelected) {
-        draftRef.current = previousInput;
-        setDraft(previousInput);
+        commitDraft(previousInput);
       }
       const message = error instanceof Error ? error.message : "노트 정보를 변경하지 못했습니다.";
       setErrorMessage(message);
@@ -809,7 +908,7 @@ export function NotesPage() {
           "ai_full",
           "노트 요약",
         );
-        openNote(id, "edit");
+        openNote(id);
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -823,6 +922,46 @@ export function NotesPage() {
     }
   }
 
+  function noteWithCurrentDraft(note: Note): Note {
+    const currentDraft = draftRef.current;
+    if (loadedNoteIdRef.current !== note.id || !currentDraft) return note;
+    const snapshot = normalizeNoteDraftSnapshot(currentDraft);
+    return {
+      ...note,
+      ...snapshot,
+      updatedAt: isDraftDifferentFromNote(note, snapshot) ? new Date().toISOString() : note.updatedAt,
+    };
+  }
+
+  function handleDownloadNote(noteId: string) {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) {
+      showToast("다운로드할 노트를 찾지 못했습니다.", { tone: "error" });
+      return;
+    }
+    try {
+      const exportNote = noteWithCurrentDraft(note);
+      const subproject = exportNote.subcategoryId ? subMap[exportNote.subcategoryId] : undefined;
+      const fileName = downloadNoteMarkdown(exportNote, projectMap[exportNote.projectId], subproject);
+      showToast(`${fileName} 다운로드를 시작했습니다.`, { tone: "success" });
+    } catch (downloadError) {
+      showToast(downloadError instanceof Error ? downloadError.message : "노트를 다운로드하지 못했습니다.", { tone: "error" });
+    }
+  }
+
+  async function handleExportAllNotes() {
+    if (isExportingNotes) return;
+    setIsExportingNotes(true);
+    try {
+      const result = await downloadNotesArchive(notes.map(noteWithCurrentDraft), projects, projectSubcategories);
+      showToast(`노트 ${result.fileCount}개를 ZIP 파일로 내보냈습니다.`, { tone: "success" });
+    } catch (exportError) {
+      showToast(exportError instanceof Error ? exportError.message : "노트를 내보내지 못했습니다.", { tone: "error" });
+    } finally {
+      setIsExportingNotes(false);
+    }
+  }
+
   function buildCardMenuItems(noteId: string): ContextMenuItem[] {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return [];
@@ -832,6 +971,12 @@ export function NotesPage() {
         id: "pin",
         label: note.isPinned ? "고정 해제" : "고정",
         onSelect: () => void updateNoteMetadata(noteId, { isPinned: !note.isPinned }),
+      },
+      {
+        id: "download-markdown",
+        label: "Markdown 다운로드",
+        description: "프론트매터와 본문 내보내기",
+        onSelect: () => handleDownloadNote(noteId),
       },
     ];
     const noteIndex = filteredNotes.findIndex((item) => item.id === noteId);
@@ -873,6 +1018,9 @@ export function NotesPage() {
   const runEditAgent = useCallback(
     async (prompt: string) => {
       if (!selectedNote || !draft) return;
+      const noteIdAtRequest = selectedNote.id;
+      const revisionAtRequest = draftRevisionRef.current;
+      const contentAtRequest = draft.content;
       const controller = beginAiRequest();
       setIsAiRunning(true);
       setAiProgress("AI 준비 중…");
@@ -893,9 +1041,22 @@ export function NotesPage() {
           onProgress: handleAiProgress,
           signal: controller.signal,
         });
+        if (
+          controller.signal.aborted ||
+          loadedNoteIdRef.current !== noteIdAtRequest ||
+          draftRevisionRef.current !== revisionAtRequest
+        ) {
+          if (loadedNoteIdRef.current === noteIdAtRequest) {
+            setAiError("AI 처리 중 노트가 변경되어 제안을 적용하지 않았습니다. 다시 요청해 주세요.");
+          }
+          return;
+        }
         setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
-        if (result.proposedContent && result.proposedContent !== draft.content) {
+        if (result.proposedContent && result.proposedContent !== contentAtRequest) {
           setAiProposal({
+            noteId: noteIdAtRequest,
+            baseRevision: revisionAtRequest,
+            baseContent: contentAtRequest,
             content: result.proposedContent,
             title: result.proposedTitle,
             editType: "ai_full",
@@ -927,6 +1088,8 @@ export function NotesPage() {
     }
     const selectedText = draft.content.slice(start, end);
     const noteIdAtRequest = selectedNote.id;
+    const revisionAtRequest = draftRevisionRef.current;
+    const contentAtRequest = draft.content;
     const prompt = window.prompt("선택한 텍스트를 어떻게 편집할까요?", "더 명확하게 다듬어줘");
     if (!prompt) return;
 
@@ -957,11 +1120,29 @@ export function NotesPage() {
         onProgress: handleAiProgress,
         signal: controller.signal,
       });
+      if (
+        controller.signal.aborted ||
+        loadedNoteIdRef.current !== noteIdAtRequest ||
+        draftRevisionRef.current !== revisionAtRequest
+      ) {
+        if (loadedNoteIdRef.current === noteIdAtRequest) {
+          setAiError("AI 처리 중 노트가 변경되어 제안을 적용하지 않았습니다. 다시 요청해 주세요.");
+        }
+        return;
+      }
       setAiProgress(result.trace ? `AI 참고: ${result.trace}` : "");
       // An empty replacement is a valid AI edit (delete the selection).
-      if (result.replacementText !== undefined && selectedNote.id === noteIdAtRequest) {
-        const nextContent = draft.content.slice(0, start) + result.replacementText + draft.content.slice(end);
-        setAiProposal({ content: nextContent, editType: "ai_inline", prompt, headline: "AI 인라인 편집 제안" });
+      if (result.replacementText !== undefined) {
+        const nextContent = contentAtRequest.slice(0, start) + result.replacementText + contentAtRequest.slice(end);
+        setAiProposal({
+          noteId: noteIdAtRequest,
+          baseRevision: revisionAtRequest,
+          baseContent: contentAtRequest,
+          content: nextContent,
+          editType: "ai_inline",
+          prompt,
+          headline: "AI 인라인 편집 제안",
+        });
       } else {
         setAiError(result.assistantMessage || "변경할 내용을 찾지 못했습니다.");
       }
@@ -977,23 +1158,30 @@ export function NotesPage() {
 
   async function acceptProposal() {
     if (!selectedNoteId || !draft || !aiProposal) return;
+    if (aiProposal.noteId !== selectedNoteId || aiProposal.baseRevision !== draftRevisionRef.current) {
+      setAiError("제안이 만들어진 뒤 노트가 변경되어 자동 적용을 중단했습니다. 다시 요청해 주세요.");
+      setAiProposal(null);
+      return;
+    }
     clearIdleAutosaveTimer();
     const nextInput: NoteFormInput = {
       ...draft,
       content: aiProposal.content,
       title: aiProposal.title?.trim() || draft.title,
     };
-    setIsSaving(true);
+    const proposalEditType = aiProposal.editType;
+    const proposalPrompt = aiProposal.prompt;
+    commitDraft(nextInput);
+    setAiProposal(null);
+    const finishSaving = beginSaving();
     try {
-      await updateNote(selectedNoteId, nextInput, aiProposal.editType, aiProposal.prompt);
-      setDraft(nextInput);
-      setAiProposal(null);
+      await enqueueNoteUpdate(selectedNoteId, nextInput, proposalEditType, proposalPrompt);
       setSavedMessage("AI 변경을 반영했습니다.");
       window.setTimeout(() => setSavedMessage(""), 2000);
     } catch (error) {
       setAiError(error instanceof Error ? error.message : "적용에 실패했습니다.");
     } finally {
-      setIsSaving(false);
+      finishSaving();
     }
   }
 
@@ -1063,12 +1251,6 @@ export function NotesPage() {
 
   function handleContentContextMenu(event: MouseEvent<HTMLElement>) {
     event.preventDefault();
-    const textarea = textareaRef.current;
-    if (textarea) {
-      selectionRef.current = { start: textarea.selectionStart, end: textarea.selectionEnd };
-    } else {
-      selectionRef.current = { start: 0, end: 0 };
-    }
     setAiMenu({ x: event.clientX, y: event.clientY });
   }
 
@@ -1112,10 +1294,6 @@ export function NotesPage() {
 
   // ✨AI 버튼: 우클릭과 동일한 메뉴를 버튼 바로 아래에 연다
   function handleOpenAiMenuButton(event: MouseEvent<HTMLElement>) {
-    const textarea = textareaRef.current;
-    selectionRef.current = textarea
-      ? { start: textarea.selectionStart, end: textarea.selectionEnd }
-      : { start: 0, end: 0 };
     const rect = event.currentTarget.getBoundingClientRect();
     setAiMenu({ x: rect.right, y: rect.bottom + 6, align: "end", anchored: true });
   }
@@ -1128,6 +1306,13 @@ export function NotesPage() {
   function buildEditorMenuItems(): ContextMenuItem[] {
     return [
       {
+        id: "download-markdown",
+        label: "Markdown 다운로드",
+        description: "현재 편집 내용과 프론트매터 내보내기",
+        disabled: !selectedNote,
+        onSelect: () => selectedNote && handleDownloadNote(selectedNote.id),
+      },
+      {
         id: "history",
         label: "변경 이력",
         description: selectedVersions.length > 0 ? `${selectedVersions.length}개 버전` : "저장된 버전 없음",
@@ -1138,23 +1323,25 @@ export function NotesPage() {
   }
 
   async function handleRestoreVersion(versionId: string) {
-    if (!selectedNoteId || !selectedNote) return;
+    if (!selectedNoteId || !selectedNote || !draft) return;
     const version = selectedVersions.find((item) => item.id === versionId);
     if (!version) return;
     const noteId = selectedNoteId;
     const restoredInput: NoteFormInput = {
-      ...noteToInput(selectedNote),
+      ...draft,
       title: version.title,
       content: version.content,
     };
     clearIdleAutosaveTimer();
-    setIsSaving(true);
+    const finishSaving = beginSaving();
     setErrorMessage("");
     try {
+      if (isDraftDifferentFromNote(selectedNote, draft)) {
+        await enqueueNoteUpdate(noteId, draft, "manual");
+      }
       await restoreNoteVersion(noteId, versionId);
-      draftRef.current = restoredInput;
       loadedNoteIdRef.current = noteId;
-      setDraft(restoredInput);
+      commitDraft(restoredInput);
       setCompareVersion(null);
       setHistoryOpen(false);
       setSavedMessage("이전 버전을 복원했습니다.");
@@ -1162,7 +1349,7 @@ export function NotesPage() {
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "버전을 복원하지 못했습니다.");
     } finally {
-      setIsSaving(false);
+      finishSaving();
     }
   }
 
@@ -1210,7 +1397,7 @@ export function NotesPage() {
         );
         setCheckedIds(new Set());
         setSelectionMode(false);
-        openNote(id, "edit");
+        openNote(id);
       } else {
         setAiError(result.assistantMessage || "요약 결과를 만들지 못했습니다.");
       }
@@ -1266,7 +1453,7 @@ export function NotesPage() {
         setCheckedIds(new Set());
         setSelectionMode(false);
         setFilterNode({ kind: "all" });
-        openNote(id, "edit");
+        openNote(id);
       } else {
         setAiError(result.assistantMessage || "통합 결과를 만들지 못했습니다.");
       }
@@ -1404,6 +1591,14 @@ export function NotesPage() {
                 {selectionMode ? "완료" : "선택"}
               </button>
             ) : null}
+            <button
+              type="button"
+              className="btn btn-soft btn-compact"
+              disabled={isExportingNotes || notes.length === 0}
+              onClick={() => void handleExportAllNotes()}
+            >
+              {isExportingNotes ? "내보내는 중" : "내보내기"}
+            </button>
             <button type="button" className="btn btn-primary btn-compact" disabled={isCreatingNote} onClick={() => void handleCreateNote()}>
               {isCreatingNote ? "생성 중" : "+ 새 노트"}
             </button>
@@ -1561,7 +1756,7 @@ export function NotesPage() {
               ← 노트 목록
             </button>
                     <NoteEditor
-                      key={`${selectedNote.id}-${editorEntryMode}-${editorEntryRevision}`}
+                      key={selectedNote.id}
                       draft={draft}
                       projectName={currentProject.name}
                       projectColor={currentProject.color}
@@ -1576,25 +1771,19 @@ export function NotesPage() {
                         setAiProgress("");
                       }}
                       onOpenAiMenu={handleOpenAiMenuButton}
-                      onChangeTitle={(value) => setDraft((prev) => (prev ? { ...prev, title: value } : prev))}
-                      onChangeContent={(value) =>
-                        setDraft((prev) => {
-                          if (!prev) return prev;
-                          const following = isFollowingTitle(prev.title, prev.content);
-                          const nextTitle = following ? deriveNoteTitle(value) || "새 노트" : prev.title;
-                          return { ...prev, content: value, title: nextTitle };
-                        })
-                      }
+                      onChangeTitle={handleDraftTitleChange}
+                      onChangeContent={handleDraftContentChange}
                       onSave={() => void handleSave("manual")}
                       onOpenMeta={() => setMetaModalOpen(true)}
                       onOpenMoreMenu={handleOpenEditorMenu}
                       onContentContextMenu={handleContentContextMenu}
-                      textareaRef={textareaRef}
+                      onContentSelectionChange={(start, end) => {
+                        selectionRef.current = { start, end };
+                      }}
                       isSaving={isSaving}
                       isDirty={isDirty}
                       savedMessage={savedMessage}
                       errorMessage={errorMessage}
-                      initialMode={editorEntryMode}
                     />
 
                     {isAiRunning ? (

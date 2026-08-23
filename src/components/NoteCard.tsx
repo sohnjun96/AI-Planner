@@ -2,6 +2,7 @@ import { useRef, type CSSProperties, type DragEvent, type MouseEvent } from "rea
 import { NOTE_STATUS_LABELS } from "../constants";
 import type { Note, Project } from "../models";
 import { formatDateTime } from "../utils/date";
+import { decodeMarkdownHtmlEntities } from "../utils/noteTitle";
 
 interface NoteCardProps {
   note: Note;
@@ -44,7 +45,7 @@ export function NoteCard({
   onDragEnd,
 }: NoteCardProps) {
   const openButtonRef = useRef<HTMLButtonElement | null>(null);
-  const snippet = note.content
+  const snippet = decodeMarkdownHtmlEntities(note.content)
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/[-*+]\s+\[[ xX]\]\s+/g, "")
     .replace(/[*_~`>|]/g, "")

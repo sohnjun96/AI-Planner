@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ChangeEvent } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface MarkdownRendererProps {
   content: string;
@@ -8,8 +10,78 @@ interface MarkdownRendererProps {
   onChecklistToggle?: (lineIndex: number, checked: boolean) => void;
 }
 
-function toSafeExternalUrl(value: string): string | undefined {
-  if (value.length > 2_048 || Array.from(value).some((character) => {
+interface MarkdownAstNode {
+  type?: string;
+  value?: string;
+  children?: MarkdownAstNode[];
+  data?: { hName?: string };
+}
+
+const ChecklistLineContext = createContext(-1);
+
+function ChecklistInput({
+  type,
+  checked,
+  uncontrolled,
+  disabled,
+  onToggle,
+}: {
+  type?: string;
+  checked?: boolean;
+  uncontrolled: boolean;
+  disabled: boolean;
+  onToggle?: (lineIndex: number, checked: boolean) => void;
+}) {
+  const lineIndex = useContext(ChecklistLineContext);
+  if (type !== "checkbox") return null;
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (lineIndex >= 0) onToggle?.(lineIndex, event.target.checked);
+  };
+  return (
+    <input
+      type="checkbox"
+      checked={uncontrolled ? undefined : Boolean(checked)}
+      defaultChecked={uncontrolled ? Boolean(checked) : undefined}
+      disabled={disabled}
+      onChange={handleChange}
+    />
+  );
+}
+
+function remarkHighlight() {
+  return (tree: MarkdownAstNode) => {
+    function transform(parent: MarkdownAstNode) {
+      if (!parent.children || parent.type === "code" || parent.type === "inlineCode") return;
+      const nextChildren: MarkdownAstNode[] = [];
+      for (const child of parent.children) {
+        if (child.type !== "text" || !child.value?.includes("==")) {
+          transform(child);
+          nextChildren.push(child);
+          continue;
+        }
+
+        const pattern = /==([^=\n]+)==/g;
+        let cursor = 0;
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(child.value)) !== null) {
+          if (match.index > cursor) nextChildren.push({ type: "text", value: child.value.slice(cursor, match.index) });
+          nextChildren.push({
+            type: "highlight",
+            data: { hName: "mark" },
+            children: [{ type: "text", value: match[1] }],
+          });
+          cursor = match.index + match[0].length;
+        }
+        if (cursor < child.value.length) nextChildren.push({ type: "text", value: child.value.slice(cursor) });
+      }
+      parent.children = nextChildren;
+    }
+    transform(tree);
+  };
+}
+
+function toSafeExternalUrl(value: string | undefined): string | undefined {
+  if (!value || value.length > 2_048 || Array.from(value).some((character) => {
     const code = character.charCodeAt(0);
     return code <= 31 || code === 127;
   })) return undefined;
@@ -30,110 +102,6 @@ function toSafeExternalUrl(value: string): string | undefined {
   return undefined;
 }
 
-// 인라인: 코드, 볼드, 이탤릭, 취소선, 하이라이트, 링크와 이미지 링크
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|==[^=]+==|\*[^*]+\*|_[^_]+_|!?\[[^\]]+\]\([^)]+\)|<(?:https?:\/\/|mailto:)[^>]+>)/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      nodes.push(text.slice(cursor, match.index));
-    }
-
-    const token = match[0];
-    const key = `${keyPrefix}-${match.index}`;
-    if (token.startsWith("`")) {
-      nodes.push(<code key={key}>{token.slice(1, -1)}</code>);
-    } else if (token.startsWith("**") || token.startsWith("__")) {
-      nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
-    } else if (token.startsWith("~~")) {
-      nodes.push(<del key={key}>{token.slice(2, -2)}</del>);
-    } else if (token.startsWith("==")) {
-      nodes.push(<mark key={key}>{token.slice(2, -2)}</mark>);
-    } else if (token.startsWith("*") || token.startsWith("_")) {
-      nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
-    } else if (token.startsWith("<")) {
-      const label = token.slice(1, -1);
-      const safeHref = toSafeExternalUrl(label);
-      nodes.push(
-        safeHref ? (
-          <a key={key} href={safeHref} target="_blank" rel="noreferrer">
-            {label}
-          </a>
-        ) : (
-          label
-        ),
-      );
-    } else {
-      const image = token.startsWith("!");
-      const linkMatch = token.match(/^!?\[([^\]]+)\]\(([^)]+)\)$/);
-      const label = linkMatch?.[1] ?? token;
-      const href = linkMatch?.[2] ?? "";
-      const safeHref = toSafeExternalUrl(href);
-      nodes.push(
-        safeHref ? (
-          <a key={key} className={image ? "markdown-image-link" : undefined} href={safeHref} target="_blank" rel="noreferrer">
-            {image ? `이미지: ${label}` : label}
-          </a>
-        ) : (
-          label
-        ),
-      );
-    }
-
-    cursor = match.index + token.length;
-  }
-
-  if (cursor < text.length) {
-    nodes.push(text.slice(cursor));
-  }
-
-  return nodes;
-}
-
-function splitTableRow(line: string): string[] {
-  const value = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-  const cells: string[] = [];
-  let cell = "";
-  let escaped = false;
-  for (const character of value) {
-    if (escaped) {
-      cell += character;
-      escaped = false;
-    } else if (character === "\\") {
-      escaped = true;
-      cell += character;
-    } else if (character === "|") {
-      cells.push(cell.trim().replace(/\\\|/g, "|"));
-      cell = "";
-    } else {
-      cell += character;
-    }
-  }
-  cells.push(cell.trim().replace(/\\\|/g, "|"));
-  return cells;
-}
-
-function tableAlignments(line: string): Array<"left" | "center" | "right"> | null {
-  const cells = splitTableRow(line);
-  if (cells.length === 0 || cells.some((cell) => !/^:?-{3,}:?$/.test(cell))) return null;
-  return cells.map((cell) => (cell.startsWith(":") && cell.endsWith(":") ? "center" : cell.endsWith(":") ? "right" : "left"));
-}
-
-function isTableStart(lines: string[], index: number): boolean {
-  const header = lines[index]?.trim() ?? "";
-  const divider = lines[index + 1]?.trim() ?? "";
-  return header.includes("|") && divider.includes("|") && tableAlignments(divider) !== null;
-}
-
-function leadingIndent(line: string): number {
-  const match = line.match(/^(\s*)/);
-  const spaces = match ? match[1].replace(/\t/g, "  ").length : 0;
-  return Math.min(4, Math.floor(spaces / 2));
-}
-
 export function MarkdownRenderer({
   content,
   emptyText = "작성된 메모가 없습니다.",
@@ -141,219 +109,57 @@ export function MarkdownRenderer({
   checklistUncontrolled = false,
   onChecklistToggle,
 }: MarkdownRendererProps) {
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
-  const elements: ReactNode[] = [];
-  let index = 0;
+  if (!content.trim()) return <p className="empty-text">{emptyText}</p>;
 
-  while (index < lines.length) {
-    const line = lines[index] ?? "";
-    const trimmed = line.trim();
+  // remark-gfm does not classify a task item with no label as a checkbox.
+  // Add an invisible render-only label while keeping the stored Markdown untouched.
+  const renderContent = content.replace(/^(\s*[-*+]\s+\[[ xX]\])\s*$/gm, "$1 \u200B");
 
-    if (!trimmed) {
-      index += 1;
-      continue;
-    }
-
-    // 코드 펜스
-    if (trimmed.startsWith("```")) {
-      const codeLines: string[] = [];
-      const fenceKey = index;
-      const language = trimmed.slice(3).trim().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 30);
-      index += 1;
-      while (index < lines.length && !(lines[index] ?? "").trim().startsWith("```")) {
-        codeLines.push(lines[index] ?? "");
-        index += 1;
-      }
-      index += 1;
-      elements.push(
-        <pre key={`code-${fenceKey}`}>
-          <code className={language ? `language-${language}` : undefined}>{codeLines.join("\n")}</code>
-        </pre>,
+  const components: Components = {
+    a({ href, children }) {
+      const safeHref = toSafeExternalUrl(href);
+      return safeHref ? (
+        <a href={safeHref} target="_blank" rel="noreferrer">
+          {children}
+        </a>
+      ) : <>{children}</>;
+    },
+    img({ alt }) {
+      return alt ? <span className="markdown-image-alt">{alt}</span> : null;
+    },
+    table({ children }) {
+      return (
+        <div className="markdown-table-scroll">
+          <table>{children}</table>
+        </div>
       );
-      continue;
-    }
-
-    // GitHub Flavored Markdown 표
-    if (isTableStart(lines, index)) {
-      const tableKey = index;
-      const headers = splitTableRow(lines[index] ?? "");
-      const alignments = tableAlignments(lines[index + 1] ?? "") ?? headers.map(() => "left" as const);
-      const rows: string[][] = [];
-      index += 2;
-      while (index < lines.length && (lines[index] ?? "").trim() && (lines[index] ?? "").includes("|")) {
-        rows.push(splitTableRow(lines[index] ?? ""));
-        index += 1;
-      }
-      elements.push(
-        <div key={`table-${tableKey}`} className="markdown-table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {headers.map((header, columnIndex) => (
-                  <th key={`th-${columnIndex}`} style={{ textAlign: alignments[columnIndex] ?? "left" }}>
-                    {renderInline(header, `table-${tableKey}-head-${columnIndex}`)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rowIndex) => (
-                <tr key={`tr-${rowIndex}`}>
-                  {headers.map((_, columnIndex) => (
-                    <td key={`td-${rowIndex}-${columnIndex}`} style={{ textAlign: alignments[columnIndex] ?? "left" }}>
-                      {renderInline(row[columnIndex] ?? "", `table-${tableKey}-${rowIndex}-${columnIndex}`)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>,
+    },
+    li({ node, className, children }) {
+      const lineIndex = node?.position?.start.line ? node.position.start.line - 1 : -1;
+      return (
+        <ChecklistLineContext.Provider value={lineIndex}>
+          <li className={className}>{children}</li>
+        </ChecklistLineContext.Provider>
       );
-      continue;
-    }
-
-    // 구분선
-    if (/^([-*_])\1{2,}$/.test(trimmed)) {
-      elements.push(<hr key={`hr-${index}`} />);
-      index += 1;
-      continue;
-    }
-
-    // 제목 h1~h6
-    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      const body = renderInline(headingMatch[2], `heading-${index}`);
-      const Tag = `h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
-      elements.push(<Tag key={`heading-${index}`}>{body}</Tag>);
-      index += 1;
-      continue;
-    }
-
-    // 인용
-    if (trimmed.startsWith(">")) {
-      const quoteLines: string[] = [];
-      while (index < lines.length && (lines[index] ?? "").trim().startsWith(">")) {
-        quoteLines.push((lines[index] ?? "").trim().replace(/^>\s?/, ""));
-        index += 1;
-      }
-      elements.push(
-        <blockquote key={`quote-${index}`}>{renderInline(quoteLines.join(" "), `quote-${index}`)}</blockquote>,
+    },
+    input({ type, checked }) {
+      return (
+        <ChecklistInput
+          type={type}
+          checked={checked}
+          uncontrolled={checklistUncontrolled}
+          disabled={checklistDisabled}
+          onToggle={onChecklistToggle}
+        />
       );
-      continue;
-    }
+    },
+  };
 
-    // 체크리스트
-    if (/^[-*+]\s+\[[ xX]\]\s+/.test(trimmed)) {
-      const items: ReactNode[] = [];
-      const listKey = index;
-      while (index < lines.length) {
-        const raw = lines[index] ?? "";
-        const candidate = raw.trim();
-        const match = candidate.match(/^[-*+]\s+\[([ xX])\]\s+(.+)$/);
-        if (!match) {
-          break;
-        }
-        const checked = match[1].toLowerCase() === "x";
-        const lineIndex = index;
-        const indent = leadingIndent(raw);
-        items.push(
-          <li key={`check-${index}`} className={checked ? "checked" : ""} style={indent ? { marginLeft: indent * 16 } : undefined}>
-            <input
-              type="checkbox"
-              checked={checklistUncontrolled ? undefined : checked}
-              defaultChecked={checklistUncontrolled ? checked : undefined}
-              disabled={checklistDisabled}
-              onChange={(event) => onChecklistToggle?.(lineIndex, event.target.checked)}
-            />
-            <span>{renderInline(match[2], `check-${index}`)}</span>
-          </li>,
-        );
-        index += 1;
-      }
-      elements.push(
-        <ul key={`check-list-${listKey}`} className="markdown-checklist">
-          {items}
-        </ul>,
-      );
-      continue;
-    }
-
-    // 순서 목록
-    if (/^\d+[.)]\s+/.test(trimmed)) {
-      const items: ReactNode[] = [];
-      const listKey = index;
-      while (index < lines.length) {
-        const raw = lines[index] ?? "";
-        const candidate = raw.trim();
-        const match = candidate.match(/^\d+[.)]\s+(.+)$/);
-        if (!match) {
-          break;
-        }
-        const indent = leadingIndent(raw);
-        items.push(
-          <li key={`ol-${index}`} style={indent ? { marginLeft: indent * 16 } : undefined}>
-            {renderInline(match[1], `ol-${index}`)}
-          </li>,
-        );
-        index += 1;
-      }
-      elements.push(<ol key={`ol-list-${listKey}`}>{items}</ol>);
-      continue;
-    }
-
-    // 불릿 목록
-    if (/^[-*+]\s+/.test(trimmed)) {
-      const items: ReactNode[] = [];
-      const listKey = index;
-      while (index < lines.length) {
-        const raw = lines[index] ?? "";
-        const candidate = raw.trim();
-        const match = candidate.match(/^[-*+]\s+(.+)$/);
-        if (!match || /^[-*+]\s+\[[ xX]\]\s+/.test(candidate)) {
-          break;
-        }
-        const indent = leadingIndent(raw);
-        items.push(
-          <li key={`list-${index}`} style={indent ? { marginLeft: indent * 16 } : undefined}>
-            {renderInline(match[1], `list-${index}`)}
-          </li>,
-        );
-        index += 1;
-      }
-      elements.push(<ul key={`list-${listKey}`}>{items}</ul>);
-      continue;
-    }
-
-    // 문단 (연속된 일반 줄 묶기)
-    const paragraphLines: string[] = [trimmed];
-    const paraKey = index;
-    index += 1;
-    while (index < lines.length) {
-      const raw = lines[index] ?? "";
-      const candidate = raw.trim();
-      if (
-        !candidate ||
-        candidate.startsWith("```") ||
-        candidate.startsWith(">") ||
-        candidate.startsWith("#") ||
-        /^[-*+]\s+/.test(candidate) ||
-        /^\d+[.)]\s+/.test(candidate) ||
-        /^([-*_])\1{2,}$/.test(candidate) ||
-        isTableStart(lines, index)
-      ) {
-        break;
-      }
-      paragraphLines.push(candidate);
-      index += 1;
-    }
-    elements.push(<p key={`paragraph-${paraKey}`}>{renderInline(paragraphLines.join("\n"), `paragraph-${paraKey}`)}</p>);
-  }
-
-  if (elements.length === 0) {
-    return <p className="empty-text">{emptyText}</p>;
-  }
-
-  return <div className="markdown-renderer">{elements}</div>;
+  return (
+    <div className="markdown-renderer">
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkHighlight]} components={components}>
+        {renderContent}
+      </ReactMarkdown>
+    </div>
+  );
 }

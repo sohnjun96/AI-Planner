@@ -23,6 +23,7 @@ import type {
   UserContext,
   UserContextRule,
 } from "../models";
+import { isValidMemoStorageKey } from "./memos";
 
 export const BACKUP_VERSION = 5;
 export const MAX_IMPORT_FILE_BYTES = 5_000_000;
@@ -188,7 +189,7 @@ function parseTaskType(value: unknown, index: number): TaskType {
 function parseMemo(value: unknown, index: number): Memo {
   const item = record(value, `memos[${index}]`);
   const date = text(item.date, `memos[${index}].date`, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(`memos[${index}].date 형식이 올바르지 않습니다.`);
+  if (!isValidMemoStorageKey(date)) fail(`memos[${index}].date 형식이 올바르지 않습니다.`);
   return { id: id(item.id, `memos[${index}].id`), date, content: text(item.content, `memos[${index}].content`, 100_000, true), updatedAt: iso(item.updatedAt, `memos[${index}].updatedAt`)! };
 }
 

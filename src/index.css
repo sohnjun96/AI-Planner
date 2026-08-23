@@ -22,6 +22,11 @@
   --brand-navy: #0f172a;
   --brand-navy-deep: #0b1020;
   --link-blue: #0b6bcb;
+  --note-heading-black: #000000;
+  --note-heading-blue: #0072b2;
+  --note-heading-sky-blue: #56b4e9;
+  --note-heading-vermilion: #d55e00;
+  --note-heading-bluish-green: #009e73;
   --tint-peach: #ffe7d6;
   --tint-rose: #ffe1ea;
   --tint-mint: #dcf7e8;
@@ -168,9 +173,9 @@ a {
   width: 100%;
   min-width: 0;
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
 
 .skip-link {
@@ -304,6 +309,7 @@ a {
   max-width: none;
   margin: 0;
   padding: 0;
+  flex: 1 0 auto;
 }
 
 @keyframes route-content-in {
@@ -324,6 +330,7 @@ a {
 }
 
 .app-copyright {
+  margin-top: auto;
   padding: 16px 24px 20px;
   border-top: 1px solid var(--hairline);
   background: var(--canvas);
@@ -331,6 +338,30 @@ a {
   font-size: 12px;
   line-height: 1.5;
   text-align: center;
+}
+
+/* Keep the copyright bar anchored while a desktop note editor is open.  The
+ * note workspace can be shorter than the viewport after its panels collapse,
+ * so relying on document flow alone leaves the footer floating above blank
+ * space. */
+@media (min-width: 881px) {
+  .app-shell:has(.notes-workspace.has-selection) .app-copyright {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 900;
+    margin-top: 0;
+  }
+
+  .app-shell:has(.notes-workspace.has-selection) .notes-workspace.has-selection {
+    padding-bottom: calc(var(--space-lg) + 80px);
+  }
+
+  .app-shell:has(.notes-workspace.has-selection) .toast-host,
+  .app-shell:has(.notes-workspace.has-selection) .weekly-backup-reminder {
+    bottom: 80px;
+  }
 }
 
 .dashboard-page,
@@ -1173,6 +1204,37 @@ textarea:focus-visible,
   color: var(--body-muted);
 }
 
+/* 노트 안에서는 제목 단계가 크기뿐 아니라 색과 구분선으로도 드러나게 한다. */
+.notes-workspace .markdown-renderer h1 {
+  color: var(--note-heading-black);
+}
+
+.notes-workspace .markdown-renderer h2 {
+  padding-bottom: 0.28em;
+  border-bottom: 1px solid var(--hairline-strong);
+  color: var(--note-heading-black);
+}
+
+.notes-workspace .markdown-renderer h3 {
+  color: var(--note-heading-blue);
+}
+
+.notes-workspace .markdown-renderer h4 {
+  color: var(--note-heading-sky-blue);
+}
+
+.notes-workspace .markdown-renderer h5 {
+  color: var(--note-heading-vermilion);
+}
+
+.notes-workspace .markdown-renderer h6 {
+  color: var(--note-heading-bluish-green);
+}
+
+.notes-workspace .markdown-renderer :is(h1, h2, h3, h4, h5, h6) :is(strong, b) {
+  color: inherit;
+}
+
 .markdown-renderer p,
 .markdown-renderer li {
   color: var(--ink-muted-80);
@@ -1233,10 +1295,15 @@ textarea:focus-visible,
   cursor: pointer;
 }
 
-.markdown-checklist li.checked span {
+.markdown-checklist li.checked span,
+.markdown-checklist li.checked span * {
   color: var(--body-muted);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
+}
+
+.markdown-checklist li.checked input[type="checkbox"] {
+  accent-color: var(--body-muted);
 }
 
 .markdown-renderer code {
@@ -6889,6 +6956,10 @@ textarea:focus-visible,
   gap: var(--space-xs);
 }
 
+.notes-list-head {
+  flex-wrap: wrap;
+}
+
 .notes-navigation-head strong {
   font-size: 14px;
 }
@@ -6935,6 +7006,7 @@ textarea:focus-visible,
 .notes-list-head h2 {
   margin: 0;
   font-size: 18px;
+  white-space: nowrap;
 }
 
 .notes-list-head > div:first-child {
@@ -6972,6 +7044,7 @@ textarea:focus-visible,
 .notes-list-actions {
   gap: 6px;
   flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .notes-list-pane > .notes-search {
@@ -7459,7 +7532,7 @@ textarea:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .note-toolbar-tools {
@@ -7468,6 +7541,12 @@ textarea:focus-visible,
   gap: var(--space-xxs);
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.note-editor-source-label {
+  color: var(--body-muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .note-ai-button {
@@ -7768,6 +7847,258 @@ textarea:focus-visible,
   cursor: pointer;
 }
 
+/* 원문은 그대로 두고 화면 장식만 바꾸는 Obsidian식 인라인 라이브 편집기. */
+.live-markdown-canvas {
+  min-width: 0;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--canvas);
+}
+
+.live-markdown-canvas .cm-editor {
+  min-height: 420px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.live-markdown-canvas .cm-editor.cm-focused {
+  outline: 2px solid color-mix(in srgb, var(--primary) 12%, transparent);
+  outline-offset: -2px;
+}
+
+.live-markdown-canvas .cm-scroller {
+  min-height: 420px;
+  overflow: auto;
+  font-family: inherit;
+  line-height: 1.75;
+}
+
+.live-markdown-canvas .cm-content {
+  width: min(100%, 800px);
+  min-height: 420px;
+  padding: 26px clamp(20px, 4vw, 44px) 48px;
+  caret-color: var(--primary);
+}
+
+.live-markdown-canvas .cm-line {
+  padding-inline: 0;
+}
+
+.live-markdown-canvas .cm-placeholder {
+  color: var(--body-muted);
+  font-style: normal;
+}
+
+.live-markdown-canvas .cm-selectionBackground,
+.live-markdown-canvas .cm-content ::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent) !important;
+}
+
+.live-markdown-canvas .cm-live-heading {
+  color: var(--ink);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.live-markdown-canvas .cm-live-heading-1 {
+  margin-block: 14px 8px;
+  color: var(--note-heading-black);
+  font-size: 2em;
+  line-height: 1.28;
+}
+
+.live-markdown-canvas .cm-live-heading-2 {
+  margin-block: 12px 6px;
+  padding-bottom: 0.28em;
+  border-bottom: 1px solid var(--hairline-strong);
+  color: var(--note-heading-black);
+  font-size: 1.55em;
+  line-height: 1.35;
+}
+
+.live-markdown-canvas .cm-live-heading-3 {
+  margin-block: 9px 4px;
+  color: var(--note-heading-blue);
+  font-size: 1.25em;
+  line-height: 1.42;
+}
+
+.live-markdown-canvas .cm-live-heading-4,
+.live-markdown-canvas .cm-live-heading-5,
+.live-markdown-canvas .cm-live-heading-6 {
+  margin-block: 6px 2px;
+  font-size: 1.08em;
+}
+
+.live-markdown-canvas .cm-live-heading-4 {
+  color: var(--note-heading-sky-blue);
+}
+
+.live-markdown-canvas .cm-live-heading-5 {
+  color: var(--note-heading-vermilion);
+}
+
+.live-markdown-canvas .cm-live-heading-6 {
+  color: var(--note-heading-bluish-green);
+}
+
+.live-markdown-canvas .cm-live-strong {
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.live-markdown-canvas .cm-live-emphasis {
+  font-style: italic;
+}
+
+.live-markdown-canvas .cm-live-strikethrough,
+.live-markdown-canvas .cm-live-task-complete {
+  color: var(--body-muted);
+  text-decoration: line-through;
+}
+
+.live-markdown-canvas .cm-live-inline-code {
+  padding: 0.1em 0.32em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--surface-pearl) 75%, var(--canvas));
+  color: var(--primary-pressed);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.live-markdown-canvas .cm-live-highlight {
+  padding-inline: 0.08em;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tint-yellow) 72%, #fff2a8);
+}
+
+.live-markdown-canvas .cm-live-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 42%, transparent);
+  text-underline-offset: 3px;
+}
+
+.live-markdown-canvas .cm-live-blockquote {
+  padding-left: 14px;
+  border-left: 3px solid color-mix(in srgb, var(--primary) 38%, var(--hairline));
+  color: var(--body-muted);
+}
+
+.live-markdown-canvas .cm-live-list-marker {
+  display: inline-block;
+  min-width: 1.2em;
+  margin-right: 0.1em;
+  color: var(--primary-focus);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+  text-align: right;
+  pointer-events: none;
+}
+
+.live-markdown-canvas .cm-live-task-widget {
+  display: inline-flex;
+  width: 1.45em;
+  align-items: center;
+  justify-content: flex-start;
+  vertical-align: -0.12em;
+}
+
+.live-markdown-canvas .cm-live-task-widget input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.live-markdown-canvas .cm-live-horizontal-rule {
+  display: inline-block;
+  width: min(100%, 720px);
+  border-top: 1px solid var(--hairline);
+  vertical-align: middle;
+  pointer-events: none;
+}
+
+.live-markdown-canvas .cm-live-horizontal-rule-source {
+  color: var(--body-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.live-markdown-canvas .cm-live-code-block {
+  padding-inline: 14px;
+  background: color-mix(in srgb, var(--surface-pearl) 72%, var(--canvas));
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.live-markdown-canvas .cm-live-code-block:first-of-type {
+  border-radius: 8px 8px 0 0;
+}
+
+.live-markdown-canvas .cm-live-table-row {
+  color: color-mix(in srgb, var(--ink) 88%, var(--body-muted));
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown-character-count {
+  align-self: flex-end;
+  margin-top: 5px;
+  color: var(--body-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-renderer .contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.markdown-renderer .task-list-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.markdown-renderer .task-list-item > input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.markdown-renderer .task-list-item > input[type="checkbox"]:checked ~ * {
+  color: var(--body-muted);
+  text-decoration: line-through;
+}
+
+.markdown-renderer .task-list-item > input[type="checkbox"]:checked,
+.markdown-renderer .task-list-item > input[type="checkbox"]:checked ~ * * {
+  color: var(--body-muted);
+  accent-color: var(--body-muted);
+}
+
+.markdown-image-alt {
+  color: var(--body-muted);
+}
+
+@media (max-width: 900px) {
+  .live-markdown-canvas,
+  .live-markdown-canvas .cm-editor,
+  .live-markdown-canvas .cm-scroller,
+  .live-markdown-canvas .cm-content {
+    min-height: 340px;
+  }
+
+  .live-markdown-canvas .cm-content {
+    padding: 20px 16px 40px;
+  }
+}
+
 .markdown-slash-menu {
   position: fixed;
   z-index: 1200;
@@ -7858,6 +8189,471 @@ textarea:focus-visible,
   color: var(--body);
   font-size: 15px;
   line-height: 1.75;
+}
+
+/* 단일 세션 기반 노트 편집기: 라이브/원문이 같은 문서와 히스토리를 공유한다. */
+.notes-detail-pane .note-editor-surface.note-editor-live {
+  min-height: min(680px, calc(100vh - 132px));
+  padding: 24px 28px 40px;
+  border: 1px solid color-mix(in srgb, var(--note-project-color, var(--hairline-strong)) 22%, var(--hairline));
+  border-top: 3px solid color-mix(in srgb, var(--note-project-color, var(--primary)) 58%, var(--hairline));
+  border-radius: 18px;
+  background: var(--canvas);
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.46), 0 3px 10px -8px rgba(15, 23, 42, 0.24);
+}
+
+.note-editor-live .note-read-view {
+  min-height: 420px;
+  margin-top: 4px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.note-editor-overlay-panel {
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--hairline));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--tint-blue) 35%, var(--canvas));
+}
+
+.note-mdx-editor {
+  --basePageBg: var(--canvas);
+  --baseBg: var(--surface-pearl);
+  --baseBgHover: var(--tint-blue);
+  --baseBgActive: color-mix(in srgb, var(--primary) 13%, var(--canvas));
+  --baseBorder: var(--hairline);
+  --baseBorderHover: var(--hairline-strong);
+  --baseLine: var(--hairline);
+  --baseText: var(--body);
+  --baseTextContrast: var(--ink);
+  --accentText: var(--primary-focus);
+  --accentSolid: var(--primary);
+  min-height: 420px;
+  color: var(--body);
+  font-family: inherit;
+}
+
+.note-mdx-editor .mdxeditor-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  min-height: 48px;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--surface-pearl) 88%, var(--canvas));
+  box-shadow: 0 5px 12px -12px rgba(15, 23, 42, 0.5);
+}
+
+.note-mdx-editor .mdxeditor-toolbar button,
+.note-mdx-editor .mdxeditor-toolbar [role="button"] {
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.note-mdx-editor .mdxeditor-root-contenteditable,
+.note-mdx-editor .mdxeditor-diff-source-wrapper,
+.note-mdx-editor .mdxeditor-source-editor {
+  min-height: 370px;
+}
+
+.note-mdx-content {
+  width: min(100%, 820px) !important;
+  min-height: 370px;
+  padding: 28px clamp(20px, 4vw, 46px) 56px !important;
+  color: var(--body) !important;
+  caret-color: var(--primary);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.78;
+}
+
+.note-mdx-content:focus {
+  outline: none;
+}
+
+.note-mdx-content ::selection,
+.note-mdx-editor .cm-content ::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.note-mdx-content > :first-child {
+  margin-top: 0;
+}
+
+.note-mdx-content p {
+  margin: 0.72em 0;
+}
+
+/* Keep bold text visually distinct in the live note canvas and AI/read previews. */
+.note-mdx-content strong,
+.note-mdx-content b {
+  color: var(--link-blue);
+  font-weight: 700;
+}
+
+.note-mdx-content h1,
+.note-mdx-content h2,
+.note-mdx-content h3,
+.note-mdx-content h4,
+.note-mdx-content h5,
+.note-mdx-content h6 {
+  color: var(--ink);
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+
+.note-mdx-content h1 {
+  margin: 1em 0 0.5em;
+  color: var(--note-heading-black);
+  font-size: 2em;
+}
+
+.note-mdx-content h2 {
+  margin: 1em 0 0.45em;
+  padding-bottom: 0.28em;
+  border-bottom: 1px solid var(--hairline-strong);
+  color: var(--note-heading-black);
+  font-size: 1.55em;
+}
+
+.note-mdx-content h3 {
+  margin: 0.9em 0 0.4em;
+  color: var(--note-heading-blue);
+  font-size: 1.26em;
+}
+
+.note-mdx-content h4 {
+  color: var(--note-heading-sky-blue);
+}
+
+.note-mdx-content h5 {
+  color: var(--note-heading-vermilion);
+}
+
+.note-mdx-content h6 {
+  color: var(--note-heading-bluish-green);
+}
+
+.note-mdx-content :is(h1, h2, h3, h4, h5, h6) :is(strong, b) {
+  color: inherit;
+}
+
+.note-mdx-content ul,
+.note-mdx-content ol {
+  margin: 0.65em 0;
+  padding-left: 1.65em;
+}
+
+.note-mdx-content li {
+  margin: 0.24em 0;
+}
+
+/* Lexical 체크리스트는 실제 input이 아니라 li의 가상 요소로 체크박스를 그린다.
+   본문 줄높이(1.78) 가운데에 맞춰 텍스트와 체크박스의 세로 기준선을 맞춘다. */
+.note-mdx-content li[role="checkbox"]::before {
+  top: 0.3em;
+}
+
+.note-mdx-content li[role="checkbox"]::after {
+  top: calc(0.3em + var(--spacing-0_5));
+}
+
+/* 완료한 체크리스트는 편집 중에도 미완료 항목과 즉시 구분한다. */
+.note-mdx-content li[role="checkbox"][aria-checked="true"],
+.note-mdx-content li[role="checkbox"][aria-checked="true"] * {
+  color: var(--body-muted) !important;
+}
+
+.note-mdx-content li[role="checkbox"][aria-checked="true"]::before {
+  border-color: var(--body-muted);
+  background-color: var(--body-muted);
+}
+
+.note-mdx-content blockquote {
+  margin: 0.9em 0;
+  padding: 0.25em 0 0.25em 1em;
+  border-left: 3px solid color-mix(in srgb, var(--primary) 42%, var(--hairline));
+  color: var(--body-muted);
+}
+
+.note-mdx-content code {
+  padding: 0.12em 0.35em;
+  border-radius: 5px;
+  background: var(--surface-pearl);
+  color: var(--primary-pressed);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.note-mdx-content pre {
+  overflow-x: auto;
+  padding: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: var(--surface-pearl);
+}
+
+.note-mdx-content pre code {
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.note-mdx-content mark {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tint-yellow) 72%, #fff2a8);
+}
+
+.note-mdx-content a {
+  color: var(--primary);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.note-mdx-content hr {
+  margin: 1.8em 0;
+  border: 0;
+  border-top: 1px solid var(--hairline-strong);
+}
+
+.note-mdx-content table {
+  width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
+}
+
+.note-mdx-content th,
+.note-mdx-content td {
+  min-width: 90px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline-strong);
+  text-align: left;
+  vertical-align: top;
+}
+
+.note-mdx-content th {
+  background: var(--surface-pearl);
+  color: var(--ink);
+}
+
+/* MDXEditor의 편집용 표는 일반 표와 제어 UI를 분리해 보여준다. */
+.note-mdx-content table:has([data-tool-cell="true"]) {
+  height: auto;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--canvas);
+  box-shadow: 0 5px 18px -16px rgba(15, 23, 42, 0.48);
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > colgroup > col:first-child,
+.note-mdx-content table:has([data-tool-cell="true"]) > colgroup > col:last-child {
+  width: 5% !important;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > tbody > tr > :is(th, td):not([data-tool-cell="true"]) {
+  min-width: 90px;
+  padding: 9px 12px;
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas);
+  vertical-align: middle;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > tbody > tr:first-child > th:not([data-tool-cell="true"]) {
+  background: var(--surface-pearl);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* MDXEditor가 열 단위로 부여하는 정렬 클래스를 공통 표 스타일보다 우선한다. */
+.note-mdx-content table:has([data-tool-cell="true"]) :is(th, td)[class*="_leftAlignedCell_"] {
+  text-align: left;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) :is(th, td)[class*="_centeredCell_"] {
+  text-align: center;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) :is(th, td)[class*="_rightAlignedCell_"] {
+  text-align: right;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > tbody > tr:last-child > :is(th, td):not([data-tool-cell="true"]) {
+  border-bottom: 0;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > tbody > tr > [data-active="true"] {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid color-mix(in srgb, var(--primary) 64%, transparent) !important;
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--tint-blue) 34%, var(--canvas));
+}
+
+/* 셀을 편집하지 않을 때 행·열 도구가 차지하던 빈 테두리와 여백까지 제거한다. */
+.note-mdx-content table:has([data-tool-cell="true"]):not(:focus-within):not(:has(> tbody > tr > :is(th, td):not([data-tool-cell="true"])[data-active="true"])) > thead,
+.note-mdx-content table:has([data-tool-cell="true"]):not(:focus-within):not(:has(> tbody > tr > :is(th, td):not([data-tool-cell="true"])[data-active="true"])) > tfoot {
+  display: none;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]):not(:focus-within):not(:has(> tbody > tr > :is(th, td):not([data-tool-cell="true"])[data-active="true"])) > tbody > tr > [data-tool-cell="true"] {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  visibility: hidden;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]):not(:focus-within):not(:has(> tbody > tr > :is(th, td):not([data-tool-cell="true"])[data-active="true"])) > colgroup > col:first-child,
+.note-mdx-content table:has([data-tool-cell="true"]):not(:focus-within):not(:has(> tbody > tr > :is(th, td):not([data-tool-cell="true"])[data-active="true"])) > colgroup > col:last-child {
+  width: 0 !important;
+  visibility: collapse;
+}
+
+/* 편집 중 나타나는 도구 레일은 작고 분명한 버튼으로 표시한다. */
+.note-mdx-content table:has([data-tool-cell="true"]) > thead > tr > th,
+.note-mdx-content table:has([data-tool-cell="true"]) > tfoot > tr > th,
+.note-mdx-content table:has([data-tool-cell="true"]) > tbody > tr > [data-tool-cell="true"] {
+  min-width: 32px;
+  width: 32px;
+  padding: 3px;
+  border: 0;
+  background: color-mix(in srgb, var(--surface-pearl) 76%, var(--canvas));
+  text-align: center;
+  vertical-align: middle;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > thead > tr > th {
+  height: 34px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > tbody > tr > [data-tool-cell="true"] {
+  border-right: 1px solid var(--hairline);
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > tbody > tr > [data-tool-cell="true"]:last-child {
+  border-right: 0;
+  border-left: 1px solid var(--hairline);
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) > tfoot > tr > th {
+  height: 34px;
+  border-top: 1px solid var(--hairline);
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]) [data-tool-cell="true"] button,
+.note-mdx-content table:has([data-tool-cell="true"]) > tfoot button {
+  display: grid;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  margin: auto;
+  padding: 0;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--body-muted);
+  opacity: 0.62;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.note-mdx-content table:has([data-tool-cell="true"]):focus-within [data-tool-cell="true"] button:hover,
+.note-mdx-content table:has([data-tool-cell="true"]):has(> tbody > tr > :is(th, td):not([data-tool-cell="true"])[data-active="true"]) [data-tool-cell="true"] button:hover,
+.note-mdx-content table:has([data-tool-cell="true"]):focus-within > tfoot button:hover,
+.note-mdx-content table:has([data-tool-cell="true"]):has(> tbody > tr > :is(th, td):not([data-tool-cell="true"])[data-active="true"]) > tfoot button:hover {
+  background: var(--tint-blue);
+  color: var(--primary-focus);
+  opacity: 1;
+}
+
+/* 포털 메뉴가 표나 인접 문단 위에 떠 있을 때에도 메뉴 자체가 포인터 입력을 받는다. */
+.note-mdx-editor [data-radix-popper-content-wrapper]:has(> [class*="_tableColumnEditorPopoverContent_"]) {
+  z-index: 20 !important;
+  pointer-events: auto !important;
+}
+
+.note-mdx-editor [class*="_tableColumnEditorPopoverContent_"][data-editor-dropdown="true"] {
+  pointer-events: auto;
+}
+
+.note-mdx-editor .cm-editor {
+  min-height: 370px;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 14px;
+}
+
+.note-mdx-editor .cm-editor.cm-focused {
+  outline: 2px solid color-mix(in srgb, var(--primary) 14%, transparent);
+  outline-offset: -2px;
+}
+
+.note-mdx-editor .cm-scroller {
+  min-height: 370px;
+  line-height: 1.7;
+}
+
+.note-mdx-editor .cm-content {
+  min-height: 370px;
+  padding: 24px clamp(16px, 4vw, 42px) 48px;
+  caret-color: var(--primary);
+}
+
+.markdown-fallback-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--status-on-hold-border);
+  background: var(--status-on-hold-bg);
+  color: var(--status-on-hold-text);
+  font-size: 12px;
+}
+
+.markdown-fallback-notice button {
+  margin-left: auto;
+}
+
+.markdown-fallback-detail {
+  width: 100%;
+  overflow: hidden;
+  color: var(--body-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-safe-source-input {
+  width: 100%;
+  min-height: 370px;
+  resize: vertical;
+  padding: 24px clamp(16px, 4vw, 42px) 48px;
+  border: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.markdown-safe-source-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 14%, transparent);
+  outline-offset: -2px;
 }
 
 .note-editor-footer {
@@ -8424,13 +9220,15 @@ textarea:focus-visible,
     padding-bottom: 2px;
   }
 
-  .notes-detail-pane .note-editor-surface.note-editor-read {
+  .notes-detail-pane .note-editor-surface.note-editor-read,
+  .notes-detail-pane .note-editor-surface.note-editor-live {
     min-height: calc(100dvh - 132px);
     padding: 20px 18px 28px;
     border-radius: 16px;
   }
 
-  .note-editor-read .note-read-view {
+  .note-editor-read .note-read-view,
+  .note-editor-live .note-read-view {
     min-height: 280px;
     padding-top: 22px;
   }

@@ -43,6 +43,70 @@ export function nextMarkdownListDepth(
 
 export type MarkdownLineStyle = "heading1" | "heading2" | "heading3" | "bullet" | "ordered" | "checklist" | "quote";
 
+const MARKDOWN_SPACE_ENTITY = /&(?:#x0*20|#0*32|nbsp);/gi;
+
+function decodeSpaceEntitiesOutsideInlineCode(line: string): string {
+  let result = "";
+  let cursor = 0;
+  let inlineFenceLength = 0;
+
+  while (cursor < line.length) {
+    const nextBacktick = line.indexOf("`", cursor);
+    const textEnd = nextBacktick < 0 ? line.length : nextBacktick;
+    const text = line.slice(cursor, textEnd);
+    result += inlineFenceLength === 0 ? text.replace(MARKDOWN_SPACE_ENTITY, " ") : text;
+    if (nextBacktick < 0) break;
+
+    let runEnd = nextBacktick + 1;
+    while (line[runEnd] === "`") runEnd += 1;
+    const run = line.slice(nextBacktick, runEnd);
+    result += run;
+    if (inlineFenceLength === 0) inlineFenceLength = run.length;
+    else if (inlineFenceLength === run.length) inlineFenceLength = 0;
+    cursor = runEnd;
+  }
+
+  return result;
+}
+
+/**
+ * 라이브 편집기의 Markdown 직렬화 과정에서 생기는 공백 문자 참조를 일반 공백으로 되돌린다.
+ * 사용자가 실제 문자 참조를 작성할 수 있는 인라인 코드와 fenced code block은 그대로 보존한다.
+ */
+export function normalizeLiveMarkdownWhitespace(value: string): string {
+  const parts = value.split(/(\r\n|\r|\n)/);
+  let fencedCharacter = "";
+  let fencedLength = 0;
+
+  return parts
+    .map((part) => {
+      if (/^\r?\n$|^\r$/.test(part)) return part;
+
+      const fence = part.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+      if (fencedCharacter) {
+        if (
+          fence &&
+          fence[1][0] === fencedCharacter &&
+          fence[1].length >= fencedLength &&
+          fence[2].trim() === ""
+        ) {
+          fencedCharacter = "";
+          fencedLength = 0;
+        }
+        return part;
+      }
+
+      if (fence) {
+        fencedCharacter = fence[1][0];
+        fencedLength = fence[1].length;
+        return part;
+      }
+
+      return decodeSpaceEntitiesOutsideInlineCode(part);
+    })
+    .join("");
+}
+
 function replaceRange(value: string, start: number, end: number, replacement: string, selectionOffset = replacement.length): MarkdownEditResult {
   return {
     value: value.slice(0, start) + replacement + value.slice(end),
@@ -73,6 +137,55 @@ export function wrapMarkdownSelection(
     value: value.slice(0, start) + replacement + value.slice(end),
     selectionStart,
     selectionEnd: selectionStart + selected.length,
+  };
+}
+
+export function toggleMarkdownSelection(
+  value: string,
+  start: number,
+  end: number,
+  prefix: string,
+  suffix: string,
+  placeholder: string,
+): MarkdownEditResult {
+  if (
+    start >= prefix.length &&
+    value.slice(start - prefix.length, start) === prefix &&
+    value.slice(end, end + suffix.length) === suffix
+  ) {
+    return {
+      value: value.slice(0, start - prefix.length) + value.slice(start, end) + value.slice(end + suffix.length),
+      selectionStart: start - prefix.length,
+      selectionEnd: end - prefix.length,
+    };
+  }
+
+  const selected = value.slice(start, end);
+  if (selected.startsWith(prefix) && selected.endsWith(suffix) && selected.length >= prefix.length + suffix.length) {
+    const body = selected.slice(prefix.length, selected.length - suffix.length);
+    return {
+      value: value.slice(0, start) + body + value.slice(end),
+      selectionStart: start,
+      selectionEnd: start + body.length,
+    };
+  }
+
+  return wrapMarkdownSelection(value, start, end, prefix, suffix, placeholder);
+}
+
+export function insertMarkdownLink(
+  value: string,
+  start: number,
+  end: number,
+  href: string,
+  placeholder = "링크 텍스트",
+): MarkdownEditResult {
+  const selected = value.slice(start, end) || placeholder;
+  const replacement = `[${selected}](${href})`;
+  return {
+    value: value.slice(0, start) + replacement + value.slice(end),
+    selectionStart: start + 1,
+    selectionEnd: start + 1 + selected.length,
   };
 }
 
@@ -162,15 +275,19 @@ export function continueMarkdownLine(value: string, start: number, end: number):
   const quote = line.match(/^(\s*>\s?)(.*)$/);
   let body = "";
   let nextPrefix = "";
+  let indent = "";
 
   if (task) {
     body = task[4];
+    indent = task[1];
     nextPrefix = `${task[1]}${task[2]} [ ] `;
   } else if (ordered) {
     body = ordered[4];
+    indent = ordered[1];
     nextPrefix = `${ordered[1]}${Number(ordered[2]) + 1}${ordered[3]} `;
   } else if (bullet) {
     body = bullet[3];
+    indent = bullet[1];
     nextPrefix = `${bullet[1]}${bullet[2]} `;
   } else if (quote) {
     body = quote[2];
@@ -180,6 +297,11 @@ export function continueMarkdownLine(value: string, start: number, end: number):
   }
 
   if (!body.trim()) {
+    if (indent) {
+      const outdentedIndent = indent.replace(/(?: {1,2}|\t)$/, "");
+      const marker = nextPrefix.slice(indent.length);
+      return replaceRange(value, lineStart, lineEnd, `${outdentedIndent}${marker}`);
+    }
     return replaceRange(value, lineStart, lineEnd, "", 0);
   }
 

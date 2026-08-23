@@ -52,6 +52,7 @@ import {
   type ValidatedImportPayload,
 } from "../utils/importBackup";
 import { getLunchAutoCompleteAt, isLunchTask } from "../utils/lunchTasks";
+import { isValidMemoStorageKey } from "../utils/memos";
 import { isTaskActive, isTaskCanceled, isTaskDone } from "../utils/taskStatus";
 
 interface ProjectInput {
@@ -122,6 +123,7 @@ interface AppDataContextValue {
     aiPrompt?: string,
   ) => Promise<string>;
   updateNote: (id: string, input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<void>;
+  updateNoteTitleIfUnchanged: (id: string, title: string, expectedUpdatedAt: string) => Promise<void>;
   applyNoteAiClassification: (id: string, projectId: string, subcategoryId?: string, expectedUpdatedAt?: string) => Promise<void>;
   removeNote: (id: string) => Promise<void>;
   restoreNoteVersion: (noteId: string, versionId: string) => Promise<void>;
@@ -183,6 +185,7 @@ const MAX_AUTO_BACKUPS = 20;
 const MAX_AUTO_BACKUP_TOTAL_BYTES = 8_000_000;
 const IMPORT_BATCH_SIZE = 500;
 const MAX_ALARM_SYNC_TASKS = 2_000;
+const AUTOSAVE_VERSION_COALESCE_MS = 5 * 60 * 1_000;
 const LIVE_QUERY_LIMITS = {
   tasks: 20_000,
   projects: 1_000,
@@ -1306,17 +1309,37 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         JSON.stringify(existing.tags) !== JSON.stringify(nextTags) ||
         JSON.stringify(existing.sourceNoteIds ?? []) !== JSON.stringify(nextSourceNoteIds);
 
+      let reusableAutosaveVersion: NoteVersion | undefined;
+      if (contentChanged && editType === "autosave") {
+        const versions = await db.noteVersions.where("noteId").equals(id).sortBy("createdAt");
+        const latest = versions.at(-1);
+        if (
+          latest?.editType === "autosave" &&
+          new Date(now).getTime() - new Date(latest.createdAt).getTime() <= AUTOSAVE_VERSION_COALESCE_MS
+        ) {
+          reusableAutosaveVersion = latest;
+        }
+      }
+
       if (!contentChanged && !metaChanged) {
         return;
       }
-      if (contentChanged) {
+      if (contentChanged && !reusableAutosaveVersion) {
         await pruneNoteVersions(id);
         await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
       }
 
       await db.transaction("rw", [db.notes, db.noteVersions], async () => {
+        // The note may have been deleted while validation/version pruning was
+        // running. Re-read it inside the write transaction so an old snapshot
+        // can never recreate a deleted note.
+        const current = await db.notes.get(id);
+        if (!current) return;
+        if (current.updatedAt !== existing.updatedAt) {
+          throw new Error("다른 작업에서 노트가 변경되어 저장을 중단했습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요.");
+        }
         await db.notes.put({
-          ...existing,
+          ...current,
           title: nextTitle,
           content: normalized.content,
           projectId: normalized.projectId,
@@ -1329,14 +1352,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (contentChanged) {
-          await db.noteVersions.add({
-            id: getId("noteversion"),
+          await db.noteVersions.put({
+            id: reusableAutosaveVersion?.id ?? getId("noteversion"),
             noteId: id,
             title: nextTitle,
             content: normalized.content,
             editType,
             aiPrompt,
-            createdAt: now,
+            // Keep the beginning of the autosave window fixed. Updating this
+            // timestamp on every keystroke would prevent a new checkpoint from
+            // ever being created during a long editing session.
+            createdAt: reusableAutosaveVersion?.createdAt ?? now,
           });
           await pruneNoteVersions(id);
         }
@@ -1346,23 +1372,34 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const applyNoteAiClassification = useCallback(async (id: string, projectId: string, subcategoryId?: string, expectedUpdatedAt?: string) => {
-    const existing = await db.notes.get(id);
-    // Do not let a delayed background classification overwrite a user's edit.
-    if (!existing || existing.aiClassifiedAt || (expectedUpdatedAt && existing.updatedAt !== expectedUpdatedAt)) {
-      return;
-    }
     const [project, subcategory] = await Promise.all([
       db.projects.get(projectId),
       subcategoryId ? db.projectSubcategories.get(subcategoryId) : undefined,
     ]);
     if (!project || (subcategoryId && (!subcategory || subcategory.projectId !== projectId))) return;
     const now = toIsoNow();
-    await db.notes.put({
-      ...existing,
-      projectId,
-      subcategoryId,
-      aiClassifiedAt: now,
-      updatedAt: now,
+    await db.transaction("rw", db.notes, async () => {
+      const current = await db.notes.get(id);
+      // Re-check inside the write transaction so delayed classification can
+      // never replace edits made after its request was started.
+      if (!current || current.aiClassifiedAt || (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt)) return;
+      await db.notes.put({
+        ...current,
+        projectId,
+        subcategoryId,
+        aiClassifiedAt: now,
+        updatedAt: now,
+      });
+    });
+  }, []);
+
+  const updateNoteTitleIfUnchanged = useCallback(async (id: string, title: string, expectedUpdatedAt: string) => {
+    const normalizedTitle = title.trim() || "제목 없는 노트";
+    if (normalizedTitle.length > 500) throw new Error("노트 제목은 500자 이하여야 합니다.");
+    await db.transaction("rw", db.notes, async () => {
+      const current = await db.notes.get(id);
+      if (!current || current.updatedAt !== expectedUpdatedAt || current.title === normalizedTitle) return;
+      await db.notes.put({ ...current, title: normalizedTitle, updatedAt: toIsoNow() });
     });
   }, []);
 
@@ -1395,26 +1432,31 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const restoreNoteVersion = useCallback(
     async (noteId: string, versionId: string) => {
-      const [note, version] = await Promise.all([db.notes.get(noteId), db.noteVersions.get(versionId)]);
-      if (!note || !version || version.noteId !== noteId) {
+      const version = await db.noteVersions.get(versionId);
+      if (!version || version.noteId !== noteId) {
         return;
       }
       await pruneNoteVersions(noteId);
       await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
       const now = toIsoNow();
-      await db.notes.put({
-        ...note,
-        title: version.title,
-        content: version.content,
-        updatedAt: now,
-      });
-      await db.noteVersions.add({
-        id: getId("noteversion"),
-        noteId,
-        title: version.title,
-        content: version.content,
-        editType: "restore",
-        createdAt: now,
+      await db.transaction("rw", [db.notes, db.noteVersions], async () => {
+        const note = await db.notes.get(noteId);
+        const currentVersion = await db.noteVersions.get(versionId);
+        if (!note || !currentVersion || currentVersion.noteId !== noteId) return;
+        await db.notes.put({
+          ...note,
+          title: currentVersion.title,
+          content: currentVersion.content,
+          updatedAt: now,
+        });
+        await db.noteVersions.add({
+          id: getId("noteversion"),
+          noteId,
+          title: currentVersion.title,
+          content: currentVersion.content,
+          editType: "restore",
+          createdAt: now,
+        });
       });
       await pruneNoteVersions(noteId);
     },
@@ -1678,7 +1720,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const saveMemo = useCallback(async (date: string, content: string) => {
     const trimmed = content.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(new Date(`${date}T00:00:00`).getTime())) {
+    if (!isValidMemoStorageKey(date)) {
       throw new Error("메모 날짜 형식이 올바르지 않습니다.");
     }
     if (trimmed.length > 100_000) throw new Error("메모 내용은 100,000자 이하여야 합니다.");
@@ -2089,6 +2131,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       createNote,
       createMergedNote,
       updateNote,
+      updateNoteTitleIfUnchanged,
       applyNoteAiClassification,
       removeNote,
       restoreNoteVersion,
@@ -2140,6 +2183,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       createNote,
       createMergedNote,
       updateNote,
+      updateNoteTitleIfUnchanged,
       applyNoteAiClassification,
       removeNote,
       restoreNoteVersion,

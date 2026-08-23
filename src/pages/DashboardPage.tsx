@@ -25,6 +25,7 @@ import {
   isPastCompletedHidden,
   shiftIsoToDateKey,
 } from "../utils/date";
+import { GLOBAL_MEMO_KEY } from "../utils/memos";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 import { shouldCelebrateAllTodayTasksCompleted } from "../utils/dayCompletion";
 import {
@@ -35,7 +36,6 @@ import {
 } from "../utils/taskStatus";
 import { isLunchTask } from "../utils/lunchTasks";
 
-const GLOBAL_MEMO_KEY = "global";
 const DASHBOARD_VIEW_MODE_STORAGE_KEY = "ai-planner:dashboard-view-mode";
 
 function getInitialCalendarViewMode(): TaskViewMode {

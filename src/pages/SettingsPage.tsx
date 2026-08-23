@@ -36,6 +36,7 @@ import { formatDateTime } from "../utils/date";
 import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
 import { downloadJsonBackup } from "../utils/jsonBackup";
 import { MAX_IMPORT_FILE_BYTES } from "../utils/importBackup";
+import { downloadNotesArchive } from "../utils/noteMarkdownExport";
 
 const API_KEY_AUTOSAVE_DELAY_MS = 700;
 
@@ -237,6 +238,7 @@ export function SettingsPage() {
     refreshAutoBackups,
     tasks,
     projects,
+    projectSubcategories,
     notes,
     noteVersions,
     noteTaskLinks,
@@ -246,6 +248,7 @@ export function SettingsPage() {
   const [error, setError] = useState("");
   const [appVersion, setAppVersion] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingNotes, setIsExportingNotes] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport>();
   const [isImporting, setIsImporting] = useState(false);
   const [backupMessage, setBackupMessage] = useState("");
@@ -646,6 +649,21 @@ export function SettingsPage() {
     }
   }
 
+  async function handleNotesExport() {
+    if (isExportingNotes) return;
+    setError("");
+    setMessage("");
+    setIsExportingNotes(true);
+    try {
+      const result = await downloadNotesArchive(notes, projects, projectSubcategories);
+      setMessage(`노트 ${result.fileCount}개를 ZIP 파일로 내보냈습니다.`);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "노트를 내보내지 못했습니다.");
+    } finally {
+      setIsExportingNotes(false);
+    }
+  }
+
   async function handleConfirmImport() {
     if (!pendingImport || isImporting) {
       return;
@@ -656,7 +674,7 @@ export function SettingsPage() {
     setIsImporting(true);
     let backupCreated = false;
     try {
-      await createAutoBackup("JSON 가져오기 직전");
+      await createAutoBackup("백업 불러오기 직전");
       backupCreated = true;
       await importData(pendingImport.raw);
       setPendingImport(undefined);
@@ -968,7 +986,7 @@ export function SettingsPage() {
         <div className="settings-hero-actions">
           <div className="settings-json-export-control">
             <button className="btn btn-primary" type="button" onClick={() => void handleExport()} disabled={isExporting}>
-              {isExporting ? "내보내는 중…" : "JSON 내보내기"}
+              {isExporting ? "내보내는 중…" : "백업 내보내기"}
             </button>
             <small className="settings-json-export-status">
               마지막 내보내기:{" "}
@@ -980,9 +998,17 @@ export function SettingsPage() {
             </small>
           </div>
           <label className="btn btn-soft file-upload">
-            JSON 가져오기
+            백업 불러오기
             <input type="file" accept=".json,application/json" onChange={handleImport} />
           </label>
+          <button
+            className="btn btn-soft"
+            type="button"
+            onClick={() => void handleNotesExport()}
+            disabled={isExportingNotes || notes.length === 0}
+          >
+            {isExportingNotes ? "노트 내보내는 중…" : "노트 내보내기"}
+          </button>
         </div>
       </section>
 
@@ -1640,7 +1666,7 @@ export function SettingsPage() {
 
           <div className="settings-inline-note">
             <span>
-              자동 백업은 이 브라우저 안에 보관됩니다. 컴퓨터에 별도 파일을 남기려면 화면 위의 JSON 내보내기를 사용하세요.
+              자동 백업은 이 브라우저 안에 보관됩니다. 컴퓨터에 별도 파일을 남기려면 화면 위의 백업 내보내기를 사용하세요.
             </span>
           </div>
 
