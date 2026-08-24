@@ -49,9 +49,12 @@ function assertSingleFileHtml(html, profile) {
   if (/<(?:script|link)\b[^>]+(?:src|href)\s*=\s*["'](?!data:)/i.test(html)) {
     throw new Error("단일 HTML에 외부 JavaScript, CSS 또는 아이콘 참조가 남아 있습니다.");
   }
-  const scriptMatch = html.match(/<script type="module">([\s\S]+)<\/script>\s*<\/body>/i);
+  const scriptMatch = html.match(/<script>([\s\S]+)<\/script>\s*<\/body>/i);
   if (!scriptMatch) {
     throw new Error("인라인 애플리케이션 스크립트를 찾지 못했습니다.");
+  }
+  if (/<script\b[^>]*\btype\s*=\s*["']module["']/i.test(html)) {
+    throw new Error("단일 HTML은 file:// 직접 실행을 위해 모듈 스크립트를 사용할 수 없습니다.");
   }
   const styleMatch = html.match(/<style>([\s\S]+)<\/style>/i);
   if (!styleMatch) {
@@ -98,7 +101,9 @@ async function runBuild() {
     outdir: "single-html-build",
     bundle: true,
     platform: "browser",
-    format: "esm",
+    // file:// 문서에서는 브라우저별 ES module 보안 제약이 달라질 수 있다.
+    // 완전히 번들된 IIFE를 고전 스크립트로 실행해 단일 파일 직접 실행을 보장한다.
+    format: "iife",
     // ASCII 출력은 JavaScript 문자열의 HTML 비문자(U+FFFF 등)를 이스케이프해
     // 단일 문서를 브라우저뿐 아니라 HTML 검사기와 정적 서버에서도 안전하게 다룬다.
     charset: "ascii",
@@ -149,7 +154,7 @@ async function runBuild() {
   </head>
   <body>
     <div id="root"></div>
-    <script type="module">${safeJavascript}</script>
+    <script>${safeJavascript}</script>
   </body>
 </html>
 `;
