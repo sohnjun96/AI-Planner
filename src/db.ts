@@ -26,6 +26,7 @@ import type {
   UserContext,
 } from "./models";
 import { toIsoNow } from "./utils/date";
+import { reconcileDefaultUserContextReferences } from "./utils/defaultReferenceRepair";
 
 class ScheduleDB extends Dexie {
   tasks!: Table<Task, string>;
@@ -228,8 +229,9 @@ export async function bootstrapDatabase(): Promise<void> {
   }
 
   const userContext = await db.userContexts.get(USER_CONTEXT_ID);
+  let nextUserContext: UserContext;
   if (!userContext) {
-    await db.userContexts.put({
+    nextUserContext = {
       ...DEFAULT_USER_CONTEXT,
       rules: DEFAULT_USER_CONTEXT.rules.map((rule) => ({
         ...rule,
@@ -237,7 +239,7 @@ export async function bootstrapDatabase(): Promise<void> {
         updatedAt: now,
       })),
       updatedAt: now,
-    });
+    };
   } else {
     const markdown = mergeRequiredUserContextPreferences(userContext.markdown);
     const rules = userContext.rules.map((rule) =>
@@ -250,13 +252,36 @@ export async function bootstrapDatabase(): Promise<void> {
         : rule,
     );
     const rulesChanged = rules.some((rule, index) => rule !== userContext.rules[index]);
-    if (markdown !== userContext.markdown || rulesChanged) {
-      await db.userContexts.put({
+    nextUserContext = markdown !== userContext.markdown || rulesChanged
+      ? {
         ...userContext,
         markdown,
         rules,
         updatedAt: now,
-      });
-    }
+      }
+      : userContext;
+  }
+
+  const availableTaskTypes = await db.taskTypes.limit(200).toArray();
+  const availableProjects = await db.projects.limit(1_000).toArray();
+  const reconciledDefaults = reconcileDefaultUserContextReferences(
+    availableProjects,
+    availableTaskTypes,
+    [nextUserContext],
+    now,
+  );
+  const availableTaskTypeIds = new Set(availableTaskTypes.map((type) => type.id));
+  const availableProjectIds = new Set(availableProjects.map((project) => project.id));
+  const restoredTaskTypes = reconciledDefaults.taskTypes.filter((type) => !availableTaskTypeIds.has(type.id));
+  const restoredProjects = reconciledDefaults.projects.filter((project) => !availableProjectIds.has(project.id));
+  if (restoredTaskTypes.length > 0) {
+    await db.taskTypes.bulkPut(restoredTaskTypes);
+  }
+  if (restoredProjects.length > 0) {
+    await db.projects.bulkPut(restoredProjects);
+  }
+  const reconciledUserContext = reconciledDefaults.userContexts[0] ?? nextUserContext;
+  if (!userContext || reconciledUserContext !== userContext) {
+    await db.userContexts.put(reconciledUserContext);
   }
 }

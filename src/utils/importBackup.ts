@@ -24,6 +24,7 @@ import type {
   UserContextRule,
 } from "../models";
 import { isValidMemoStorageKey } from "./memos";
+import { reconcileDefaultUserContextReferences } from "./defaultReferenceRepair";
 
 export const BACKUP_VERSION = 5;
 export const MAX_IMPORT_FILE_BYTES = 5_000_000;
@@ -295,20 +296,31 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
   }
   const root = record(parsed, "root");
   if (root.version !== 4 && root.version !== BACKUP_VERSION) fail(`지원하는 백업 버전은 4와 ${BACKUP_VERSION}입니다.`);
+  const exportedAt = iso(root.exportedAt, "exportedAt")!;
 
-  const projects = uniqueIds(array(root.projects, "projects").map(parseProject), "projects");
-  const taskTypes = uniqueIds(array(root.taskTypes, "taskTypes").map(parseTaskType), "taskTypes");
+  const parsedProjects = uniqueIds(array(root.projects, "projects").map(parseProject), "projects");
+  const parsedTaskTypes = uniqueIds(array(root.taskTypes, "taskTypes").map(parseTaskType), "taskTypes");
   const tasks = uniqueIds(array(root.tasks, "tasks").map(parseTask), "tasks");
   const memos = uniqueIds(array(root.memos, "memos").map(parseMemo), "memos");
   const settingsRaw = array(root.settings, "settings");
   const settings = settingsRaw.length === 0 ? [] : [parseSetting(settingsRaw[0])];
   const contextsRaw = array(root.userContexts ?? [], "userContexts");
-  const userContexts = contextsRaw.length === 0 ? [] : [parseUserContext(contextsRaw[0])];
+  const parsedUserContexts = contextsRaw.length === 0 ? [] : [parseUserContext(contextsRaw[0])];
   const notes = uniqueIds(array(root.notes ?? [], "notes").map(parseNote), "notes");
   const noteVersions = uniqueIds(array(root.noteVersions ?? [], "noteVersions").map(parseNoteVersion), "noteVersions");
   const noteTaskLinks = uniqueIds(array(root.noteTaskLinks ?? [], "noteTaskLinks").map(parseNoteTaskLink), "noteTaskLinks");
   const projectSubcategories = uniqueIds(array(root.projectSubcategories ?? [], "projectSubcategories").map(parseSubcategory), "projectSubcategories");
   const archiveInsightCaches = uniqueIds(array(root.archiveInsightCaches ?? [], "archiveInsightCaches").map(parseCache), "archiveInsightCaches");
+
+  const reconciledDefaults = reconcileDefaultUserContextReferences(
+    parsedProjects,
+    parsedTaskTypes,
+    parsedUserContexts,
+    exportedAt,
+  );
+  const { projects, taskTypes, userContexts } = reconciledDefaults;
+  if (projects.length > LIMITS.projects) fail("projects 항목 수가 허용 한도를 초과했습니다.");
+  if (taskTypes.length > LIMITS.taskTypes) fail("taskTypes 항목 수가 허용 한도를 초과했습니다.");
 
   const projectIds = new Set(projects.map((item) => item.id));
   const typeIds = new Set(taskTypes.map((item) => item.id));
@@ -348,7 +360,7 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
   return {
     tasks, projects, taskTypes, memos, settings, userContexts, notes, noteVersions, noteTaskLinks,
     projectSubcategories, archiveInsightCaches, version: BACKUP_VERSION,
-    exportedAt: iso(root.exportedAt, "exportedAt") ?? new Date().toISOString(),
+    exportedAt,
   };
 }
 

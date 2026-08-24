@@ -27,6 +27,7 @@
   --note-heading-sky-blue: #56b4e9;
   --note-heading-vermilion: #d55e00;
   --note-heading-bluish-green: #009e73;
+  --note-bold: #a33a3a;
   --tint-peach: #ffe7d6;
   --tint-rose: #ffe1ea;
   --tint-mint: #dcf7e8;
@@ -1232,7 +1233,7 @@ textarea:focus-visible,
 }
 
 .notes-workspace .markdown-renderer :is(h1, h2, h3, h4, h5, h6) :is(strong, b) {
-  color: inherit;
+  color: var(--note-bold);
 }
 
 .markdown-renderer p,
@@ -1260,6 +1261,11 @@ textarea:focus-visible,
 .markdown-renderer b {
   font-weight: 700;
   color: var(--link-blue);
+}
+
+.notes-workspace .markdown-renderer strong,
+.notes-workspace .markdown-renderer b {
+  color: var(--note-bold);
 }
 
 .markdown-renderer del {
@@ -7907,7 +7913,7 @@ textarea:focus-visible,
 .live-markdown-canvas .cm-live-heading-1 {
   margin-block: 14px 8px;
   color: var(--note-heading-black);
-  font-size: 2em;
+  font-size: 1.6em;
   line-height: 1.28;
 }
 
@@ -7947,7 +7953,7 @@ textarea:focus-visible,
 }
 
 .live-markdown-canvas .cm-live-strong {
-  color: var(--ink);
+  color: var(--note-bold);
   font-weight: 750;
 }
 
@@ -8295,7 +8301,7 @@ textarea:focus-visible,
 /* Keep bold text visually distinct in the live note canvas and AI/read previews. */
 .note-mdx-content strong,
 .note-mdx-content b {
-  color: var(--link-blue);
+  color: var(--note-bold);
   font-weight: 700;
 }
 
@@ -8313,7 +8319,7 @@ textarea:focus-visible,
 .note-mdx-content h1 {
   margin: 1em 0 0.5em;
   color: var(--note-heading-black);
-  font-size: 2em;
+  font-size: 1.6em;
 }
 
 .note-mdx-content h2 {
@@ -8343,7 +8349,7 @@ textarea:focus-visible,
 }
 
 .note-mdx-content :is(h1, h2, h3, h4, h5, h6) :is(strong, b) {
-  color: inherit;
+  color: var(--note-bold);
 }
 
 .note-mdx-content ul,
