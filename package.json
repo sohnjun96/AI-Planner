@@ -12,6 +12,7 @@
     "build:internal": "npm run typecheck && node scripts/build-extension.mjs --profile internal",
     "build:external": "npm run typecheck && node scripts/build-extension.mjs --profile external",
     "build:single-html": "npm run typecheck && node scripts/build-single-html.mjs",
+    "verify:single-html": "node scripts/build-single-html.mjs --verify-only",
     "build:extension": "npm run build",
     "build:vite": "vite build",
     "lint": "eslint .",

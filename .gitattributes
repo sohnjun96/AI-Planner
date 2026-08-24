@@ -1,0 +1,4 @@
+# Preserve generated distribution bytes; the standalone HTML also contains CSP hashes.
+/dist/** -text
+/dist-external/** -text
+/dist-web/planai.html -text

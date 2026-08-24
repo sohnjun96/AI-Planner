@@ -207,15 +207,6 @@ function formatTokens(tokens: number): string {
   return `${(tokens / 1_000_000).toFixed(2)}M`;
 }
 
-async function readManifestVersion(signal: AbortSignal): Promise<string> {
-  const response = await fetch("./manifest.json", { cache: "no-store", signal });
-  if (!response.ok) {
-    return "";
-  }
-  const manifest = (await response.json()) as { version?: unknown };
-  return typeof manifest.version === "string" ? manifest.version.trim() : "";
-}
-
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -246,7 +237,7 @@ export function SettingsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [appVersion, setAppVersion] = useState("");
+  const appVersion = __PLANAI_APP_VERSION__.trim();
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingNotes, setIsExportingNotes] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport>();
@@ -352,14 +343,6 @@ export function SettingsPage() {
   useEffect(() => {
     setActiveSection(resolveSettingsSection(searchParams.get("section")));
   }, [searchParams]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void readManifestVersion(controller.signal)
-      .then(setAppVersion)
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     if (activeSection !== "ai") {

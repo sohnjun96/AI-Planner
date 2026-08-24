@@ -10,6 +10,7 @@ const rootDir = path.resolve(path.dirname(__filename), "..");
 const outputDir = path.join(rootDir, "dist-web");
 const outputPath = path.join(outputDir, "planai.html");
 const MAX_SINGLE_HTML_BYTES = 5 * 1024 * 1024;
+const VERIFY_ONLY_ARGUMENT = "--verify-only";
 
 function sha256Csp(value) {
   return `'sha256-${createHash("sha256").update(value, "utf8").digest("base64")}'`;
@@ -29,6 +30,10 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function normalizeInlineText(value) {
+  return value.replace(/\r\n?/g, "\n");
+}
+
 function dataUrl(mimeType, contents) {
   return `data:${mimeType};base64,${Buffer.from(contents).toString("base64")}`;
 }
@@ -44,13 +49,47 @@ function assertSingleFileHtml(html, profile) {
   if (/<(?:script|link)\b[^>]+(?:src|href)\s*=\s*["'](?!data:)/i.test(html)) {
     throw new Error("단일 HTML에 외부 JavaScript, CSS 또는 아이콘 참조가 남아 있습니다.");
   }
-  if (!/<script type="module">[\s\S]+<\/script>\s*<\/body>/i.test(html)) {
+  const scriptMatch = html.match(/<script type="module">([\s\S]+)<\/script>\s*<\/body>/i);
+  if (!scriptMatch) {
     throw new Error("인라인 애플리케이션 스크립트를 찾지 못했습니다.");
   }
+  const styleMatch = html.match(/<style>([\s\S]+)<\/style>/i);
+  if (!styleMatch) {
+    throw new Error("인라인 애플리케이션 스타일을 찾지 못했습니다.");
+  }
+
+  // HTML 파서는 CRLF를 LF로 정규화한 뒤 CSP 해시를 비교한다. 실제 브라우저가
+  // 검사하는 내용과 같은 값을 다시 계산해, 생성 후 문자열 치환이나 손상으로
+  // 애플리케이션 전체가 차단되는 배포 파일을 즉시 거부한다.
+  const scriptDirective = escapeHtml(`script-src ${sha256Csp(normalizeInlineText(scriptMatch[1]))}`);
+  const styleDirective = escapeHtml(`style-src ${sha256Csp(normalizeInlineText(styleMatch[1]))}`);
+  if (!html.includes(scriptDirective)) {
+    throw new Error("단일 HTML의 JavaScript와 CSP 해시가 일치하지 않습니다. 생성 후 파일을 수정하지 마세요.");
+  }
+  if (!html.includes(styleDirective)) {
+    throw new Error("단일 HTML의 CSS와 CSP 해시가 일치하지 않습니다. 생성 후 파일을 수정하지 마세요.");
+  }
+}
+
+function readRunMode() {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return "build";
+  if (args.length === 1 && args[0] === VERIFY_ONLY_ARGUMENT) return "verify";
+  throw new Error(`지원하지 않는 인자입니다. 검증만 하려면 ${VERIFY_ONLY_ARGUMENT}를 사용하세요.`);
+}
+
+async function verifyExistingBuild(profile) {
+  const html = await readFile(outputPath, "utf8");
+  assertSingleFileHtml(html, profile);
+  console.info(`단일 HTML 무결성 검증 완료: ${outputPath} (${Buffer.byteLength(html, "utf8")} bytes)`);
 }
 
 async function runBuild() {
   const profile = loadBuildProfile(rootDir, "internal");
+  if (readRunMode() === "verify") {
+    await verifyExistingBuild(profile);
+    return;
+  }
   const iconSvg = await readFile(path.join(rootDir, "icon.svg"), "utf8");
   const iconUrl = dataUrl("image/svg+xml", iconSvg);
   const result = await build({
@@ -84,11 +123,12 @@ async function runBuild() {
   if (!javascript || !css) throw new Error("인라인으로 변환할 JavaScript 또는 CSS 출력을 찾지 못했습니다.");
   if (/<\/style/i.test(css)) throw new Error("CSS에 안전하게 인라인할 수 없는 종료 태그가 포함되어 있습니다.");
 
-  const safeJavascript = escapeInlineScript(javascript);
+  const safeJavascript = escapeInlineScript(normalizeInlineText(javascript));
+  const safeCss = normalizeInlineText(css);
   const csp = [
     "default-src 'none'",
     `script-src ${sha256Csp(safeJavascript)}`,
-    `style-src ${sha256Csp(css)} 'unsafe-inline'`,
+    `style-src ${sha256Csp(safeCss)} 'unsafe-inline'`,
     `connect-src 'self' ${profile.origin}`,
     "img-src 'self' data: blob:",
     "object-src 'none'",
@@ -105,7 +145,7 @@ async function runBuild() {
     <meta name="referrer" content="no-referrer" />
     <link rel="icon" type="image/svg+xml" href="${iconUrl}" />
     <title>플래나이(PLANAI)</title>
-    <style>${css}</style>
+    <style>${safeCss}</style>
   </head>
   <body>
     <div id="root"></div>
@@ -117,7 +157,9 @@ async function runBuild() {
   assertSingleFileHtml(html, profile);
   await mkdir(outputDir, { recursive: true });
   await writeFile(outputPath, html, "utf8");
-  console.info(`단일 HTML 빌드 완료: ${outputPath} (${Buffer.byteLength(html, "utf8")} bytes)`);
+  const persistedHtml = await readFile(outputPath, "utf8");
+  assertSingleFileHtml(persistedHtml, profile);
+  console.info(`단일 HTML 빌드 완료: ${outputPath} (${Buffer.byteLength(persistedHtml, "utf8")} bytes)`);
 }
 
 runBuild().catch((error) => {

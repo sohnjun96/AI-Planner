@@ -1,6 +1,7 @@
 export interface BuildProfile {
   readonly id: "internal" | "external";
   readonly label: string;
+  readonly appVersion: string;
   readonly chatEndpoint: string;
   readonly modelsEndpoint: string;
   readonly modelsEndpoints: readonly string[];

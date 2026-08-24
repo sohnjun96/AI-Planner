@@ -3,6 +3,21 @@ import path from "node:path";
 
 export const BUILD_PROFILE_IDS = Object.freeze(["internal", "external"]);
 
+function loadAppVersion(rootDir) {
+  const manifestPath = path.join(rootDir, "public", "manifest.json");
+  const packagePath = path.join(rootDir, "package.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, ""));
+  const packageMetadata = JSON.parse(readFileSync(packagePath, "utf8").replace(/^\uFEFF/, ""));
+  const appVersion = typeof manifest.version === "string" ? manifest.version.trim() : "";
+  if (!/^\d+(?:\.\d+){2,3}$/.test(appVersion)) {
+    throw new Error("애플리케이션 버전 형식이 올바르지 않습니다.");
+  }
+  if (packageMetadata.version !== appVersion) {
+    throw new Error("package.json과 확장 매니페스트의 버전이 일치하지 않습니다.");
+  }
+  return appVersion;
+}
+
 function validateEndpoint(value, expectedPathSuffix, label) {
   if (typeof value !== "string") throw new Error(`${label} Endpoint가 문자열이 아닙니다.`);
   let parsed;
@@ -62,6 +77,7 @@ export function loadBuildProfile(rootDir, profileId) {
   return Object.freeze({
     id: profileId,
     label,
+    appVersion: loadAppVersion(rootDir),
     chatEndpoint,
     modelsEndpoint,
     modelsEndpoints: Object.freeze(modelsEndpoints),
@@ -75,6 +91,7 @@ export function createBuildDefines(profile) {
   return {
     __PLANAI_BUILD_PROFILE_ID__: JSON.stringify(profile.id),
     __PLANAI_BUILD_PROFILE_LABEL__: JSON.stringify(profile.label),
+    __PLANAI_APP_VERSION__: JSON.stringify(profile.appVersion),
     __PLANAI_LLM_CHAT_ENDPOINT__: JSON.stringify(profile.chatEndpoint),
     __PLANAI_LLM_MODELS_ENDPOINT__: JSON.stringify(profile.modelsEndpoint),
     __PLANAI_LLM_MODELS_ENDPOINTS__: JSON.stringify(profile.modelsEndpoints),
