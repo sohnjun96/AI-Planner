@@ -11,6 +11,13 @@ export interface BuildProfile {
 }
 
 export const BUILD_PROFILE_IDS: readonly ["internal", "external"];
+export const DEFAULT_LLM_MODEL_BY_PROFILE: Readonly<{
+  internal: string;
+  external: string;
+}>;
 export function loadBuildProfile(rootDir: string, profileId: string): BuildProfile;
-export function createBuildDefines(profile: BuildProfile): Record<string, string>;
+export function createBuildDefines(
+  profile: BuildProfile,
+  options?: { readonly defaultLlmModel?: string },
+): Record<string, string>;
 export function createExtensionCsp(origin: string): string;

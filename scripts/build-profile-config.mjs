@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 export const BUILD_PROFILE_IDS = Object.freeze(["internal", "external"]);
+export const DEFAULT_LLM_MODEL_BY_PROFILE = Object.freeze({
+  internal: "gemma4-26b-moe",
+  external: "gpt-4o-mini",
+});
 
 function loadAppVersion(rootDir) {
   const manifestPath = path.join(rootDir, "public", "manifest.json");
@@ -87,7 +91,17 @@ export function loadBuildProfile(rootDir, profileId) {
   });
 }
 
-export function createBuildDefines(profile) {
+export function createBuildDefines(profile, options = {}) {
+  const defaultLlmModel = options.defaultLlmModel ?? DEFAULT_LLM_MODEL_BY_PROFILE[profile.id];
+  if (
+    typeof defaultLlmModel !== "string"
+    || defaultLlmModel.length < 1
+    || defaultLlmModel.length > 200
+    || !/^[A-Za-z0-9._:/-]+$/.test(defaultLlmModel)
+  ) {
+    throw new Error("기본 LLM 모델 ID 형식이 올바르지 않습니다.");
+  }
+
   return {
     __PLANAI_BUILD_PROFILE_ID__: JSON.stringify(profile.id),
     __PLANAI_BUILD_PROFILE_LABEL__: JSON.stringify(profile.label),
@@ -95,6 +109,7 @@ export function createBuildDefines(profile) {
     __PLANAI_LLM_CHAT_ENDPOINT__: JSON.stringify(profile.chatEndpoint),
     __PLANAI_LLM_MODELS_ENDPOINT__: JSON.stringify(profile.modelsEndpoint),
     __PLANAI_LLM_MODELS_ENDPOINTS__: JSON.stringify(profile.modelsEndpoints),
+    __PLANAI_LLM_DEFAULT_MODEL__: JSON.stringify(defaultLlmModel),
     __PLANAI_APP_ICON_URL__: JSON.stringify("./icon.svg"),
   };
 }

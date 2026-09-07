@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { analyzeLunchMateAliases } from "../src/agent/lunchMateAgent";
 import { listLlmModels, parseLlmModelList, requestLlmResponse } from "../src/agent/llmClient";
-import { LLM_REQUEST_TIMEOUT_MS } from "../src/constants";
+import { LLM_DEFAULT_MODEL, LLM_REQUEST_TIMEOUT_MS } from "../src/constants";
 
 Object.defineProperty(globalThis, "window", {
   configurable: true,
@@ -9,6 +9,8 @@ Object.defineProperty(globalThis, "window", {
 });
 
 const INTERNAL_CHAT_ENDPOINT = "https://llm.moip.go.kr/api/chat/completions";
+
+assert.equal(LLM_DEFAULT_MODEL, "gemma4-26b-moe");
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {

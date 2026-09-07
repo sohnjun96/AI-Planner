@@ -7,7 +7,8 @@ import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 import { formatDateTime, getDateKey, toIsoNow } from "../utils/date";
-import { isTaskCanceled, isTaskDone } from "../utils/taskStatus";
+import { isTaskDisplayedOnDate, isTaskOverdue } from "../utils/taskTiming";
+import { isTaskCanceled } from "../utils/taskStatus";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ModalBackdrop } from "./ModalBackdrop";
 
@@ -62,19 +63,13 @@ export function DailyBriefing() {
     });
 
     const todayTasksRaw = tasks
-      .filter((task) => getDateKey(task.startAt) === todayKey && !isTaskCanceled(task.status))
+      .filter((task) => isTaskDisplayedOnDate(task, todayKey) && !isTaskCanceled(task.status))
       .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
       .slice(0, 20);
     const todayTasks = todayTasksRaw.map(toBriefingTask);
 
     const overdueTasks = tasks
-      .filter(
-        (task) =>
-          new Date(task.startAt).getTime() < now &&
-          getDateKey(task.startAt) !== todayKey &&
-          !isTaskDone(task.status) &&
-          !isTaskCanceled(task.status),
-      )
+      .filter((task) => isTaskOverdue(task, now))
       .sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime())
       .slice(0, 8)
       .map(toBriefingTask);

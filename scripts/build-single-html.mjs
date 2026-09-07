@@ -3,7 +3,11 @@ import { build } from "esbuild";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createBuildDefines, loadBuildProfile } from "./build-profile-config.mjs";
+import {
+  createBuildDefines,
+  DEFAULT_LLM_MODEL_BY_PROFILE,
+  loadBuildProfile,
+} from "./build-profile-config.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const rootDir = path.resolve(path.dirname(__filename), "..");
@@ -11,6 +15,7 @@ const outputDir = path.join(rootDir, "dist-web");
 const outputPath = path.join(outputDir, "planai.html");
 const MAX_SINGLE_HTML_BYTES = 5 * 1024 * 1024;
 const VERIFY_ONLY_ARGUMENT = "--verify-only";
+const SINGLE_HTML_DEFAULT_LLM_MODEL = DEFAULT_LLM_MODEL_BY_PROFILE.internal;
 
 function sha256Csp(value) {
   return `'sha256-${createHash("sha256").update(value, "utf8").digest("base64")}'`;
@@ -45,6 +50,9 @@ function assertSingleFileHtml(html, profile) {
   }
   if (!html.includes(profile.chatEndpoint) || profile.modelsEndpoints.some((endpoint) => !html.includes(endpoint))) {
     throw new Error("단일 HTML에 내부망 AI Endpoint가 정확히 반영되지 않았습니다.");
+  }
+  if (!html.includes(SINGLE_HTML_DEFAULT_LLM_MODEL)) {
+    throw new Error("단일 HTML에 기본 LLM 모델이 정확히 반영되지 않았습니다.");
   }
   if (/<(?:script|link)\b[^>]+(?:src|href)\s*=\s*["'](?!data:)/i.test(html)) {
     throw new Error("단일 HTML에 외부 JavaScript, CSS 또는 아이콘 참조가 남아 있습니다.");
@@ -111,7 +119,7 @@ async function runBuild() {
     conditions: ["browser", "production"],
     define: {
       "process.env.NODE_ENV": '"production"',
-      ...createBuildDefines(profile),
+      ...createBuildDefines(profile, { defaultLlmModel: SINGLE_HTML_DEFAULT_LLM_MODEL }),
       __PLANAI_APP_ICON_URL__: JSON.stringify(iconUrl),
     },
     treeShaking: true,

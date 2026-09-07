@@ -7,5 +7,6 @@ declare global {
   const __PLANAI_LLM_CHAT_ENDPOINT__: string;
   const __PLANAI_LLM_MODELS_ENDPOINT__: string;
   const __PLANAI_LLM_MODELS_ENDPOINTS__: readonly string[];
+  const __PLANAI_LLM_DEFAULT_MODEL__: string;
   const __PLANAI_APP_ICON_URL__: string;
 }

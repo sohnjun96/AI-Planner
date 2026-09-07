@@ -35,7 +35,7 @@ import type { AppSetting, NoteAiAction } from "../models";
 import { formatDateTime } from "../utils/date";
 import { getAiUsageStats, getTodayUsage, resetAiUsage, type AiUsageStats } from "../utils/aiUsage";
 import { downloadJsonBackup } from "../utils/jsonBackup";
-import { MAX_IMPORT_FILE_BYTES } from "../utils/importBackup";
+import { decodeBackupFile } from "../utils/backupArchive";
 import { downloadNotesArchive } from "../utils/noteMarkdownExport";
 
 const API_KEY_AUTOSAVE_DELAY_MS = 700;
@@ -617,10 +617,7 @@ export function SettingsPage() {
     setMessage("");
 
     try {
-      if (file.size > MAX_IMPORT_FILE_BYTES) {
-        throw new Error("백업 파일은 5MB 이하여야 합니다.");
-      }
-      const content = await file.text();
+      const content = await decodeBackupFile(file);
       const preview = inspectImportData(content);
       setPendingImport({ fileName: file.name, raw: content, preview });
       setMessage("백업 파일을 확인했습니다. 가져올 항목과 교체 범위를 검토해 주세요.");
@@ -982,7 +979,7 @@ export function SettingsPage() {
           </div>
           <label className="btn btn-soft file-upload">
             백업 불러오기
-            <input type="file" accept=".json,application/json" onChange={handleImport} />
+            <input type="file" accept=".json,.zip,application/json,application/zip" onChange={handleImport} />
           </label>
           <button
             className="btn btn-soft"
@@ -1649,7 +1646,7 @@ export function SettingsPage() {
 
           <div className="settings-inline-note">
             <span>
-              자동 백업은 이 브라우저 안에 보관됩니다. 컴퓨터에 별도 파일을 남기려면 화면 위의 백업 내보내기를 사용하세요.
+              자동 백업은 이 브라우저의 별도 저장소에 최대 20개·합계 100MB까지 보관하며 오래된 항목부터 정리합니다. 외부 백업은 5MB 초과 시 ZIP으로 압축하며, 압축 전 50MB까지 지원합니다. 컴퓨터에 파일을 남기려면 화면 위의 백업 내보내기를 사용하세요.
             </span>
           </div>
 

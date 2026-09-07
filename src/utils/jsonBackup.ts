@@ -1,13 +1,26 @@
+import { encodeBackupFile } from "./backupArchive";
+import { DEFAULT_PROJECT_IDS } from "../constants";
+import type { Memo, Note, Project, ProjectSubcategory, Task, TaskType } from "../models";
+
 export interface JsonBackupReminderStatus {
   lastExportedAt?: string;
   nextReminderAt?: string;
+}
+
+export interface JsonBackupDataState {
+  tasks: readonly Task[];
+  projects: readonly Project[];
+  taskTypes: readonly TaskType[];
+  memos: readonly Memo[];
+  notes: readonly Note[];
+  projectSubcategories: readonly ProjectSubcategory[];
 }
 
 export const JSON_BACKUP_STATUS_CHANGED_EVENT = "ai-planner:json-backup-status-changed";
 export const JSON_BACKUP_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const JSON_BACKUP_STATUS_STORAGE_KEY = "schedule_json_export_reminder_v1";
-const MAX_JSON_BACKUP_BYTES = 5_000_000;
+
 
 interface ChromeStorageLocal {
   get: (keys: string[], callback: (items: Record<string, unknown>) => void) => void;
@@ -98,6 +111,19 @@ function addReminderInterval(value: Date): string {
   return new Date(value.getTime() + JSON_BACKUP_REMINDER_INTERVAL_MS).toISOString();
 }
 
+export function hasUserCreatedJsonBackupData(data: JsonBackupDataState): boolean {
+  return data.tasks.length > 0
+    || data.notes.length > 0
+    || data.memos.some((memo) => memo.content.trim().length > 0)
+    || data.projectSubcategories.length > 0
+    || data.projects.some((project) => !DEFAULT_PROJECT_IDS.includes(project.id))
+    || data.taskTypes.some((taskType) => !taskType.isDefault);
+}
+
+export function createInitialJsonBackupReminderStatus(now = new Date()): JsonBackupReminderStatus {
+  return { nextReminderAt: addReminderInterval(now) };
+}
+
 export function getJsonBackupReminderDueAt(status: JsonBackupReminderStatus): number | undefined {
   const explicitReminderAt = status.nextReminderAt ? new Date(status.nextReminderAt).getTime() : Number.NaN;
   if (Number.isFinite(explicitReminderAt)) return explicitReminderAt;
@@ -107,7 +133,21 @@ export function getJsonBackupReminderDueAt(status: JsonBackupReminderStatus): nu
 
 export function isJsonBackupReminderDue(status: JsonBackupReminderStatus, now = Date.now()): boolean {
   const dueAt = getJsonBackupReminderDueAt(status);
-  return dueAt === undefined || dueAt <= now;
+  return dueAt !== undefined && dueAt <= now;
+}
+
+export async function initializeJsonBackupReminder(): Promise<JsonBackupReminderStatus> {
+  const current = await readJsonBackupReminderStatus();
+  if (getJsonBackupReminderDueAt(current) !== undefined) {
+    return current;
+  }
+
+  const status = {
+    ...current,
+    ...createInitialJsonBackupReminderStatus(),
+  } satisfies JsonBackupReminderStatus;
+  await writeJsonBackupReminderStatus(status);
+  return status;
 }
 
 export async function snoozeJsonBackupReminder(): Promise<JsonBackupReminderStatus> {
@@ -130,16 +170,12 @@ function createBackupFileName(now: Date): string {
 }
 
 export async function downloadJsonBackup(content: string): Promise<JsonBackupReminderStatus> {
-  if (new TextEncoder().encode(content).byteLength > MAX_JSON_BACKUP_BYTES) {
-    throw new Error("백업 데이터가 안전한 처리 한도(5MB)를 초과했습니다.");
-  }
-
+  const { blob, extension } = await encodeBackupFile(content);
   const now = new Date();
-  const blob = new Blob([content], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = createBackupFileName(now);
+  anchor.download = createBackupFileName(now).replace(/\.json$/, `.${extension}`);
   anchor.hidden = true;
   document.body.appendChild(anchor);
 

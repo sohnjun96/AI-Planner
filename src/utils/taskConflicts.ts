@@ -24,7 +24,7 @@ function toTimedRange(startAt: string, endAt?: string): TimeRange | null {
 }
 
 function overlaps(a: TimeRange, b: TimeRange): boolean {
-  return a.start <= b.end && b.start <= a.end;
+  return a.start < a.end && b.start < b.end && a.start < b.end && b.start < a.end;
 }
 
 export function buildTaskConflictMap(tasks: Task[]): Record<string, string[]> {

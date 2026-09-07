@@ -1,3 +1,4 @@
+import { isTaskDisplayedOnDate } from "../utils/taskTiming";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import "./DashboardPage.weekNavigation.css";
 import { useNavigate, useSearchParams } from "../routing";
@@ -377,23 +378,6 @@ function getTaskDateKeys(task: Task): string[] {
     keys.push(getDateKey(date));
   }
   return keys;
-}
-
-function isTaskDisplayedOnDate(task: Task, dateKey: string): boolean {
-  const startKey = getDateKey(task.startAt);
-  if (dateKey < startKey) {
-    return false;
-  }
-  if (!task.endAt) {
-    return dateKey === startKey;
-  }
-
-  const startAt = new Date(task.startAt).getTime();
-  const endAt = new Date(task.endAt).getTime();
-  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt < startAt) {
-    return dateKey === startKey;
-  }
-  return dateKey <= getDateKey(task.endAt);
 }
 
 function getUniqueTasks(tasks: Task[]): Task[] {

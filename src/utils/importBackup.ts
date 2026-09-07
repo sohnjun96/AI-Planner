@@ -27,7 +27,8 @@ import { isValidMemoStorageKey } from "./memos";
 import { reconcileDefaultUserContextReferences } from "./defaultReferenceRepair";
 
 export const BACKUP_VERSION = 5;
-export const MAX_IMPORT_FILE_BYTES = 5_000_000;
+export { MAX_BACKUP_BYTES as MAX_IMPORT_FILE_BYTES } from "./backupArchive";
+import { MAX_BACKUP_BYTES as MAX_IMPORT_FILE_BYTES } from "./backupArchive";
 
 export interface ValidatedImportPayload {
   tasks: Task[];

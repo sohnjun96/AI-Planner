@@ -10,9 +10,11 @@ const result = await build({
   entryPoints: [
     "tests/autoBackupIntegrity.test.ts",
     "tests/importBackup.compat.test.ts",
+    "tests/jsonBackupReminder.test.ts",
     "tests/llmClient.compat.test.ts",
     "tests/markdownEditing.test.ts",
     "tests/noteMarkdownExport.test.ts",
+    "tests/featureGaps.test.ts",
   ],
   outdir: path.join(rootDir, ".test-output"),
   bundle: true,
@@ -27,7 +29,7 @@ const result = await build({
   },
 });
 
-if (result.outputFiles.length !== 5) throw new Error("테스트 번들을 생성하지 못했습니다.");
+if (result.outputFiles.length !== 7) throw new Error("테스트 번들을 생성하지 못했습니다.");
 for (const output of result.outputFiles) {
   await import(`data:text/javascript;base64,${Buffer.from(output.contents).toString("base64")}`);
 }

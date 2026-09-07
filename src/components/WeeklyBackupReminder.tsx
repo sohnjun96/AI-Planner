@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useJsonBackupStatus } from "../hooks/useJsonBackupStatus";
 import { formatDateTime } from "../utils/date";
@@ -6,20 +6,49 @@ import { showToast } from "../utils/toast";
 import {
   downloadJsonBackup,
   getJsonBackupReminderDueAt,
+  hasUserCreatedJsonBackupData,
+  initializeJsonBackupReminder,
   isJsonBackupReminderDue,
   snoozeJsonBackupReminder,
 } from "../utils/jsonBackup";
 
 export function WeeklyBackupReminder({ compact = false }: { compact?: boolean }) {
-  const { exportData, setting } = useAppData();
-  const { isReady, status } = useJsonBackupStatus();
+  const {
+    exportData,
+    isReady: isAppDataReady,
+    memos,
+    notes,
+    projects,
+    projectSubcategories,
+    setting,
+    tasks,
+    taskTypes,
+  } = useAppData();
+  const { isReady: isBackupStatusReady, status } = useJsonBackupStatus();
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [isExporting, setIsExporting] = useState(false);
   const [isSnoozing, setIsSnoozing] = useState(false);
   const [error, setError] = useState("");
+  const hasUserCreatedData = useMemo(
+    () => hasUserCreatedJsonBackupData({ tasks, projects, taskTypes, memos, notes, projectSubcategories }),
+    [memos, notes, projects, projectSubcategories, tasks, taskTypes],
+  );
 
   useEffect(() => {
-    if (!isReady) {
+    if (
+      !isAppDataReady
+      || !isBackupStatusReady
+      || !hasUserCreatedData
+      || getJsonBackupReminderDueAt(status) !== undefined
+    ) {
+      return;
+    }
+
+    void initializeJsonBackupReminder().catch(() => undefined);
+  }, [hasUserCreatedData, isAppDataReady, isBackupStatusReady, status]);
+
+  useEffect(() => {
+    if (!isBackupStatusReady) {
       return;
     }
 
@@ -43,9 +72,14 @@ export function WeeklyBackupReminder({ compact = false }: { compact?: boolean })
       window.removeEventListener("focus", refreshCurrentTime);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isReady, status]);
+  }, [isBackupStatusReady, status]);
 
-  if (!isReady || !isJsonBackupReminderDue(status, currentTime)) {
+  if (
+    !isAppDataReady
+    || !isBackupStatusReady
+    || !hasUserCreatedData
+    || !isJsonBackupReminderDue(status, currentTime)
+  ) {
     return null;
   }
 
@@ -63,7 +97,7 @@ export function WeeklyBackupReminder({ compact = false }: { compact?: boolean })
     try {
       const content = await exportData();
       await downloadJsonBackup(content);
-      showToast("JSON 백업 파일 다운로드를 시작했습니다.");
+      showToast("백업 파일 다운로드를 시작했습니다. 5MB 초과 시 ZIP으로 저장합니다.");
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : "JSON 백업을 내보내지 못했습니다.");
     } finally {

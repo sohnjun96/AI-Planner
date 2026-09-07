@@ -8,7 +8,6 @@ import {
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   DEFAULT_NOTE_AI_ACTIONS,
   DEFAULT_NOTIFY_BEFORE_MINUTES,
-  DEFAULT_PROJECT_IDS,
   DEFAULT_SETTING,
   DEFAULT_USER_CONTEXT,
   isValidLlmModelId,
@@ -42,13 +41,15 @@ import type {
   UserContextRule,
   UserContextSuggestion,
 } from "../models";
-import { areAutoBackupEntriesEqual } from "../utils/autoBackupIntegrity";
+import { readStoredAutoBackups, storeAutoBackup, removeStoredAutoBackup, type StoredAutoBackupEntry } from "../utils/autoBackupStore";
+import { deleteTasksWithLinks, restoreDeletedTasks, deleteEmptyProject, type DeletedTasks } from "../utils/taskLifecycle";
+import { selectUpcomingAlarmTasks } from "../utils/taskTiming";
+import { showToast } from "../utils/toast";
 import { toIsoNow } from "../utils/date";
 import {
   BACKUP_VERSION,
   MAX_IMPORT_FILE_BYTES,
   parseAndSanitizeImportPayload,
-  stripSecretsFromBackupRaw,
   type ValidatedImportPayload,
 } from "../utils/importBackup";
 import { getLunchAutoCompleteAt, isLunchTask } from "../utils/lunchTasks";
@@ -178,11 +179,8 @@ interface AppDataContextValue {
 
 const AppDataContext = createContext<AppDataContextValue | undefined>(undefined);
 
-const AUTO_BACKUPS_STORAGE_KEY = "schedule_auto_backups_v1";
 const ALARM_SYNC_STORAGE_KEY = "schedule_alarm_payload_v1";
 const LLM_CREDENTIAL_STORAGE_KEY = "planai_llm_credential_v1";
-const MAX_AUTO_BACKUPS = 20;
-const MAX_AUTO_BACKUP_TOTAL_BYTES = 8_000_000;
 const IMPORT_BATCH_SIZE = 500;
 const MAX_ALARM_SYNC_TASKS = 2_000;
 const AUTOSAVE_VERSION_COALESCE_MS = 5 * 60 * 1_000;
@@ -202,14 +200,8 @@ const LIVE_QUERY_LIMITS = {
 const MAX_UNDO_STACK = 80;
 const UPDATE_UNDO_MERGE_WINDOW_MS = 15_000;
 
-interface StoredAutoBackupEntry {
-  id: string;
-  createdAt: string;
-  reason: string;
-  raw: string;
-}
-
 type UndoEntry =
+  | ({ kind: "restore_deleted_tasks"; createdAt: string; description: string } & DeletedTasks)
   | {
       kind: "delete_tasks";
       createdAt: string;
@@ -719,99 +711,6 @@ async function deleteRememberedLlmApiKey(): Promise<void> {
   }
 }
 
-function sanitizeStoredAutoBackupEntry(value: unknown): StoredAutoBackupEntry | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const candidate = value as Record<string, unknown>;
-  if (
-    typeof candidate.id !== "string" ||
-    !/^[A-Za-z0-9._:-]{1,128}$/.test(candidate.id) ||
-    typeof candidate.createdAt !== "string" ||
-    !Number.isFinite(new Date(candidate.createdAt).getTime()) ||
-    typeof candidate.reason !== "string" ||
-    candidate.reason.length > 200 ||
-    typeof candidate.raw !== "string" ||
-    new TextEncoder().encode(candidate.raw).byteLength > MAX_IMPORT_FILE_BYTES
-  ) {
-    return undefined;
-  }
-
-  try {
-    const raw = JSON.stringify(parseAndSanitizeImportPayload(stripSecretsFromBackupRaw(candidate.raw)));
-    return { id: candidate.id, createdAt: candidate.createdAt, reason: candidate.reason, raw };
-  } catch {
-    return undefined;
-  }
-}
-
-function limitStoredAutoBackups(values: unknown[]): StoredAutoBackupEntry[] {
-  let totalBytes = 0;
-  const entries: StoredAutoBackupEntry[] = [];
-  for (const value of values.slice(0, MAX_AUTO_BACKUPS * 2)) {
-    const entry = sanitizeStoredAutoBackupEntry(value);
-    if (!entry) continue;
-    const entryBytes = new TextEncoder().encode(entry.raw).byteLength;
-    if (totalBytes + entryBytes > MAX_AUTO_BACKUP_TOTAL_BYTES) continue;
-    entries.push(entry);
-    totalBytes += entryBytes;
-    if (entries.length >= MAX_AUTO_BACKUPS) break;
-  }
-  return entries.sort(compareNewestFirst);
-}
-
-async function readStoredAutoBackups(): Promise<StoredAutoBackupEntry[]> {
-  const storage = getChromeStorageLocal();
-  if (storage) {
-    const items = await readChromeStorage(storage, AUTO_BACKUPS_STORAGE_KEY);
-    const rawEntries = Array.isArray(items[AUTO_BACKUPS_STORAGE_KEY]) ? items[AUTO_BACKUPS_STORAGE_KEY] : [];
-    return limitStoredAutoBackups(rawEntries);
-  }
-
-  if (typeof localStorage === "undefined") {
-    return [];
-  }
-
-  const raw = localStorage.getItem(AUTO_BACKUPS_STORAGE_KEY);
-  if (!raw) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return limitStoredAutoBackups(parsed);
-  } catch {
-    return [];
-  }
-}
-
-async function writeStoredAutoBackups(entries: StoredAutoBackupEntry[]): Promise<void> {
-  const safeEntries = limitStoredAutoBackups(entries);
-  const expected = JSON.stringify(safeEntries);
-  const storage = getChromeStorageLocal();
-  if (storage) {
-    await writeChromeStorage(storage, { [AUTO_BACKUPS_STORAGE_KEY]: safeEntries });
-    const stored = await readChromeStorage(storage, AUTO_BACKUPS_STORAGE_KEY);
-    const storedEntries = Array.isArray(stored[AUTO_BACKUPS_STORAGE_KEY])
-      ? limitStoredAutoBackups(stored[AUTO_BACKUPS_STORAGE_KEY])
-      : [];
-    if (!areAutoBackupEntriesEqual(safeEntries, storedEntries)) {
-      throw new Error("자동 백업 저장 검증에 실패했습니다.");
-    }
-    return;
-  }
-
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(AUTO_BACKUPS_STORAGE_KEY, expected);
-    if (localStorage.getItem(AUTO_BACKUPS_STORAGE_KEY) !== expected) {
-      throw new Error("자동 백업 저장 검증에 실패했습니다.");
-    }
-  }
-}
-
 async function writeAlarmSyncPayload(payload: {
   updatedAt: string;
   settings: {
@@ -843,7 +742,7 @@ function toBackupSummary(entry: StoredAutoBackupEntry): AutoBackupSummary {
     id: entry.id,
     createdAt: entry.createdAt,
     reason: entry.reason,
-    size: entry.raw.length,
+    size: new TextEncoder().encode(entry.raw).byteLength,
   };
 }
 
@@ -1133,18 +1032,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const removeTask = useCallback(
     async (id: string) => {
-      const existing = await db.tasks.get(id);
-      if (!existing) {
-        return;
-      }
-
-      await db.tasks.delete(id);
-
+      const snapshot = await deleteTasksWithLinks([id]);
+      if (!snapshot.tasks.length) return;
       pushUndo({
-        kind: "upsert_tasks",
-        createdAt: toIsoNow(),
-        description: `일정 삭제: ${existing.title}`,
-        tasks: [existing],
+        kind: "restore_deleted_tasks", createdAt: toIsoNow(),
+        description: `일정 삭제: ${snapshot.tasks[0].title}`, ...snapshot,
       });
     },
     [pushUndo],
@@ -1581,15 +1473,20 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (!target) {
       return;
     }
-    undoStackRef.current = undoStackRef.current.slice(0, -1);
-    setUndoStack(undoStackRef.current);
-
     if (target.kind === "delete_tasks") {
-      await db.tasks.bulkDelete(target.taskIds);
-      return;
+      await deleteTasksWithLinks(target.taskIds);
+    } else if (target.kind === "restore_deleted_tasks") {
+      await restoreDeletedTasks(target);
+    } else {
+      await db.transaction("rw", db.tasks, async () => {
+        for (const task of target.tasks) {
+          const current = await db.tasks.get(task.id);
+          if (current) await db.tasks.put({ ...task, linkedNoteIds: current.linkedNoteIds });
+        }
+      });
     }
-
-    await db.tasks.bulkPut(target.tasks);
+    undoStackRef.current = undoStackRef.current.filter((entry) => entry !== target);
+    setUndoStack(undoStackRef.current);
   }, []);
 
   const upsertProject = useCallback(async (input: ProjectInput) => {
@@ -1657,16 +1554,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const deleteProject = useCallback(async (id: string) => {
-    if (DEFAULT_PROJECT_IDS.includes(id)) {
-      throw new Error("기본 프로젝트는 삭제할 수 없습니다.");
-    }
-    const taskCount = await db.tasks.where("projectId").equals(id).count();
-    if (taskCount > 0) {
-      throw new Error("해당 프로젝트에 연결된 일정이 있어 삭제할 수 없습니다.");
-    }
-    await db.projects.delete(id);
-  }, []);
+  const deleteProject = useCallback(async (id: string) => deleteEmptyProject(id), []);
 
   const upsertTaskType = useCallback(async (input: TaskTypeInput) => {
     const now = toIsoNow();
@@ -1914,44 +1802,47 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const exportData = useCallback(async () => {
-    const counts = await Promise.all([
-      db.tasks.count(),
-      db.projects.count(),
-      db.taskTypes.count(),
-      db.memos.count(),
-      db.notes.count(),
-      db.noteVersions.count(),
-      db.noteTaskLinks.count(),
-      db.projectSubcategories.count(),
-      db.settings.count(),
-      db.userContexts.count(),
-      db.archiveInsightCaches.count(),
-    ]);
-    const limits = Object.values(LIVE_QUERY_LIMITS);
-    if (counts.some((count, index) => count > limits[index])) {
-      throw new Error("데이터 항목 수가 단일 백업의 안전 처리 한도를 초과했습니다. 데이터를 분할 보관해 주세요.");
-    }
-    const data = {
-      exportedAt: toIsoNow(),
-      version: BACKUP_VERSION,
-      tasks: await db.tasks.limit(LIVE_QUERY_LIMITS.tasks).toArray(),
-      projects: await db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(),
-      taskTypes: await db.taskTypes.limit(LIVE_QUERY_LIMITS.taskTypes).toArray(),
-      memos: await db.memos.limit(LIVE_QUERY_LIMITS.memos).toArray(),
-      settings: (await db.settings.limit(LIVE_QUERY_LIMITS.settings).toArray()).map(sanitizeSettingForStorage),
-      userContexts: await db.userContexts.limit(LIVE_QUERY_LIMITS.userContexts).toArray(),
-      notes: await db.notes.limit(LIVE_QUERY_LIMITS.notes).toArray(),
-      noteVersions: await db.noteVersions.limit(LIVE_QUERY_LIMITS.noteVersions).toArray(),
-      noteTaskLinks: await db.noteTaskLinks.limit(LIVE_QUERY_LIMITS.noteTaskLinks).toArray(),
-      projectSubcategories: await db.projectSubcategories.limit(LIVE_QUERY_LIMITS.projectSubcategories).toArray(),
-      archiveInsightCaches: await db.archiveInsightCaches.limit(LIVE_QUERY_LIMITS.archiveInsightCaches).toArray(),
-    };
-    const raw = JSON.stringify(data, null, 2);
-    if (new TextEncoder().encode(raw).byteLength > MAX_IMPORT_FILE_BYTES) {
-      throw new Error("백업 데이터가 안전한 처리 한도(5MB)를 초과했습니다. 데이터를 분할 보관해 주세요.");
-    }
-    return raw;
+    return db.transaction("r", db.tables, async () => {
+      const counts = await Promise.all([
+        db.tasks.count(),
+        db.projects.count(),
+        db.taskTypes.count(),
+        db.memos.count(),
+        db.notes.count(),
+        db.noteVersions.count(),
+        db.noteTaskLinks.count(),
+        db.projectSubcategories.count(),
+        db.settings.count(),
+        db.userContexts.count(),
+        db.archiveInsightCaches.count(),
+      ]);
+      const limits = Object.values(LIVE_QUERY_LIMITS);
+      if (counts.some((count, index) => count > limits[index])) {
+        throw new Error("데이터 항목 수가 백업 처리 한도를 초과했습니다. 노트 버전과 불필요한 기록을 정리한 뒤 다시 시도해 주세요.");
+      }
+      const data = {
+        exportedAt: toIsoNow(),
+        version: BACKUP_VERSION,
+        tasks: await db.tasks.limit(LIVE_QUERY_LIMITS.tasks).toArray(),
+        projects: await db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(),
+        taskTypes: await db.taskTypes.limit(LIVE_QUERY_LIMITS.taskTypes).toArray(),
+        memos: await db.memos.limit(LIVE_QUERY_LIMITS.memos).toArray(),
+        settings: (await db.settings.limit(LIVE_QUERY_LIMITS.settings).toArray()).map(sanitizeSettingForStorage),
+        userContexts: await db.userContexts.limit(LIVE_QUERY_LIMITS.userContexts).toArray(),
+        notes: await db.notes.limit(LIVE_QUERY_LIMITS.notes).toArray(),
+        noteVersions: await db.noteVersions.limit(LIVE_QUERY_LIMITS.noteVersions).toArray(),
+        noteTaskLinks: await db.noteTaskLinks.limit(LIVE_QUERY_LIMITS.noteTaskLinks).toArray(),
+        projectSubcategories: await db.projectSubcategories.limit(LIVE_QUERY_LIMITS.projectSubcategories).toArray(),
+        archiveInsightCaches: await db.archiveInsightCaches.limit(LIVE_QUERY_LIMITS.archiveInsightCaches).toArray(),
+      };
+      const raw = JSON.stringify(data);
+      if (new TextEncoder().encode(raw).byteLength > MAX_IMPORT_FILE_BYTES) {
+        throw new Error("백업 데이터가 압축 전 50MB를 초과했습니다. 불필요한 기록을 정리한 뒤 다시 시도해 주세요.");
+      }
+      return raw;
+    });
   }, []);
+
 
   const inspectImportData = useCallback((raw: string) => {
     return toImportDataPreview(parseImportPayload(raw));
@@ -2009,8 +1900,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAutoBackups = useCallback(async () => {
     const entries = await readStoredAutoBackups();
-    // 기존 백업도 다시 써서 과거 버전의 키/임의 엔드포인트를 즉시 제거한다.
-    await writeStoredAutoBackups(entries);
     setAutoBackups(entries.sort(compareNewestFirst).map(toBackupSummary));
   }, []);
 
@@ -2024,9 +1913,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         raw,
       };
 
-      const existing = await readStoredAutoBackups();
-      const next = limitStoredAutoBackups([entry, ...existing]);
-      await writeStoredAutoBackups(next);
+      await storeAutoBackup(entry);
       await refreshAutoBackups();
     },
     [exportData, refreshAutoBackups],
@@ -2049,9 +1936,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteAutoBackup = useCallback(
     async (id: string) => {
-      const entries = await readStoredAutoBackups();
-      const next = entries.filter((item) => item.id !== id);
-      await writeStoredAutoBackups(next);
+      await removeStoredAutoBackup(id);
       await refreshAutoBackups();
     },
     [refreshAutoBackups],
@@ -2070,7 +1955,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
     const intervalMinutes = Math.max(15, Math.floor(setting.autoBackupIntervalMinutes ?? DEFAULT_AUTO_BACKUP_INTERVAL_MINUTES));
     const timerId = window.setInterval(() => {
-      void createAutoBackup("자동");
+      void createAutoBackup("자동").catch((error: unknown) => {
+        showToast(error instanceof Error ? `자동 백업 실패: ${error.message}` : "자동 백업에 실패했습니다. 외부 백업을 내보내 주세요.", { tone: "error", duration: 10_000 });
+      });
     }, intervalMinutes * 60_000);
 
     return () => {
@@ -2079,10 +1966,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [setting.autoBackupEnabled, setting.autoBackupIntervalMinutes, createAutoBackup]);
 
   useEffect(() => {
-    const futureTasks = tasks
-      .filter((task) => isTaskActive(task.status) && Number.isFinite(new Date(task.startAt).getTime()))
-      .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime())
-      .slice(0, MAX_ALARM_SYNC_TASKS);
+    const futureTasks = selectUpcomingAlarmTasks(
+      tasks, setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES, Date.now(), MAX_ALARM_SYNC_TASKS,
+    );
     const timerId = window.setTimeout(() => {
       void writeAlarmSyncPayload({
       updatedAt: toIsoNow(),
