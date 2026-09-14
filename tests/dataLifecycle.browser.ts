@@ -5,6 +5,9 @@ import type { Note, Project, Task, TaskType } from "../src/models";
 import { createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { AppDataProvider, useAppData } from "../src/context/AppDataContext";
+import { saveRoutine, actOnRoutine, routineTaskDraft, removeRoutine } from "../src/utils/routineStore";
+import { getRoutineCycle } from "../src/utils/routines";
+import { addDays, getDateKey } from "../src/utils/date";
 
 function check(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -101,6 +104,34 @@ export async function runTests() {
   check((await db.notes.get(noteId))?.linkedTaskIds.length === 0, "생성 실행 취소 연결 정리");
   const exported = await api.exportData();
   check(api.inspectImportData(exported).notes === 1, "실행 취소 후 백업 참조 무결성");
+  const today = getDateKey(new Date());
+  await saveRoutine({ title: "영수증 취합", content: "루틴 테스트", projectId, taskTypeId,
+    intervalMonths: 1, startMonth: today.slice(0, 7), dayOfMonth: Number(today.slice(-2)), time: "09:00", leadDays: 0,
+    mode: "schedule", isActive: true });
+  const routine = (await db.routines.toArray())[0];
+  check(await db.tasks.count() === 0, "루틴 등록만으로 일정이 생성되지 않음");
+  let cycle = getRoutineCycle(routine, []);
+  const concurrent = await Promise.allSettled([1, 2].map(() => actOnRoutine(routine, cycle.id, "created", routineTaskDraft(routine, cycle.dueDate))));
+  check(concurrent.filter((result) => result.status === "fulfilled").length === 1, "여러 탭에서 한 회차 중복 생성 방지");
+  check(await db.tasks.count() === 1 && await db.routineOccurrences.count() === 1, "일정과 회차 원자적 생성");
+  const routineBackup = await api.exportData();
+  check(api.inspectImportData(routineBackup).routines === 1, "백업에 루틴 포함");
+  await api.importData(exported);
+  check(await db.routines.count() === 0, "이전 백업 복원 시 루틴 교체");
+  await api.importData(routineBackup);
+  check(await db.routines.count() === 1 && await db.routineOccurrences.count() === 1, "루틴과 이력 복원");
+  check(!getRoutineCycle(routine, await db.routineOccurrences.toArray()).needsAttention, "복원 후 같은 회차 재제안 방지");
+  await db.routineOccurrences.clear();
+  cycle = getRoutineCycle(routine, []);
+  await actOnRoutine(routine, cycle.id, "snoozed", undefined, getDateKey(addDays(new Date(), 1)));
+  check(!getRoutineCycle(routine, await db.routineOccurrences.toArray()).needsAttention, "나중에 선택 저장");
+  await db.routineOccurrences.clear();
+  await actOnRoutine(routine, cycle.id, "skipped");
+  check(!getRoutineCycle(routine, await db.routineOccurrences.toArray()).needsAttention, "이번 회차 건너뛰기");
+  await saveRoutine({ ...routine, isActive: false }, routine);
+  await rejects(() => actOnRoutine(routine, cycle.id, "created", routineTaskDraft(routine, cycle.dueDate)), "변경되거나 중지된 루틴의 오래된 초안 거부");
+  await removeRoutine(routine.id);
+  check(await db.routineOccurrences.count() === 0 && await db.tasks.count() === 1, "루틴 삭제 시 생성 일정 유지");
   root.unmount();
   host.remove();
   return "Data lifecycle browser checks passed.";

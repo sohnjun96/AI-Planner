@@ -13,6 +13,8 @@ import {
   USER_CONTEXT_ID,
 } from "./constants";
 import type {
+  Routine,
+  RoutineOccurrence,
   AppSetting,
   ArchiveInsightCache,
   Memo,
@@ -29,6 +31,8 @@ import { toIsoNow } from "./utils/date";
 import { reconcileDefaultUserContextReferences } from "./utils/defaultReferenceRepair";
 
 class ScheduleDB extends Dexie {
+  routines!: Table<Routine, string>;
+  routineOccurrences!: Table<RoutineOccurrence, string>;
   tasks!: Table<Task, string>;
   projects!: Table<Project, string>;
   taskTypes!: Table<TaskType, string>;
@@ -94,6 +98,7 @@ class ScheduleDB extends Dexie {
       projectSubcategories: "id, projectId, order, updatedAt",
       archiveInsightCaches: "id, updatedAt",
     });
+    this.version(6).stores({ routines: "id, updatedAt", routineOccurrences: "id, routineId, taskId, updatedAt" });
   }
 }
 

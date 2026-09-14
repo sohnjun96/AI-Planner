@@ -1,3 +1,4 @@
+import { RoutinesPage } from "./pages/RoutinesPage";
 import { AppShell } from "./components/AppShell";
 import { AppDataProvider, useAppData } from "./context/AppDataContext";
 import { ArchivePage } from "./pages/ArchivePage";
@@ -10,7 +11,8 @@ import { RouterProvider, useLocation } from "./routing";
 function RoutedPages() {
   const { pathname } = useLocation();
   const page =
-    pathname === "/notes" ? <NotesPage />
+    pathname === "/routines" ? <RoutinesPage />
+      : pathname === "/notes" ? <NotesPage />
       : pathname === "/projects" ? <ProjectsPage />
         : pathname === "/archive" ? <ArchivePage />
           : pathname === "/settings" ? <SettingsPage />

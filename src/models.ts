@@ -1,6 +1,36 @@
 export type TaskStatus = "NOT_DONE" | "ON_HOLD" | "DONE" | "CANCELED";
 export type RecurrencePattern = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
 
+export interface Routine {
+  id: string;
+  title: string;
+  content: string;
+  projectId: string;
+  taskTypeId: string;
+  intervalMonths: number;
+  startMonth: string;
+  dayOfMonth: number;
+  time: string;
+  leadDays: number;
+  mode: "schedule" | "remind";
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RoutineInput = Omit<Routine, "id" | "createdAt" | "updatedAt">;
+
+export interface RoutineOccurrence {
+  id: string;
+  routineId: string;
+  period: string;
+  dueDate: string;
+  status: "snoozed" | "created" | "skipped" | "acknowledged";
+  snoozedUntil?: string;
+  taskId?: string;
+  updatedAt: string;
+}
+
 export interface Task {
   id: string;
   title: string;

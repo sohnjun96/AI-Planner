@@ -1,0 +1,61 @@
+import { chromium, expect } from "@playwright/test";
+import { pathToFileURL } from "node:url";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+
+const browser = await chromium.launch({ headless: true });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await page.route(/^https?:/, (route) => route.abort());
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${pathToFileURL(path.resolve("dist-web/planai.html")).href}#/routines`);
+  await expect(page.getByRole("heading", { name: "나의 루틴", exact: true })).toBeVisible();
+  await expect(page.getByText("매번 기억하지 않아도 괜찮아요.")).toBeVisible();
+  const today = new Date();
+  async function addRoutine(title, mode = "schedule") {
+    await page.getByRole("button", { name: "+ 루틴 추가", exact: true }).click();
+    await page.getByLabel("어떤 일을 챙길까요?").fill(title);
+    await page.getByLabel("예정일").selectOption(String(today.getDate()));
+    await page.getByLabel("며칠 전에 알려드릴까요?").selectOption("0");
+    await page.getByLabel("안내 방식").selectOption(mode);
+    await page.getByRole("button", { name: "루틴 등록", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  await addRoutine("영수증 취합");
+  await addRoutine("장비 점검", "remind");
+  await mkdir("artifacts/routines", { recursive: true });
+  await page.screenshot({ path: "artifacts/routines/desktop.png", fullPage: true });
+  const receipt = page.locator(".routine-card").filter({ has: page.getByRole("heading", { name: "영수증 취합", exact: true }) });
+  await receipt.getByRole("button", { name: "일정 만들기", exact: true }).click();
+  await expect(page.locator('input[name="title"]')).toHaveValue("영수증 취합");
+  await page.getByRole("button", { name: "루틴에서 일정 만들기 창 닫기" }).click();
+  await expect(receipt.getByText("확인 필요", { exact: true })).toBeVisible();
+  await receipt.getByRole("button", { name: "일정 만들기", exact: true }).click();
+  await page.getByRole("button", { name: "일정 추가", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await receipt.locator("summary").click();
+  await expect(receipt.getByRole("button", { name: "일정 보기" })).toBeVisible();
+  await expect(receipt.getByRole("button", { name: "일정 만들기", exact: true })).toHaveCount(0);
+  const equipment = page.locator(".routine-card").filter({ has: page.getByRole("heading", { name: "장비 점검", exact: true }) });
+  await equipment.getByRole("button", { name: "나중에", exact: true }).click();
+  await page.getByRole("button", { name: "3일 뒤", exact: true }).click();
+  await page.getByRole("button", { name: "이날 다시 알려주세요" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(equipment.getByRole("button", { name: "확인했어요" })).toHaveCount(0);
+  await equipment.getByRole("button", { name: "일시 중지", exact: true }).click();
+  await expect(equipment.getByRole("button", { name: "다시 시작" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "다시 시작" })).toBeVisible();
+  await addRoutine("정기 보고서");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "artifacts/routines/mobile.png", fullPage: true });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  if (overflow) throw new Error("Mobile horizontal overflow");
+  await page.getByRole("link", { name: "대시보드", exact: true }).click();
+  await expect(page.getByRole("region", { name: "확인할 나의 루틴" })).toBeVisible();
+  await page.getByRole("button", { name: "이번 회차 건너뛰기", exact: true }).click();
+  await expect(page.getByRole("region", { name: "확인할 나의 루틴" })).toHaveCount(0);
+  if (errors.length) throw new Error(errors.join("\n"));
+  console.log("Routine UI: registration, draft cancel/save, history, snooze, pause/reload, dashboard skip and mobile layout passed.");
+} finally { await browser.close(); }

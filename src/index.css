@@ -2495,9 +2495,30 @@ textarea:focus-visible,
   background: #fff5f6;
 }
 
-.reminder-action-hold {
+.reminder-action-postpone {
   color: #8a5a08;
   background: #fff8df;
+}
+
+.reminder-postpone-options {
+  grid-column: 1 / -1;
+  justify-self: end;
+  display: grid;
+  width: max(33.333%, 180px);
+  max-width: 100%;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #e7d8af;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 12px #1e293b14;
+}
+
+.reminder-postpone-options button {
+  padding: 8px 12px;
+  text-align: left;
+  color: #725014;
+  background: #fffaf0;
 }
 
 .reminder-review-primary-actions button:hover:not(:disabled) {
@@ -11951,7 +11972,7 @@ body:has(.modal-backdrop:not([hidden])) {
     bottom: calc(8px + env(safe-area-inset-bottom));
     z-index: 1200;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 2px;
     overflow: visible;
     padding: 6px;

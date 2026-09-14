@@ -2062,6 +2062,7 @@ export function SettingsPage() {
               아래 데이터로 현재 내용을 모두 교체합니다. 교체 직전에 현재 데이터를 자동 백업한 뒤 가져옵니다.
             </p>
             <div className="stats-grid" aria-label="가져올 데이터 건수">
+              <div className="stat-item"><span className="stat-label">나의 루틴 / 처리 이력</span><strong className="stat-value">{pendingImport.preview.routines} / {pendingImport.preview.routineOccurrences}건</strong></div>
               <div className="stat-item">
                 <span className="stat-label">일정</span>
                 <strong className="stat-value">{pendingImport.preview.tasks}건</strong>

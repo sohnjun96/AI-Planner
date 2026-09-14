@@ -18,6 +18,8 @@ interface TaskFormProps {
   taskTypes: TaskType[];
   allTasks?: Task[];
   initialTask?: Task;
+  initialInput?: TaskFormInput;
+  allowRecurrence?: boolean;
   defaultStartDate?: string;
   fixedProjectId?: string;
   timeFormat: "24h" | "12h";
@@ -229,6 +231,8 @@ export function TaskForm({
   taskTypes,
   allTasks = [],
   initialTask,
+  initialInput,
+  allowRecurrence = true,
   defaultStartDate,
   fixedProjectId,
   timeFormat,
@@ -244,7 +248,7 @@ export function TaskForm({
   const orderedProjects = useMemo(() => [...projects].sort(compareProjects), [projects]);
   const isEdit = Boolean(initialTask);
   const [form, setForm] = useState<FormState>(() => {
-    return initialTask ? buildStateFromTask(initialTask) : buildDefaultState(orderedProjects, taskTypes, defaultStartDate);
+    return initialTask ? buildStateFromTask(initialTask) : initialInput ? buildStateFromTask({ ...initialInput, id: "draft", createdAt: "", updatedAt: "" }) : buildDefaultState(orderedProjects, taskTypes, defaultStartDate);
   });
   const [fieldErrors, setFieldErrors] = useState<FormErrors>({});
   const [submitError, setSubmitError] = useState("");
@@ -755,7 +759,7 @@ export function TaskForm({
             </div>
           </div>
 
-          {!isEdit ? (
+          {!isEdit && allowRecurrence ? (
             <div className="form-grid two-col task-form-recurrence-grid">
               <label className="task-form-field">
                 반복

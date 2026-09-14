@@ -1,4 +1,5 @@
-﻿/* eslint-disable react-refresh/only-export-components */
+import { trimTaskInput } from "../utils/taskInput";
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
@@ -79,6 +80,8 @@ interface AutoBackupSummary {
 }
 
 export interface ImportDataPreview {
+  routines: number;
+  routineOccurrences: number;
   version?: number;
   exportedAt?: string;
   tasks: number;
@@ -196,6 +199,8 @@ const LIVE_QUERY_LIMITS = {
   settings: 1,
   userContexts: 1,
   archiveInsightCaches: 5_000,
+  routines: 500,
+  routineOccurrences: 20_000,
 } as const;
 const MAX_UNDO_STACK = 80;
 const UPDATE_UNDO_MERGE_WINDOW_MS = 15_000;
@@ -220,32 +225,6 @@ function getId(prefix: string): string {
     return `${prefix}-${crypto.randomUUID()}`;
   }
   return `${prefix}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
-function trimTaskInput(input: TaskFormInput): TaskFormInput {
-  const title = input.title.trim();
-  const content = input.content.trim();
-  if (!title || title.length > 500) throw new Error("일정 제목은 1~500자로 입력해 주세요.");
-  if (content.length > 100_000) throw new Error("일정 내용은 100,000자 이하여야 합니다.");
-  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(input.taskTypeId) || !/^[A-Za-z0-9._:-]{1,128}$/.test(input.projectId)) {
-    throw new Error("일정 분류 식별자가 올바르지 않습니다.");
-  }
-  if (!["NOT_DONE", "ON_HOLD", "DONE", "CANCELED"].includes(input.status)) {
-    throw new Error("일정 상태가 올바르지 않습니다.");
-  }
-  if (input.recurrencePattern && !["NONE", "DAILY", "WEEKLY", "MONTHLY"].includes(input.recurrencePattern)) {
-    throw new Error("반복 주기가 올바르지 않습니다.");
-  }
-  const startTime = new Date(input.startAt).getTime();
-  const endTime = input.endAt ? new Date(input.endAt).getTime() : undefined;
-  if (!Number.isFinite(startTime) || input.startAt.length > 40 || (endTime !== undefined && (!Number.isFinite(endTime) || endTime < startTime))) {
-    throw new Error("일정 시작·종료 시간이 올바르지 않습니다.");
-  }
-  return {
-    ...input,
-    title,
-    content,
-  };
 }
 
 function normalizeNoteInput(input: NoteFormInput): NoteFormInput {
@@ -343,6 +322,8 @@ function parseImportPayload(raw: string): ImportPayload {
 
 function toImportDataPreview(payload: ImportPayload): ImportDataPreview {
   return {
+    routines: payload.routines.length,
+    routineOccurrences: payload.routineOccurrences.length,
     version: typeof payload.version === "number" ? payload.version : undefined,
     exportedAt: typeof payload.exportedAt === "string" ? payload.exportedAt : undefined,
     tasks: payload.tasks.length,
@@ -1599,6 +1580,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (type.isDefault) {
       throw new Error("기본 종류는 삭제할 수 없습니다.");
     }
+    if (await db.routines.filter((routine) => routine.taskTypeId === id).count()) throw new Error("이 종류를 사용하는 루틴이 있습니다. 먼저 루틴의 종류를 변경해 주세요.");
     const taskCount = await db.tasks.where("taskTypeId").equals(id).count();
     if (taskCount > 0) {
       throw new Error("해당 종류에 연결된 일정이 있어 삭제할 수 없습니다.");
@@ -1815,6 +1797,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         db.settings.count(),
         db.userContexts.count(),
         db.archiveInsightCaches.count(),
+        db.routines.count(),
+        db.routineOccurrences.count(),
       ]);
       const limits = Object.values(LIVE_QUERY_LIMITS);
       if (counts.some((count, index) => count > limits[index])) {
@@ -1823,6 +1807,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const data = {
         exportedAt: toIsoNow(),
         version: BACKUP_VERSION,
+        routines: await db.routines.toArray(),
+        routineOccurrences: await db.routineOccurrences.toArray(),
         tasks: await db.tasks.limit(LIVE_QUERY_LIMITS.tasks).toArray(),
         projects: await db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(),
         taskTypes: await db.taskTypes.limit(LIVE_QUERY_LIMITS.taskTypes).toArray(),
@@ -1865,6 +1851,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         db.noteTaskLinks,
         db.projectSubcategories,
         db.archiveInsightCaches,
+        db.routines,
+        db.routineOccurrences,
       ],
       async () => {
         await db.tasks.clear();
@@ -1878,6 +1866,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         await db.noteTaskLinks.clear();
         await db.projectSubcategories.clear();
         await db.archiveInsightCaches.clear();
+        await db.routines.clear();
+        await db.routineOccurrences.clear();
 
         await addInChunks(parsed.projects, (chunk) => db.projects.bulkAdd(chunk));
         await addInChunks(parsed.taskTypes, (chunk) => db.taskTypes.bulkAdd(chunk));
@@ -1890,6 +1880,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         await addInChunks(parsed.noteTaskLinks, (chunk) => db.noteTaskLinks.bulkAdd(chunk));
         await addInChunks(parsed.projectSubcategories, (chunk) => db.projectSubcategories.bulkAdd(chunk));
         await addInChunks(parsed.archiveInsightCaches, (chunk) => db.archiveInsightCaches.bulkAdd(chunk));
+        await addInChunks(parsed.routines, (chunk) => db.routines.bulkAdd(chunk));
+        await addInChunks(parsed.routineOccurrences, (chunk) => db.routineOccurrences.bulkAdd(chunk));
       },
     );
 

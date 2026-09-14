@@ -1,4 +1,6 @@
+import { DashboardRoutines } from "../components/RoutineList";
 import { isTaskDisplayedOnDate } from "../utils/taskTiming";
+import { removeReminder } from "../utils/reminderQueue";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import "./DashboardPage.weekNavigation.css";
 import { useNavigate, useSearchParams } from "../routing";
@@ -22,6 +24,7 @@ import {
   addDays,
   combineDateTimeToIso,
   compareByStartAtAsc,
+  formatDateTime,
   getDateKey,
   isPastCompletedHidden,
   shiftIsoToDateKey,
@@ -572,10 +575,10 @@ export function DashboardPage() {
       }
 
       const task = tasks.find((item) => item.id === taskId);
-      if (!task) {
-        const nextParams = new URLSearchParams(searchParams);
-        nextParams.delete("taskId");
-        nextParams.delete("review");
+      if (!task || (searchParams.get("review") === "1" && (task.status === "DONE" || task.status === "CANCELED"))) {
+        const nextParams = removeReminder(searchParams, taskId);
+        setReminderReviewTaskId(null);
+        handledDeepLinkRef.current = "";
         setSearchParams(nextParams, { replace: true });
         return;
       }
@@ -782,9 +785,11 @@ export function DashboardPage() {
 
   function closeReminderReview() {
     setReminderReviewTaskId(null);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("taskId");
-    nextParams.delete("review");
+    handledDeepLinkRef.current = "";
+    // Read the current hash because another alarm may have updated it before
+    // React has rendered the new search params.
+    const currentParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+    const nextParams = removeReminder(currentParams, reminderReviewTaskId ?? "");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -807,6 +812,27 @@ export function DashboardPage() {
     await updateTask(reminderReviewTask.id, {
       ...toTaskInput(reminderReviewTask),
       status,
+    });
+    closeReminderReview();
+  }
+
+  async function postponeReminderTask(days: 1 | 3 | 7) {
+    if (!reminderReviewTask) return;
+    const start = new Date(reminderReviewTask.startAt);
+    const nextStart = addDays(start, days);
+    const offset = nextStart.getTime() - start.getTime();
+    const nextStartAt = nextStart.toISOString();
+    const nextEndAt = reminderReviewTask.endAt
+      ? new Date(new Date(reminderReviewTask.endAt).getTime() + offset).toISOString()
+      : undefined;
+    const formatPeriod = (startAt: string, endAt?: string) =>
+      `${formatDateTime(startAt, "24h")}${endAt ? ` ~ ${formatDateTime(endAt, "24h")}` : ""}`;
+    const postponeMemo = `[일정 연기] ${formatPeriod(reminderReviewTask.startAt, reminderReviewTask.endAt)} → ${formatPeriod(nextStartAt, nextEndAt)}`;
+    await updateTask(reminderReviewTask.id, {
+      ...toTaskInput(reminderReviewTask),
+      startAt: nextStartAt,
+      endAt: nextEndAt,
+      content: `${reminderReviewTask.content}${reminderReviewTask.content ? "\n\n" : ""}${postponeMemo}`,
     });
     closeReminderReview();
   }
@@ -1416,6 +1442,7 @@ export function DashboardPage() {
         </section>
       ) : null}
 
+      <DashboardRoutines />
       <div className="dashboard-primary-grid">
         <section className="dashboard-card dashboard-calendar-card premium-calendar-card">
           <header className="dashboard-card-header">
@@ -1691,11 +1718,13 @@ export function DashboardPage() {
 
       {reminderReviewTask ? (
         <ScheduleReminderModal
+          key={reminderReviewTask.id}
           task={reminderReviewTask}
           project={projectMap[reminderReviewTask.projectId]}
           taskType={typeMap[reminderReviewTask.taskTypeId]}
           timeFormat={setting.timeFormat}
           onStatusChange={updateReminderTaskStatus}
+          onPostpone={postponeReminderTask}
           onAiEdit={openReminderAiEdit}
           onClose={closeReminderReview}
         />

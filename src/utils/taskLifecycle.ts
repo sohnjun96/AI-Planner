@@ -49,15 +49,16 @@ export async function restoreDeletedTasks(snapshot: DeletedTasks): Promise<void>
 
 export async function deleteEmptyProject(id: string): Promise<void> {
   if (DEFAULT_PROJECT_IDS.includes(id)) throw new Error("기본 프로젝트는 삭제할 수 없습니다.");
-  await db.transaction("rw", [db.projects, db.tasks, db.notes, db.projectSubcategories, db.userContexts], async () => {
+  await db.transaction("rw", [db.projects, db.tasks, db.notes, db.projectSubcategories, db.userContexts, db.routines], async () => {
     const counts = await Promise.all([
       db.tasks.where("projectId").equals(id).count(),
       db.notes.where("projectId").equals(id).count(),
       db.projectSubcategories.where("projectId").equals(id).count(),
       db.userContexts.filter((context) => context.rules.some((rule) => rule.projectId === id)).count(),
+      db.routines.filter((routine) => routine.projectId === id).count(),
     ]);
     if (counts.some(Boolean)) {
-      throw new Error(`일정 ${counts[0]}개, 노트 ${counts[1]}개, 세부 항목 ${counts[2]}개, AI 규칙 설정 ${counts[3]}개가 연결되어 삭제할 수 없습니다. 먼저 이동하거나 정리해 주세요.`);
+      throw new Error(`일정 ${counts[0]}개, 노트 ${counts[1]}개, 세부 항목 ${counts[2]}개, AI 규칙 설정 ${counts[3]}개, 루틴 ${counts[4]}개가 연결되어 삭제할 수 없습니다. 먼저 이동하거나 정리해 주세요.`);
     }
     await db.projects.delete(id);
   });

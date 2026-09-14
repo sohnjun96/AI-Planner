@@ -1,3 +1,4 @@
+import { useRoutines } from "../hooks/useRoutines";
 import { useEffect, useMemo, useState } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useJsonBackupStatus } from "../hooks/useJsonBackupStatus";
@@ -24,14 +25,15 @@ export function WeeklyBackupReminder({ compact = false }: { compact?: boolean })
     tasks,
     taskTypes,
   } = useAppData();
+  const { rows: routineRows } = useRoutines();
   const { isReady: isBackupStatusReady, status } = useJsonBackupStatus();
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [isExporting, setIsExporting] = useState(false);
   const [isSnoozing, setIsSnoozing] = useState(false);
   const [error, setError] = useState("");
   const hasUserCreatedData = useMemo(
-    () => hasUserCreatedJsonBackupData({ tasks, projects, taskTypes, memos, notes, projectSubcategories }),
-    [memos, notes, projects, projectSubcategories, tasks, taskTypes],
+    () => routineRows.length > 0 || hasUserCreatedJsonBackupData({ tasks, projects, taskTypes, memos, notes, projectSubcategories }),
+    [memos, notes, projects, projectSubcategories, tasks, taskTypes, routineRows.length],
   );
 
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { RoutineNotifications } from "./RoutineNotifications";
+import { useRoutines } from "../hooks/useRoutines";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
@@ -14,6 +16,7 @@ const planaiLogo = __PLANAI_APP_ICON_URL__;
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
+  { to: "/routines", label: "나의 루틴" },
   { to: "/notes", label: "노트" },
   { to: "/projects", label: "프로젝트" },
   { to: "/archive", label: "나의 기록" },
@@ -26,6 +29,7 @@ type AiScheduleOpenDetail = {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { undoLastChange } = useAppData();
+  const { dueCount } = useRoutines();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAiAddOpen, setIsAiAddOpen] = useState(false);
@@ -151,6 +155,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
+      <RoutineNotifications />
       <a
         className="skip-link"
         href={`#${location.pathname}${location.search}`}
@@ -178,7 +183,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               to={item.to}
               className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
             >
-              {item.label}
+              {item.label}{item.to === "/routines" && dueCount > 0 && <span className="routine-nav-badge">{dueCount}</span>}
             </NavLink>
           ))}
         </nav>

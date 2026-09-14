@@ -124,32 +124,93 @@ async function lockStorageToTrustedContexts() {
   await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 }
 
-function getPlannerUrl(taskId) {
-  const query = taskId ? `?taskId=${encodeURIComponent(taskId)}&review=1` : "";
-  return chrome.runtime.getURL(`index.html#/dashboard${query}`);
+function getPlannerUrl(taskId, currentUrl = "") {
+  const params = new URLSearchParams(currentUrl.split("?")[1] || "");
+  const ids = params.get("review") === "1" ? params.getAll("taskId") : [];
+  if (taskId && !ids.includes(taskId)) ids.push(taskId);
+  const query = new URLSearchParams();
+  for (const id of ids) query.append("taskId", id);
+  if (ids.length) query.set("review", "1");
+  return chrome.runtime.getURL(`index.html#/dashboard${ids.length ? `?${query}` : ""}`);
 }
 
-function openPlanner(taskId) {
-  return chrome.tabs.create({ url: getPlannerUrl(taskId) });
+// Serialize discovery and creation as well as URL updates. Simultaneous alarms
+// must not all observe an absent tab or overwrite each other's reminder IDs.
+let plannerQueue = Promise.resolve();
+let plannerTabId;
+
+async function waitForPlannerNavigation(tabId, url) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.url === url && tab.status !== "loading") return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("플래너 탭의 알림 이동을 완료하지 못했습니다.");
+}
+
+async function showPlanner(taskId, routine = false) {
+  const plannerBase = chrome.runtime.getURL("index.html");
+  const tabs = await chrome.tabs.query({ url: `${plannerBase}*` });
+  const target = tabs
+    .filter((tab) => {
+      const url = tab.pendingUrl || tab.url || "";
+      return typeof tab.id === "number" && (url === plannerBase || url.startsWith(`${plannerBase}#`));
+    })
+    .sort((a, b) => Number(b.id === plannerTabId) - Number(a.id === plannerTabId)
+      || (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
+
+  let tab;
+  const url = routine ? chrome.runtime.getURL("index.html#/routines") : getPlannerUrl(taskId, target?.pendingUrl || target?.url);
+  if (target) {
+    // An activation failure is surfaced, not converted into another window.
+    tab = await chrome.tabs.update(target.id, {
+      active: true,
+      ...(taskId || routine ? { url } : {}),
+    });
+  } else {
+    tab = await chrome.tabs.create({ url, active: true });
+  }
+  plannerTabId = tab.id;
+  // tabs.update resolves before navigation commits. Wait for the actual URL so
+  // the next alarm reads the complete queue rather than the previous URL.
+  if (taskId || routine || !target) await waitForPlannerNavigation(tab.id, url);
+  const window = await chrome.windows.get(tab.windowId);
+  await chrome.windows.update(tab.windowId, {
+    focused: true,
+    ...(window.state === "minimized" ? { state: "normal" } : {}),
+  });
+}
+
+function openPlanner(taskId, routine = false) {
+  plannerQueue = plannerQueue.catch(() => undefined).then(() => showPlanner(taskId, routine));
+  return plannerQueue;
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  void Promise.all([lockStorageToTrustedContexts(), syncAlarmsFromStorage()])
+  void Promise.all([lockStorageToTrustedContexts(), syncAlarmsFromStorage(), queueRoutineSync()])
     .catch((error) => console.error("초기 보안 설정에 실패했습니다.", error));
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void Promise.all([lockStorageToTrustedContexts(), syncAlarmsFromStorage()])
+  void Promise.all([lockStorageToTrustedContexts(), syncAlarmsFromStorage(), queueRoutineSync()])
     .catch((error) => console.error("시작 보안 설정에 실패했습니다.", error));
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes[ROUTINE_PAYLOAD_KEY]) {
+    void queueRoutineSync().catch((error) => console.error("루틴 알림 동기화 실패", error));
+  }
   if (areaName === "local" && changes[ALARM_PAYLOAD_KEY]) {
     queueAlarmSync(changes[ALARM_PAYLOAD_KEY].newValue);
   }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name.startsWith(ROUTINE_ALARM_PREFIX)) {
+    void showRoutineReminder(alarm.name).catch((error) => console.error("루틴 알림 실패", error));
+    return;
+  }
   if (!alarm.name.startsWith(TASK_ALARM_PREFIX)) return;
   const taskId = alarm.name.slice(TASK_ALARM_PREFIX.length);
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(taskId)) return;
@@ -169,3 +230,43 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.action.onClicked.addListener(() => {
   void openPlanner().catch((error) => console.error("플래너 탭을 열지 못했습니다.", error));
 });
+
+// 루틴 알림에는 업무 제목/본문을 저장하지 않고 회차 ID와 안내 시각만 전달한다.
+const ROUTINE_PAYLOAD_KEY = "schedule_routine_payload_v1";
+const ROUTINE_DELIVERED_KEY = "schedule_routine_delivered_v1";
+const ROUTINE_ALARM_PREFIX = "routine-reminder:";
+function normalizeRoutinePayload(value) {
+  return { enabled: value?.enabled === true, items: (Array.isArray(value?.items) ? value.items : []).slice(0, 500)
+    .filter((item) => item && typeof item.id === "string" && /^[A-Za-z0-9._:-]{1,180}$/.test(item.id) && typeof item.when === "number" && Number.isFinite(item.when) && item.when > 0)
+    .map((item) => ({ id: item.id, when: item.when })) };
+}
+function normalizeDelivered(value) {
+  return Array.isArray(value) ? value.filter((id) => typeof id === "string" && /^[A-Za-z0-9._:-]{1,180}$/.test(id)).slice(-2000) : [];
+}
+let routineSyncQueue = Promise.resolve();
+function queueRoutineSync() {
+  routineSyncQueue = routineSyncQueue.catch(() => undefined).then(async () => {
+    const payload = normalizeRoutinePayload(await storageGet(ROUTINE_PAYLOAD_KEY));
+    const delivered = new Set(normalizeDelivered(await storageGet(ROUTINE_DELIVERED_KEY)));
+    const wanted = new Map((payload.enabled ? payload.items : []).filter((item) => !delivered.has(item.id))
+      .sort((a, b) => a.when - b.when).slice(0, 80).map((item) => [`${ROUTINE_ALARM_PREFIX}${item.id}`, Math.max(Date.now() + 1_000, item.when)]));
+    const alarms = (await alarmGetAll()).filter((alarm) => alarm.name.startsWith(ROUTINE_ALARM_PREFIX));
+    await runInBatches(alarms.filter((alarm) => !wanted.has(alarm.name)), (alarm) => alarmClear(alarm.name));
+    const existing = new Map(alarms.map((alarm) => [alarm.name, alarm]));
+    await runInBatches([...wanted], ([name, when]) => existing.has(name) ? Promise.resolve() : alarmCreate(name, when));
+  });
+  return routineSyncQueue;
+}
+let routineDeliveryQueue = Promise.resolve();
+function showRoutineReminder(name) {
+  routineDeliveryQueue = routineDeliveryQueue.catch(() => undefined).then(async () => {
+    const id = name.slice(ROUTINE_ALARM_PREFIX.length);
+    const payload = normalizeRoutinePayload(await storageGet(ROUTINE_PAYLOAD_KEY));
+    const delivered = normalizeDelivered(await storageGet(ROUTINE_DELIVERED_KEY));
+    if (!payload.enabled || !payload.items.some((item) => item.id === id) || delivered.includes(id)) return;
+    await openPlanner(undefined, true);
+    await chrome.storage.local.set({ [ROUTINE_DELIVERED_KEY]: [...delivered, id].slice(-2000) });
+    await queueRoutineSync();
+  });
+  return routineDeliveryQueue;
+}

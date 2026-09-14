@@ -9,6 +9,7 @@ interface ScheduleReminderModalProps {
   taskType?: TaskType;
   timeFormat: "24h" | "12h";
   onStatusChange: (status: TaskStatus) => Promise<void>;
+  onPostpone: (days: 1 | 3 | 7) => Promise<void>;
   onAiEdit: () => void;
   onClose: () => void;
 }
@@ -45,11 +46,13 @@ export function ScheduleReminderModal({
   taskType,
   timeFormat,
   onStatusChange,
+  onPostpone,
   onAiEdit,
   onClose,
 }: ScheduleReminderModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [isPostponeOpen, setIsPostponeOpen] = useState(false);
   const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose: isSubmitting ? undefined : onClose });
 
   async function handleStatusChange(status: TaskStatus) {
@@ -62,6 +65,18 @@ export function ScheduleReminderModal({
       await onStatusChange(status);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "일정 상태를 변경하지 못했습니다.");
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handlePostpone(days: 1 | 3 | 7) {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await onPostpone(days);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "일정을 연기하지 못했습니다.");
       setIsSubmitting(false);
     }
   }
@@ -116,9 +131,17 @@ export function ScheduleReminderModal({
           <button type="button" className="reminder-action-cancel" onClick={() => void handleStatusChange("CANCELED")} disabled={isSubmitting}>
             취소하기
           </button>
-          <button type="button" className="reminder-action-hold" onClick={() => void handleStatusChange("ON_HOLD")} disabled={isSubmitting}>
-            보류하기
+          <button type="button" className="reminder-action-postpone" onClick={() => setIsPostponeOpen((open) => !open)} disabled={isSubmitting}
+            aria-expanded={isPostponeOpen} aria-controls="reminder-postpone-options">
+            연기하기 <span aria-hidden="true">{isPostponeOpen ? "▴" : "▾"}</span>
           </button>
+          {isPostponeOpen ? (
+            <div id="reminder-postpone-options" className="reminder-postpone-options" role="group" aria-label="일정 연기 기간">
+              <button type="button" onClick={() => void handlePostpone(1)} disabled={isSubmitting}>내일로 연기</button>
+              <button type="button" onClick={() => void handlePostpone(3)} disabled={isSubmitting}>3일 뒤로 연기</button>
+              <button type="button" onClick={() => void handlePostpone(7)} disabled={isSubmitting}>일주일 뒤로 연기</button>
+            </div>
+          ) : null}
         </footer>
       </section>
     </ModalBackdrop>

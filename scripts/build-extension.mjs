@@ -114,7 +114,7 @@ async function validateBuildDirectory(buildDir, profile, excludedProfile) {
   const manifestSource = await readFile(path.join(buildDir, "manifest.json"), "utf8");
   const manifest = JSON.parse(manifestSource.replace(/^\uFEFF/, ""));
   if (
-    JSON.stringify(manifest.permissions) !== JSON.stringify(["storage", "alarms"]) ||
+    JSON.stringify(manifest.permissions) !== JSON.stringify(["storage", "alarms", "tabs"]) ||
     JSON.stringify(manifest.host_permissions) !== JSON.stringify([`${profile.origin}/*`]) ||
     manifest.content_security_policy?.extension_pages !== createExtensionCsp(profile.origin) ||
     manifest.version_name !== (profile.id === "internal" ? manifest.version : `${manifest.version}-${profile.id}`) ||

@@ -1,3 +1,4 @@
+import { validateRoutine, isCalendarDate, isMonth } from "./routines";
 import {
   clampLlmTemperature,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
@@ -9,6 +10,8 @@ import {
   USER_CONTEXT_ID,
 } from "../constants";
 import type {
+  Routine,
+  RoutineOccurrence,
   AppSetting,
   ArchiveInsightCache,
   Memo,
@@ -26,11 +29,13 @@ import type {
 import { isValidMemoStorageKey } from "./memos";
 import { reconcileDefaultUserContextReferences } from "./defaultReferenceRepair";
 
-export const BACKUP_VERSION = 5;
+export const BACKUP_VERSION = 6;
 export { MAX_BACKUP_BYTES as MAX_IMPORT_FILE_BYTES } from "./backupArchive";
 import { MAX_BACKUP_BYTES as MAX_IMPORT_FILE_BYTES } from "./backupArchive";
 
 export interface ValidatedImportPayload {
+  routines: Routine[];
+  routineOccurrences: RoutineOccurrence[];
   tasks: Task[];
   projects: Project[];
   taskTypes: TaskType[];
@@ -47,6 +52,8 @@ export interface ValidatedImportPayload {
 }
 
 const LIMITS = {
+  routines: 500,
+  routineOccurrences: 20_000,
   tasks: 20_000,
   projects: 1_000,
   taskTypes: 200,
@@ -129,6 +136,32 @@ function uniqueIds<T extends { id: string }>(items: T[], label: string): T[] {
 function stringIds(value: unknown, label: string, maxItems = 200): string[] {
   if (!Array.isArray(value) || value.length > maxItems) fail(`${label} 배열이 올바르지 않습니다.`);
   return Array.from(new Set(value.map((item, index) => id(item, `${label}[${index}]`))));
+}
+
+function parseRoutine(value: unknown): Routine {
+  const item = record(value, "routine");
+  const input = validateRoutine({
+    title: text(item.title, "routine.title", 200), content: text(item.content, "routine.content", 100_000, true),
+    projectId: id(item.projectId, "routine.projectId"), taskTypeId: id(item.taskTypeId, "routine.taskTypeId"),
+    intervalMonths: integer(item.intervalMonths, "routine.intervalMonths", 1, 24)!,
+    startMonth: text(item.startMonth, "routine.startMonth", 7), dayOfMonth: integer(item.dayOfMonth, "routine.dayOfMonth", 1, 31)!,
+    time: text(item.time, "routine.time", 5), leadDays: integer(item.leadDays, "routine.leadDays", 0, 30)!,
+    mode: oneOf(item.mode, "routine.mode", ["schedule", "remind"]), isActive: bool(item.isActive, "routine.isActive"),
+  });
+  return { ...input, id: id(item.id, "routine.id"), createdAt: iso(item.createdAt, "routine.createdAt")!, updatedAt: iso(item.updatedAt, "routine.updatedAt")! };
+}
+
+function parseRoutineOccurrence(value: unknown): RoutineOccurrence {
+  const item = record(value, "routineOccurrence");
+  const routineId = id(item.routineId, "routineOccurrence.routineId");
+  const period = text(item.period, "routineOccurrence.period", 7);
+  const dueDate = text(item.dueDate, "routineOccurrence.dueDate", 10);
+  const snoozedUntil = optionalText(item.snoozedUntil, "routineOccurrence.snoozedUntil", 10);
+  const status = oneOf(item.status, "routineOccurrence.status", ["created", "skipped", "acknowledged", "snoozed"]);
+  if (!isMonth(period) || !isCalendarDate(dueDate) || dueDate.slice(0, 7) !== period || (snoozedUntil && !isCalendarDate(snoozedUntil))) fail("루틴 회차의 날짜가 올바르지 않습니다.");
+  if (item.id !== `${routineId}:${period}` || (status === "snoozed" && !snoozedUntil)) fail("루틴 회차 정보가 올바르지 않습니다.");
+  return { id: id(item.id, "routineOccurrence.id"), routineId, period, dueDate, status, snoozedUntil,
+    taskId: item.taskId ? id(item.taskId, "routineOccurrence.taskId") : undefined, updatedAt: iso(item.updatedAt, "routineOccurrence.updatedAt")! };
 }
 
 function parseTask(value: unknown, index: number): Task {
@@ -296,9 +329,11 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
     fail("JSON 형식이 올바르지 않습니다.");
   }
   const root = record(parsed, "root");
-  if (root.version !== 4 && root.version !== BACKUP_VERSION) fail(`지원하는 백업 버전은 4와 ${BACKUP_VERSION}입니다.`);
+  if (![4, 5, BACKUP_VERSION].includes(root.version as number)) fail(`지원하는 백업 버전은 4, 5, ${BACKUP_VERSION}입니다.`);
   const exportedAt = iso(root.exportedAt, "exportedAt")!;
 
+  const routines = uniqueIds(array(root.routines ?? [], "routines").map(parseRoutine), "routines");
+  const routineOccurrences = uniqueIds(array(root.routineOccurrences ?? [], "routineOccurrences").map(parseRoutineOccurrence), "routineOccurrences");
   const parsedProjects = uniqueIds(array(root.projects, "projects").map(parseProject), "projects");
   const parsedTaskTypes = uniqueIds(array(root.taskTypes, "taskTypes").map(parseTaskType), "taskTypes");
   const tasks = uniqueIds(array(root.tasks, "tasks").map(parseTask), "tasks");
@@ -328,6 +363,10 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
   const taskIds = new Set(tasks.map((item) => item.id));
   const noteIds = new Set(notes.map((item) => item.id));
   const subcategoryIds = new Set(projectSubcategories.map((item) => item.id));
+  const routineIds = new Set(routines.map((item) => item.id));
+  routines.forEach((item) => { requireReference(projectIds, item.projectId, "routine.projectId"); requireReference(typeIds, item.taskTypeId, "routine.taskTypeId"); });
+  routineOccurrences.forEach((item) => requireReference(routineIds, item.routineId, "routineOccurrence.routineId"));
+  // 삭제한 일정의 ID는 이력에 남겨 중복 생성을 막는다. taskId는 존재하지 않을 수 있다.
   tasks.forEach((item) => {
     requireReference(projectIds, item.projectId, `task ${item.id}.projectId`);
     requireReference(typeIds, item.taskTypeId, `task ${item.id}.taskTypeId`);
@@ -359,7 +398,7 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
   });
 
   return {
-    tasks, projects, taskTypes, memos, settings, userContexts, notes, noteVersions, noteTaskLinks,
+    routines, routineOccurrences, tasks, projects, taskTypes, memos, settings, userContexts, notes, noteVersions, noteTaskLinks,
     projectSubcategories, archiveInsightCaches, version: BACKUP_VERSION,
     exportedAt,
   };

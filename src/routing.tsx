@@ -29,7 +29,7 @@ interface RouterContextValue {
 }
 
 const RouterContext = createContext<RouterContextValue | undefined>(undefined);
-const ALLOWED_PATHS = new Set(["/dashboard", "/notes", "/projects", "/archive", "/settings"]);
+const ALLOWED_PATHS = new Set(["/dashboard", "/routines", "/notes", "/projects", "/archive", "/settings"]);
 
 function normalizeRoute(raw: string): string {
   const candidate = raw.startsWith("/") ? raw : `/${raw}`;
