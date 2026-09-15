@@ -5,6 +5,11 @@ export function toIsoNow(): string {
   return new Date().toISOString();
 }
 
+/** AI 일정 해석 기준인 한국 시각을 오프셋까지 명시한다. 저장용 UTC 변환과 분리한다. */
+export function toSeoulIso(date: Date = new Date()): string {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().replace(/Z$/, "+09:00");
+}
+
 export function formatDateTime(value: string, timeFormat: "24h" | "12h"): string {
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",

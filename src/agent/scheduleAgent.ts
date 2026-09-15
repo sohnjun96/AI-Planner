@@ -1,6 +1,6 @@
 import { DEFAULT_AI_CONTEXT_MAX_LENGTH, DEFAULT_PROJECT_ID, DEFAULT_TASK_TYPES } from "../constants";
 import type { Project, Task, TaskStatus, TaskType, UserContext, UserContextRuleCategory, UserContextSuggestion } from "../models";
-import { toIsoNow } from "../utils/date";
+import { toSeoulIso } from "../utils/date";
 import {
   ToolCallCache,
   capToolResults,
@@ -234,7 +234,7 @@ Hard output rules:
 7. Ask a clarification question only when a usable title or schedulable date/time cannot be determined, or when multiple existing tasks remain possible for an update/delete. Do not ask about optional details.
 8. Missing project or task type is never a reason to ask a question. Use the best matching saved rule, then an active/default item from knownChoices. If the user names an unavailable project or type, prefer a reasonable matching/default choice and prepare a draft instead of blocking whenever possible.
 9. Use only these status values: NOT_DONE, ON_HOLD, DONE, CANCELED. If the user asks to cancel an existing schedule, update its status to CANCELED instead of deleting it.
-10. Interpret user dates and times in Asia/Seoul using the input now value. For startAt/endAt, prefer local ISO without a timezone, for example 2026-02-11T09:00. The app will normalize it.
+10. Interpret user dates and times in the input timeZone (Asia/Seoul). The input now already contains Korean local date/time with +09:00; do not add another 9 hours or treat its clock time as UTC. Resolve today/tomorrow/current time from this value. For startAt/endAt, prefer local ISO without a timezone, for example 2026-02-11T09:00. The app will normalize it.
 11. Treat a request as a range only when it explicitly provides both boundaries for the same schedule, such as "A부터 B까지", "A에서 B까지", "A~B", "14:00부터 16:00까지", or an explicit duration.
 12. A lone deadline such as "B까지", "B 18시까지", "18시까지 해줘", "마감 B", or "기한 B" is always a point-in-time schedule, never a range. Put the deadline date and time in startAt and omit endAt. If the deadline gives a date but no time, use 18:00 as startAt's time. Never ask whether a lone "B까지" request means a continuous schedule or a deadline.
 13. The word "까지" alone never justifies endAt. For a non-range request, never infer or create endAt from a default time, a deadline, or an assumed duration.
@@ -1009,7 +1009,8 @@ function buildPromptMessages(
       ].join("\n\n")
     : "";
   const userPayload = {
-    now: toIsoNow(),
+    now: toSeoulIso(),
+    timeZone: "Asia/Seoul",
     conversation: input.conversation.filter((message) => message.content.trim() !== input.userMessage.trim()),
     userRequest: input.userMessage,
     knownChoices: {
