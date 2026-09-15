@@ -1,4 +1,4 @@
-.routines-page { max-width: 1120px; margin: 0 auto; padding: 24px 0 32px; display: grid; gap: 22px; }
+.routines-page { box-sizing: border-box; width: 100%; max-width: 1040px; margin: 0 auto; padding: 32px clamp(20px, 3vw, 40px) 40px; display: grid; gap: 24px; }
 .routine-page-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .routine-page-header h2 { margin: 5px 0 8px; font-size: 28px; }
 .routine-page-header p { margin: 0; }
@@ -40,7 +40,7 @@
 .dashboard-routines .routine-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 .routine-nav-badge { display: inline-block; margin-left: 5px; padding: 1px 6px; border-radius: 9px; font-size: 11px; background: #dceee1; color: #276441; }
 @media (max-width: 900px) {
-  .routines-page { padding: 20px 14px 32px; }
+  .routines-page { padding: 24px 20px 36px; }
 }
 @media (max-width: 600px) {
   .top-nav-list .nav-link { position: relative; }
