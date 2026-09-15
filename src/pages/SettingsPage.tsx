@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { ColorSelector } from "../components/ColorSelector";
+import { HelpModal } from "../components/HelpModal";
 import { ModalBackdrop } from "../components/ModalBackdrop";
 import { useSearchParams } from "../routing";
 import {
@@ -208,6 +209,7 @@ function formatTokens(tokens: number): string {
 }
 
 export function SettingsPage() {
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     setting,
@@ -964,6 +966,7 @@ export function SettingsPage() {
           <p className="description-text">기본 환경과 일정 종류, AI, 일정 호출·백업을 성격별로 모아 관리합니다.</p>
         </div>
         <div className="settings-hero-actions">
+          <button className="btn btn-soft" type="button" onClick={() => setIsHelpOpen(true)}>도움말 · 단축키</button>
           <div className="settings-json-export-control">
             <button className="btn btn-primary" type="button" onClick={() => void handleExport()} disabled={isExporting}>
               {isExporting ? "내보내는 중…" : "백업 내보내기"}
@@ -992,6 +995,7 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} /> : null}
       {message ? (
         <p className="success-text" role="status" aria-live="polite">
           {message}

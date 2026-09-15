@@ -20,7 +20,6 @@ const NAV_ITEMS = [
   { to: "/notes", label: "노트" },
   { to: "/projects", label: "프로젝트" },
   { to: "/archive", label: "나의 기록" },
-  { to: "/settings", label: "설정" },
 ];
 
 type AiScheduleOpenDetail = {
@@ -189,31 +188,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="top-nav-actions">
-          <div className="top-nav-desktop-actions">
-            {/* 되돌리기 버튼은 제거 — 변경 직후 토스트의 '실행 취소'와 Ctrl+Z가 대체한다 */}
-            <button
-              type="button"
-              className="btn btn-icon"
-              onClick={() => setIsHelpOpen(true)}
-              aria-label="도움말과 단축키 (물음표 키)"
-              title="도움말 · 단축키 (?)"
-            >
-              ?
-            </button>
-
             <button type="button" className="btn btn-soft" onClick={() => setIsAskOpen(true)} aria-label="내 데이터에 질문">
               질문
             </button>
-          </div>
-
-          <div className="top-nav-primary-actions">
-            <button type="button" className="btn btn-soft" onClick={openNewNote} aria-label="노트 추가, Ctrl+N">
-              노트 추가
-            </button>
-            <button type="button" className="btn btn-primary" onClick={() => openAiScheduleSession()}>
-              AI 일정 추가
-            </button>
-          </div>
+            <NavLink to="/settings" className={({ isActive }) => `btn btn-icon top-nav-settings${isActive ? " active" : ""}`} aria-label="설정" title="설정" aria-current={location.pathname === "/settings" ? "page" : undefined}>
+              <span aria-hidden="true">⚙</span>
+            </NavLink>
         </div>
       </header>
 

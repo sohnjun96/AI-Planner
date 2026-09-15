@@ -1384,6 +1384,9 @@ export function DashboardPage() {
           <h2>{formatFullDate(today)}</h2>
         </button>
         <div className="dashboard-hero-actions">
+          <button type="button" className="btn btn-primary" onClick={() => openAiSchedule("")}>
+            AI 일정 추가
+          </button>
           <DailyBriefing />
           <TaskViewSegmentedControl
             value={calendarViewMode}
