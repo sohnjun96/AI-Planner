@@ -309,14 +309,37 @@ a {
   flex-wrap: wrap;
 }
 
-.top-nav-settings {
+.btn.top-nav-settings {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  padding: 0;
+  border-color: var(--hairline-strong);
+  background: var(--surface-pearl);
+  color: var(--ink);
   text-decoration: none;
-  font-size: 20px;
 }
 
-.top-nav-settings.active {
+.top-nav-settings svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.btn.top-nav-settings:hover {
+  background: var(--surface-soft);
+  border-color: var(--body-muted);
+}
+
+.btn.top-nav-settings.active {
+  border-color: var(--surface-black);
   background: var(--surface-black);
   color: var(--body-on-dark);
+}
+
+.top-nav-settings:focus-visible {
+  outline: 2px solid var(--primary-focus);
+  outline-offset: 2px;
 }
 
 .page-content {
@@ -4752,6 +4775,7 @@ textarea:focus-visible,
 }
 
 .dashboard-topbar {
+  --dashboard-topbar-control-height: 52px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
@@ -4768,8 +4792,15 @@ textarea:focus-visible,
   letter-spacing: 0;
 }
 
+.dashboard-summary-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .dashboard-hero-actions {
-  --dashboard-topbar-control-height: 52px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -4777,7 +4808,7 @@ textarea:focus-visible,
   flex-wrap: wrap;
 }
 
-.dashboard-hero-actions > .daily-briefing-trigger,
+.dashboard-summary-heading > .daily-briefing-trigger,
 .dashboard-hero-actions > .segmented-control,
 .dashboard-hero-actions > .btn {
   height: var(--dashboard-topbar-control-height);
@@ -4865,6 +4896,13 @@ textarea:focus-visible,
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.dashboard-ai-add-button {
+  margin-inline-start: auto;
+  align-self: center;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .dashboard-card-header h3 {
@@ -9830,15 +9868,10 @@ textarea:focus-visible,
   font-size: 18px;
 }
 
-.daily-briefing-trigger span > strong {
-  display: block;
-  font-size: 13px;
-  line-height: 1.1;
-}
-
-.daily-briefing-trigger span > small {
-  font-size: 11px;
-  color: var(--body-muted);
+.daily-briefing-trigger > strong {
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .briefing-modal-card {

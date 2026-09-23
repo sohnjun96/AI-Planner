@@ -48,6 +48,7 @@ try {
   await page.reload();
   await expect(page.getByRole("button", { name: "다시 시작" })).toBeVisible();
   await addRoutine("정기 보고서");
+  await page.getByRole("button", { name: "루틴 알림 접기", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "artifacts/routines/mobile.png", fullPage: true });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

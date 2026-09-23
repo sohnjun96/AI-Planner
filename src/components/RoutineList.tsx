@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useRoutines } from "../hooks/useRoutines";
 import type { Routine } from "../models";
@@ -11,6 +11,15 @@ import { TaskForm } from "./TaskForm";
 import { showToast } from "../utils/toast";
 
 export type RoutineRow = { routine: Routine; cycle: RoutineCycle };
+
+function formatRoutineDate(value: string, weekday = false): string {
+  const date = new Date(`${value}T12:00:00`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    month: "long", day: "numeric", weekday: weekday ? "short" : undefined,
+  }).format(date);
+}
+
 export function RoutineList({ rows, onEdit, onToggle, onDelete }: {
   rows: RoutineRow[]; onEdit?: (routine: Routine) => void;
   onToggle?: (routine: Routine) => void; onDelete?: (routine: Routine) => void;
@@ -38,32 +47,42 @@ export function RoutineList({ rows, onEdit, onToggle, onDelete }: {
     <div className="routine-list">
       {rows.map((row) => {
         const { routine, cycle } = row;
+        const project = projects.find((item) => item.id === routine.projectId);
         const history = records.filter((record) => record.routineId === routine.id).sort((a, b) => b.period.localeCompare(a.period));
-        return <article key={routine.id} className={`routine-card ${cycle.needsAttention ? "routine-card-due" : ""}`}>
+        return <article key={routine.id}
+          className={`routine-card ${cycle.needsAttention ? "routine-card-due" : ""} ${!routine.isActive ? "routine-card-paused" : ""}`}
+          style={{ "--routine-project-color": project?.color ?? "var(--body-muted)" } as CSSProperties}>
           <div className="routine-card-heading">
-            <div><span className={`routine-status ${cycle.needsAttention ? "is-due" : ""}`}>{!routine.isActive ? "일시 중지" : cycle.needsAttention ? "확인 필요" : "안내 예정"}</span>
-              <h3>{routine.title}</h3></div>
-            <span className="routine-project">{projects.find((project) => project.id === routine.projectId)?.name ?? "프로젝트"}</span>
+            <span className="routine-project"><span aria-hidden="true" className="routine-project-dot" />{project?.name ?? "프로젝트 없음"}</span>
+            {(!routine.isActive || cycle.needsAttention) && <span className={`routine-status ${cycle.needsAttention ? "is-due" : ""}`}>{!routine.isActive ? "일시 중지" : "확인 필요"}</span>}
           </div>
-          <p className="routine-summary">{routineFrequency(routine)} · {routine.leadDays ? `${routine.leadDays}일 전 안내` : "당일 안내"} · {routine.mode === "schedule" ? "일정 만들기 제안" : "알림만 받기"}</p>
-          {routine.content && <p className="routine-content">{routine.content}</p>}
-          <div className="routine-dates"><span>예정일 <strong>{cycle.dueDate}</strong></span><span>안내일 <strong>{cycle.notifyDate}</strong></span></div>
+          <div className="routine-card-title">
+            <h3>{routine.title}</h3>
+            <p className="routine-summary">{routineFrequency(routine)}{routine.mode === "remind" && <span>알림만</span>}</p>
+          </div>
+          <div className="routine-dates">
+            <div><span className="routine-date-label">예정</span><time dateTime={cycle.dueDate} title={cycle.dueDate}>{formatRoutineDate(cycle.dueDate, true)}</time></div>
+            <span className="routine-notify-date">{!routine.isActive ? "알림 중지" : cycle.notifyDate === cycle.dueDate ? "당일 알림" : <><time dateTime={cycle.notifyDate} title={cycle.notifyDate}>{formatRoutineDate(cycle.notifyDate)}</time> 알림</>}</span>
+          </div>
           {cycle.needsAttention && <div className="routine-prompt">
-            <p>{routine.mode === "schedule" ? "이번 회차의 일정을 만들까요?" : "챙길 때가 되었어요. 확인하셨나요?"}</p>
             <div className="button-row">
               <button className="btn btn-primary" disabled={busy} onClick={() => routine.mode === "schedule" ? (setError(""), setDraft(row)) : void act(row, "acknowledged")}>{routine.mode === "schedule" ? "일정 만들기" : "확인했어요"}</button>
               <button className="btn btn-soft" disabled={busy} onClick={() => { setError(""); setSnooze(row); setSnoozeDate(getDateKey(addDays(new Date(), 1))); }}>나중에</button>
-              <button className="btn btn-outline" disabled={busy} onClick={() => void act(row, "skipped")}>이번 회차 건너뛰기</button>
+              <button className="btn routine-skip" aria-label="이번 회차 건너뛰기" disabled={busy} onClick={() => void act(row, "skipped")}>건너뛰기</button>
             </div>
           </div>}
-          {onEdit && <div className="routine-card-tools"><button className="btn btn-soft" onClick={() => onEdit(routine)}>수정</button>
-            <button className="btn btn-soft" onClick={() => onToggle?.(routine)}>{routine.isActive ? "일시 중지" : "다시 시작"}</button>
-            <button className="btn btn-outline" onClick={() => onDelete?.(routine)}>삭제</button></div>}
-          {onEdit && history.length > 0 && <details className="routine-history"><summary>처리 이력 {history.length}건</summary><ul>{history.slice(0, 24).map((record) => {
+          {routine.content && <details className="routine-memo"><summary>메모</summary><p className="routine-content">{routine.content}</p></details>}
+          {onEdit && history.length > 0 && <details className="routine-history"><summary>처리 이력 <span>{history.length}</span></summary><ul>{history.slice(0, 24).map((record) => {
             const linkedTask = tasks.find((task) => task.id === record.taskId);
             return <li key={record.id}><span>{record.dueDate} · {{ created: "일정 생성됨", skipped: "건너뜀", acknowledged: "확인 완료", snoozed: "미룸" }[record.status]}</span>
               {linkedTask ? <button className="btn btn-soft" onClick={() => navigate(`/dashboard?taskId=${encodeURIComponent(linkedTask.id)}`)}>일정 보기</button> : record.taskId ? <small>연결 일정이 삭제되었습니다.</small> : null}</li>;
           })}</ul>{history.length > 24 && <small>최근 24건을 표시합니다.</small>}</details>}
+          {onEdit && <div className="routine-card-tools"><button className="btn routine-edit" onClick={() => onEdit(routine)}>수정</button>
+            {onToggle && <button className="btn" onClick={() => onToggle(routine)}>{routine.isActive ? "일시 중지" : "다시 시작"}</button>}
+            {onDelete && <button className="btn routine-delete" aria-label="삭제" title="루틴 삭제" onClick={() => onDelete(routine)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
+              <span>삭제</span>
+            </button>}</div>}
         </article>;
       })}
     </div>

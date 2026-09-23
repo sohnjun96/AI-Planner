@@ -10,7 +10,7 @@ import { AskDataModal } from "./AskDataModal";
 import { HelpModal } from "./HelpModal";
 import { ModalBackdrop } from "./ModalBackdrop";
 import { ToastHost } from "./ToastHost";
-import { WeeklyBackupReminder } from "./WeeklyBackupReminder";
+import { AppReminderStack } from "./AppReminderStack";
 
 const planaiLogo = __PLANAI_APP_ICON_URL__;
 
@@ -192,7 +192,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               질문
             </button>
             <NavLink to="/settings" className={({ isActive }) => `btn btn-icon top-nav-settings${isActive ? " active" : ""}`} aria-label="설정" title="설정" aria-current={location.pathname === "/settings" ? "page" : undefined}>
-              <span aria-hidden="true">⚙</span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                <path d="m9.5 3-.5 2a8 8 0 0 0-1.5.9l-2-.6L3 9.5 4.5 11a8 8 0 0 0 0 2L3 14.5l2.5 4.2 2-.6A8 8 0 0 0 9 19l.5 2h5l.5-2a8 8 0 0 0 1.5-.9l2 .6 2.5-4.2-1.5-1.5a8 8 0 0 0 0-2L21 9.5l-2.5-4.2-2 .6A8 8 0 0 0 15 5l-.5-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
             </NavLink>
         </div>
       </header>
@@ -274,7 +277,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {isAskOpen ? <AskDataModal onClose={() => setIsAskOpen(false)} /> : null}
 
-      <WeeklyBackupReminder compact={location.pathname === "/notes"} />
+      <AppReminderStack compact={location.pathname === "/notes"} />
 
       <ToastHost />
     </div>

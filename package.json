@@ -9,7 +9,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:integration": "node scripts/test-data-lifecycle.mjs",
     "test:reminders": "node scripts/test-schedule-reminders.mjs",
-    "test:routines": "node scripts/test-routines-ui.mjs && node scripts/test-routine-reminders.mjs",
+    "test:routines": "node scripts/test-routines-ui.mjs && node scripts/test-routine-reminders.mjs && node scripts/test-routine-notifications.mjs",
     "typecheck": "tsc -b",
     "build": "npm run build:internal",
     "build:internal": "npm run typecheck && node scripts/build-extension.mjs --profile internal",

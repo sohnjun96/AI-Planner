@@ -1371,23 +1371,22 @@ export function DashboardPage() {
     <div className="dashboard-workspace">
       {celebrationRevision > 0 ? <DayCompleteCelebration key={celebrationRevision} /> : null}
       <section className={`dashboard-topbar compact-dashboard-topbar ${isTopbarExpanded ? "expanded" : "collapsed"}`}>
-        <button
-          type="button"
-          className="dashboard-summary-trigger"
-          onClick={() => setIsTopbarExpanded((prev) => !prev)}
-          aria-expanded={isTopbarExpanded}
-          aria-controls="dashboard-summary-panel"
-          aria-label={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
-          title={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
-        >
-          <p className="eyebrow">TODAY</p>
-          <h2>{formatFullDate(today)}</h2>
-        </button>
-        <div className="dashboard-hero-actions">
-          <button type="button" className="btn btn-primary" onClick={() => openAiSchedule("")}>
-            AI 일정 추가
+        <div className="dashboard-summary-heading">
+          <button
+            type="button"
+            className="dashboard-summary-trigger"
+            onClick={() => setIsTopbarExpanded((prev) => !prev)}
+            aria-expanded={isTopbarExpanded}
+            aria-controls="dashboard-summary-panel"
+            aria-label={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
+            title={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
+          >
+            <p className="eyebrow">TODAY</p>
+            <h2>{formatFullDate(today)}</h2>
           </button>
           <DailyBriefing />
+        </div>
+        <div className="dashboard-hero-actions">
           <TaskViewSegmentedControl
             value={calendarViewMode}
             onChange={handleCalendarViewModeChange}
@@ -1453,6 +1452,9 @@ export function DashboardPage() {
               <p className="eyebrow">CALENDAR</p>
               <h3>일정 보드</h3>
             </div>
+            <button type="button" className="btn btn-primary dashboard-ai-add-button" onClick={() => openAiSchedule("")}>
+              AI 일정 추가
+            </button>
           </header>
 
           {calendarViewMode === "MONTH" ? (

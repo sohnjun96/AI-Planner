@@ -134,7 +134,9 @@ export function DailyBriefing() {
       setBriefing(result);
     } catch (runError) {
       if (isAbortError(runError)) return;
-      setError(runError instanceof Error ? runError.message : "브리핑 생성에 실패했습니다.");
+      const message = runError instanceof Error ? runError.message : "브리핑 생성에 실패했습니다.";
+      const isConnectionError = /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(message);
+      setError(isConnectionError ? "AI 연결 실패" : message);
     } finally {
       if (abortRef.current === controller) {
         setIsRunning(false);
@@ -175,10 +177,7 @@ export function DailyBriefing() {
         <span className="daily-briefing-icon" aria-hidden="true">
           ☀️
         </span>
-        <span>
-          <strong>AI 브리핑</strong>
-          <small>오늘 하루를 정리해 드려요</small>
-        </span>
+        <strong>AI 브리핑</strong>
       </button>
 
       {isOpen ? (
