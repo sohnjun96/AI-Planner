@@ -1,0 +1,56 @@
+.routine-list-group-title { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 6px; margin: 10px 0 -6px; font-size: 13px; line-height: 1.5; font-weight: 600; color: var(--body-muted); }
+.routine-list-group-title:first-child { margin-top: 0; }
+.routine-list-group-title > span { font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 400; }
+.routine-card { min-width: 0; padding: 12px 16px 14px; border: 1px solid var(--hairline); border-left: 3px solid var(--routine-project-color); border-radius: 15px; background: var(--canvas); color: var(--ink); }
+.routine-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+.routine-card-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.routine-project { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--body-muted); overflow-wrap: anywhere; }
+.routine-project-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--routine-project-color); }
+.routine-status { flex-shrink: 0; padding: 2px 6px; border-radius: 5px; font-size: 11px; line-height: 1.5; color: var(--body-muted); background: var(--surface-soft); }
+.routine-status.is-due { color: var(--status-on-hold-text); background: var(--status-on-hold-bg); }
+.routine-more-button { display: grid; place-items: center; flex: 0 0 32px; width: 32px; min-height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--body-muted); cursor: pointer; }
+.routine-more-button:hover:not(:disabled) { color: var(--ink); background: var(--surface-soft); }
+.routine-card .routine-card-title { min-width: 0; margin: 3px 0 4px; font-size: 18px; line-height: 1.45; letter-spacing: -.025em; }
+.routine-details-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 30px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--ink); text-align: left; font: inherit; font-weight: 650; cursor: pointer; }
+.routine-title-text { min-width: 0; overflow-wrap: anywhere; }
+.routine-details-toggle:hover .routine-title-text { color: var(--primary-focus); }
+.routine-details-label { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 12px; letter-spacing: 0; font-weight: 400; color: var(--body-muted); }
+.routine-details-toggle[aria-expanded="true"] .routine-details-label svg { transform: rotate(180deg); }
+.routine-card-schedule { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.routine-card-dates { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 8px; min-width: 0; flex: 1 1 140px; }
+.routine-due-date { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.routine-summary { min-width: 0; overflow-wrap: anywhere; color: var(--body-muted); font-size: 12px; line-height: 1.65; }
+.routine-due-date + .routine-summary::before { content: "·"; margin-right: 8px; }
+.routine-notify-date { margin: 3px 0 0; font-size: 12px; line-height: 1.6; color: var(--body-muted); overflow-wrap: anywhere; }
+.routine-prompt { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.routine-card .routine-prompt .btn, .routine-card .routine-resume { min-height: 36px; padding: 7px 12px; font-size: 13px; line-height: 1.5; border-radius: 8px; font-weight: 600; }
+.routine-card .btn-soft { border-color: var(--hairline-strong); background: var(--canvas); color: var(--ink); box-shadow: none; }
+.routine-card .btn-soft:hover:not(:disabled) { background: var(--surface-soft); }
+.routine-card .routine-resume { margin-left: auto; flex-shrink: 0; }
+.routine-card-details { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--hairline); }
+.routine-card-details[hidden] { display: none; }
+.routine-detail-fields { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 8px 10px; margin: 0; font-size: 13px; line-height: 1.7; }
+.routine-detail-fields dt { color: var(--body-muted); }
+.routine-detail-fields dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.routine-content { white-space: pre-wrap; max-height: 220px; overflow-y: auto; }
+.routine-history { margin-top: 14px; font-size: 12px; line-height: 1.6; }
+.routine-history h4 { display: flex; align-items: baseline; gap: 6px; margin: 0 0 7px; font-size: 12px; font-weight: 600; color: var(--body-muted); }
+.routine-history h4 > span { font-weight: 400; font-variant-numeric: tabular-nums; }
+.routine-history ul { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.routine-history li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px 8px; }
+.routine-history li > span { min-width: 0; overflow-wrap: anywhere; }
+.routine-history small { display: block; color: var(--body-muted); font-size: 12px; }
+.routine-history .btn { min-height: 32px; padding: 5px 9px; font-size: 12px; }
+.routine-history-empty { margin: 4px 0 0; color: var(--body-muted); }
+.routine-card button:disabled { cursor: wait; opacity: .6; }
+.routine-card button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .routine-card { padding: 10px 12px 12px; }
+  .routine-card .routine-card-title { font-size: 17px; }
+  .routine-details-toggle { gap: 8px; }
+}
+@media (pointer: coarse) {
+  .routine-card .routine-prompt .btn, .routine-card .routine-resume, .routine-card .routine-history .btn { min-height: 44px; }
+  .routine-more-button { flex-basis: 44px; width: 44px; min-height: 44px; }
+  .routine-details-toggle { min-height: 44px; }
+}

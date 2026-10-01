@@ -9,6 +9,7 @@ import {
   STATUS_LABELS,
 } from "../constants";
 import { useAppData } from "../context/AppDataContext";
+import { LunchMateRankingModal } from "../components/LunchMateRankingModal";
 import { db } from "../db";
 import type { Project, Task, TaskType } from "../models";
 import {
@@ -291,6 +292,7 @@ export function ArchivePage() {
   const [activityMode, setActivityMode] = useState<ActivityMode>("completed");
   const [showAllRecords, setShowAllRecords] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showLunchRanking, setShowLunchRanking] = useState(false);
   const [isAnalyzingLunch, setIsAnalyzingLunch] = useState(false);
   const [lunchAnalysisError, setLunchAnalysisError] = useState("");
   const [lunchRetryRequestId, setLunchRetryRequestId] = useState(0);
@@ -410,6 +412,7 @@ export function ArchivePage() {
     [cachedLunchGroups, periodLunchCandidates],
   );
   const topLunchMate = lunchGroups[0];
+  const periodLabel = PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? "전체";
   const hasAiLunchAnalysis = Boolean(cachedLunchGroups);
   const persistedLunchAnalysisError = lunchCache?.lastError === "request_failed"
     ? "AI 정리를 완료하지 못했습니다. 설정의 모델과 API 키를 확인한 뒤 다시 시도해 주세요."
@@ -480,6 +483,11 @@ export function ArchivePage() {
 
   function resetFilters() {
     setFilters({ keyword: "", projectId: "", taskTypeId: "", fromDate: "", toDate: "", majorOnly: false });
+  }
+
+  function retryLunchAnalysis() {
+    setLunchAnalysisError("");
+    setLunchRetryRequestId((current) => current + 1);
   }
 
   function openTask(task: Task) {
@@ -692,20 +700,30 @@ export function ArchivePage() {
             <p className="eyebrow">HIGHLIGHTS</p>
             <h3 id="archive-record-title">기억해 둘 만한 기록</h3>
           </div>
-          <span>{PERIOD_OPTIONS.find((option) => option.value === period)?.label} 기준</span>
+          <span>{periodLabel} 기준</span>
         </header>
         <div className="archive-record-grid">
           <article className="archive-record-card lunch">
-            <div className="archive-record-card-top">
-              <span className="archive-record-icon" aria-hidden="true">🍽</span>
-              <span className="archive-record-kicker">점심 메이트</span>
-              {isAnalyzingLunch ? <span className="archive-ai-badge">AI 정리 중</span> : hasAiLunchAnalysis ? <span className="archive-ai-badge">AI 정리됨</span> : null}
-            </div>
-            <strong>{topLunchMate?.displayName ?? "아직 기록 없음"}</strong>
-            <p>
-              {topLunchMate ? `함께 점심 먹은 횟수 : ${topLunchMate.count} 번` : "함께 점심 먹은 횟수 : 0 번"}
-            </p>
-            {hasAiLunchAnalysis && topLunchMate && topLunchMate.aliases.length > 1 ? <small className="archive-alias-note">{topLunchMate.aliases.join(" · ")} 동일인 분석</small> : null}
+            <button
+              type="button"
+              className="archive-lunch-ranking-trigger"
+              aria-label="점심 메이트 랭킹 보기"
+              aria-describedby="archive-top-lunch-name archive-top-lunch-count"
+              aria-haspopup="dialog"
+              onClick={() => setShowLunchRanking(true)}
+            >
+              <span className="archive-record-card-top">
+                <span className="archive-record-icon" aria-hidden="true">🍽</span>
+                <span className="archive-record-kicker">점심 메이트</span>
+                {isAnalyzingLunch ? <span className="archive-ai-badge">AI 정리 중</span> : hasAiLunchAnalysis ? <span className="archive-ai-badge">AI 정리됨</span> : null}
+              </span>
+              <strong id="archive-top-lunch-name">{topLunchMate?.displayName ?? "아직 기록 없음"}</strong>
+              <span id="archive-top-lunch-count" className="archive-lunch-count">
+                {topLunchMate ? `함께 점심 먹은 횟수 : ${topLunchMate.count}회` : "함께 점심 먹은 횟수 : 0회"}
+              </span>
+              {hasAiLunchAnalysis && topLunchMate && topLunchMate.aliases.some((alias) => alias !== topLunchMate.displayName) ? <small className="archive-alias-note">{topLunchMate.aliases.join(" · ")} 동일인 분석</small> : null}
+              <span className="archive-lunch-ranking-hint">랭킹 보기 <span aria-hidden="true">→</span></span>
+            </button>
             {lunchAnalysisError || persistedLunchAnalysisError ? (
               <span className="archive-card-error" role="alert">
                 {lunchAnalysisError || persistedLunchAnalysisError}
@@ -716,10 +734,7 @@ export function ArchivePage() {
                 type="button"
                 className="archive-card-action"
                 disabled={isAnalyzingLunch}
-                onClick={() => {
-                  setLunchAnalysisError("");
-                  setLunchRetryRequestId((current) => current + 1);
-                }}
+                onClick={retryLunchAnalysis}
               >
                 {isAnalyzingLunch ? "다시 정리 중" : "AI 정리 다시 시도"}
               </button>
@@ -858,6 +873,17 @@ export function ArchivePage() {
           </div>
         ) : null}
       </section>
+      {showLunchRanking ? (
+        <LunchMateRankingModal
+          groups={lunchGroups}
+          periodLabel={periodLabel}
+          isAnalyzing={isAnalyzingLunch}
+          hasAiAnalysis={hasAiLunchAnalysis}
+          analysisError={lunchAnalysisError || persistedLunchAnalysisError}
+          onRetry={retryLunchAnalysis}
+          onClose={() => setShowLunchRanking(false)}
+        />
+      ) : null}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import { useDialogFocus } from "../hooks/useDialogFocus";
 import { NavLink, useLocation, useNavigate } from "../routing";
 import { showToast } from "../utils/toast";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
+import { AiScheduleOrb } from "./AiScheduleOrb";
 import { AskDataModal } from "./AskDataModal";
 import { HelpModal } from "./HelpModal";
 import { ModalBackdrop } from "./ModalBackdrop";
@@ -16,8 +17,8 @@ const planaiLogo = __PLANAI_APP_ICON_URL__;
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "대시보드" },
-  { to: "/routines", label: "나의 루틴" },
   { to: "/notes", label: "노트" },
+  { to: "/routines", label: "나의 루틴" },
   { to: "/projects", label: "프로젝트" },
   { to: "/archive", label: "나의 기록" },
 ];
@@ -191,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button type="button" className="btn btn-soft" onClick={() => setIsAskOpen(true)} aria-label="내 데이터에 질문">
               질문
             </button>
-            <NavLink to="/settings" className={({ isActive }) => `btn btn-icon top-nav-settings${isActive ? " active" : ""}`} aria-label="설정" title="설정" aria-current={location.pathname === "/settings" ? "page" : undefined}>
+            <NavLink to="/settings" className={({ isActive }) => `btn btn-soft btn-icon top-nav-settings${isActive ? " active" : ""}`} aria-label="설정" title="설정" aria-current={location.pathname === "/settings" ? "page" : undefined}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
                 <path d="m9.5 3-.5 2a8 8 0 0 0-1.5.9l-2-.6L3 9.5 4.5 11a8 8 0 0 0 0 2L3 14.5l2.5 4.2 2-.6A8 8 0 0 0 9 19l.5 2h5l.5-2a8 8 0 0 0 1.5-.9l2 .6 2.5-4.2-1.5-1.5a8 8 0 0 0 0-2L21 9.5l-2.5-4.2-2 .6A8 8 0 0 0 15 5l-.5-2z" />
                 <circle cx="12" cy="12" r="3" />
@@ -226,15 +227,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <header className="panel-header ai-add-modal-header">
               <div className="ai-add-modal-heading">
-                <span className="ai-add-modal-orb" aria-hidden="true">
-                  <span />
-                  <span />
-                  <i />
-                </span>
+                <AiScheduleOrb active={isAiAddOpen} />
                 <div>
                   <p className="eyebrow">AI SCHEDULE</p>
                   <h2>AI 일정 추가</h2>
-                  <small>원하는 시간을 자연스럽게 말하면, 확인할 수 있는 일정 초안으로 정리해요.</small>
+                  <small>일정이 포함된 내용을 넣으면, AI가 일정 초안으로 정리해요</small>
                 </div>
               </div>
               <button

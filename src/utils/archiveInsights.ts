@@ -49,7 +49,7 @@ export function extractLunchMateCandidates(
   projectMap: Record<string, Project | undefined>,
   typeMap: Record<string, TaskType | undefined>,
 ): LunchMateCandidate[] {
-  const rawCounts = new Map<string, number>();
+  const machineGroups = new Map<string, { names: Set<string>; count: number }>();
   for (const task of tasks) {
     if (!isLunchArchiveTask(task, projectMap, typeMap)) {
       continue;
@@ -59,22 +59,22 @@ export function extractLunchMateCandidates(
       .split(/\s*(?:\/|,|·|＆|&)\s*/)
       .map((name) => name.trim())
       .filter((name) => !IGNORED_LUNCH_NAMES.has(name));
-    for (const name of new Set(names)) {
-      rawCounts.set(name, (rawCounts.get(name) ?? 0) + 1);
+    const seenPeople = new Set<string>();
+    for (const name of names) {
+      const key = normalizedPersonKey(name);
+      if (!key) continue;
+      const current = machineGroups.get(key) ?? { names: new Set<string>(), count: 0 };
+      current.names.add(name);
+      if (!seenPeople.has(key)) {
+        current.count += 1;
+        seenPeople.add(key);
+      }
+      machineGroups.set(key, current);
     }
   }
 
-  const machineGroups = new Map<string, { names: string[]; count: number }>();
-  for (const [name, count] of rawCounts) {
-    const key = normalizedPersonKey(name);
-    if (!key) continue;
-    const current = machineGroups.get(key) ?? { names: [], count: 0 };
-    current.names.push(name);
-    current.count += count;
-    machineGroups.set(key, current);
-  }
   return [...machineGroups.values()]
-    .map((group) => ({ name: preferredPersonName(group.names), count: group.count }))
+    .map((group) => ({ name: preferredPersonName([...group.names]), count: group.count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
 }
 
@@ -94,19 +94,25 @@ export function applyLunchMateAliasGroups(
   if (!aliasGroups || aliasGroups.length === 0) {
     return buildMachineLunchMateGroups(candidates);
   }
-  const countByName = new Map(candidates.map((candidate) => [candidate.name, candidate.count]));
   const used = new Set<string>();
   const groups: LunchMateGroup[] = [];
   for (const aliasGroup of aliasGroups) {
-    const aliases = aliasGroup.aliases.filter((alias) => countByName.has(alias));
+    const aliasKeys = new Set(aliasGroup.aliases
+      .filter((alias) => typeof alias === "string")
+      .map(normalizedPersonKey));
+    const matchedCandidates = candidates.filter(
+      (candidate) => !used.has(candidate.name) && aliasKeys.has(normalizedPersonKey(candidate.name)),
+    );
+    const aliases = matchedCandidates.map((candidate) => candidate.name);
     if (aliases.length === 0) continue;
     aliases.forEach((alias) => used.add(alias));
     groups.push({
-      displayName: aliases.includes(aliasGroup.displayName)
+      // Keep the resolved name even when this period contains only a shorter alias.
+      displayName: aliasGroup.aliases.includes(aliasGroup.displayName)
         ? aliasGroup.displayName
         : preferredPersonName(aliases),
       aliases,
-      count: aliases.reduce((sum, alias) => sum + (countByName.get(alias) ?? 0), 0),
+      count: matchedCandidates.reduce((sum, candidate) => sum + candidate.count, 0),
       confidence: aliasGroup.confidence,
     });
   }

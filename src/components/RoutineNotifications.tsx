@@ -7,8 +7,8 @@ export function RoutineNotifications() {
   const { rows, ready } = useRoutines();
   const { setting } = useAppData();
   const payload = JSON.stringify({ enabled: Boolean(setting.notificationsEnabled),
-    items: rows.filter((row) => row.routine.isActive).map(({ routine, cycle }) => ({
-      id: `${routine.id}:${cycle.period}:${cycle.notifyDate}`,
+    items: rows.filter((row) => row.routine.isActive && !row.cycle.ended && row.cycle.notifyDate).map(({ cycle }) => ({
+      id: `${cycle.id}:${cycle.notifyDate}`,
       when: new Date(`${cycle.notifyDate}T09:00:00`).getTime(),
     })) });
   useEffect(() => {

@@ -29,8 +29,9 @@ import type {
 } from "./models";
 import { toIsoNow } from "./utils/date";
 import { reconcileDefaultUserContextReferences } from "./utils/defaultReferenceRepair";
+import { isCalendarDate, isMonth, validateRoutine } from "./utils/routines";
 
-class ScheduleDB extends Dexie {
+export class ScheduleDB extends Dexie {
   routines!: Table<Routine, string>;
   routineOccurrences!: Table<RoutineOccurrence, string>;
   tasks!: Table<Task, string>;
@@ -45,8 +46,8 @@ class ScheduleDB extends Dexie {
   projectSubcategories!: Table<ProjectSubcategory, string>;
   archiveInsightCaches!: Table<ArchiveInsightCache, string>;
 
-  constructor() {
-    super("schedule-manager-db");
+  constructor(name = "schedule-manager-db") {
+    super(name);
     this.version(1).stores({
       tasks: "id, startAt, status, projectId, taskTypeId, isMajor, updatedAt",
       projects: "id, name, isActive, updatedAt",
@@ -99,6 +100,32 @@ class ScheduleDB extends Dexie {
       archiveInsightCaches: "id, updatedAt",
     });
     this.version(6).stores({ routines: "id, updatedAt", routineOccurrences: "id, routineId, taskId, updatedAt" });
+    this.version(7).stores({ routines: "id, updatedAt", routineOccurrences: "id, routineId, taskId, updatedAt" }).upgrade(async (transaction) => {
+      const routines = await transaction.table<Routine, string>("routines").toArray();
+      const occurrences = await transaction.table<RoutineOccurrence, string>("routineOccurrences").toArray();
+      const normalizedRoutines = routines.map((routine) => ({ ...validateRoutine(routine),
+        id: routine.id, createdAt: routine.createdAt, updatedAt: routine.updatedAt }));
+      const seen = new Set<string>();
+      const normalizedOccurrences = occurrences.map((record) => {
+        const legacyIdentity = isMonth(record.period) && record.dueDate.slice(0, 7) === record.period
+          && record.id === `${record.routineId}:${record.period}`;
+        const dateIdentity = record.period === record.dueDate && record.id === `${record.routineId}:${record.dueDate}`;
+        if (!isCalendarDate(record.dueDate) || (!legacyIdentity && !dateIdentity)
+          || !["snoozed", "created", "skipped", "acknowledged"].includes(record.status)
+          || (record.status === "snoozed" && (!record.snoozedUntil || !isCalendarDate(record.snoozedUntil)))) {
+          throw new Error("루틴 처리 이력의 날짜 또는 회차 정보가 올바르지 않습니다. 기존 데이터는 유지됩니다.");
+        }
+        const id = `${record.routineId}:${record.dueDate}`;
+        // Conflicting histories must not be silently merged: abort the whole
+        // IndexedDB upgrade so the original records and linked tasks survive.
+        if (seen.has(id)) throw new Error("같은 날짜의 루틴 처리 이력이 중복되어 변환할 수 없습니다. 기존 데이터는 유지됩니다.");
+        seen.add(id);
+        return { ...record, id, period: record.dueDate };
+      });
+      if (normalizedRoutines.length) await transaction.table("routines").bulkPut(normalizedRoutines);
+      await transaction.table("routineOccurrences").clear();
+      if (normalizedOccurrences.length) await transaction.table("routineOccurrences").bulkAdd(normalizedOccurrences);
+    });
   }
 }
 

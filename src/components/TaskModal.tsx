@@ -9,9 +9,11 @@ interface TaskModalProps {
   children: ReactNode;
   hasUnsavedChanges?: boolean;
   isBusy?: boolean;
+  className?: string;
+  eyebrow?: string;
 }
 
-export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false, isBusy = false }: TaskModalProps) {
+export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false, isBusy = false, className = "", eyebrow = "SCHEDULE" }: TaskModalProps) {
   const titleId = useId();
 
   function requestClose() {
@@ -36,7 +38,7 @@ export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false
     >
       <section
         ref={dialogRef}
-        className="modal-card panel task-modal-card"
+        className={`modal-card panel task-modal-card ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -44,7 +46,7 @@ export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false
       >
         <header className="panel-header task-modal-header">
           <div>
-            <p className="eyebrow">SCHEDULE</p>
+            <p className="eyebrow">{eyebrow}</p>
             <h2 id={titleId}>{title}</h2>
           </div>
           <button

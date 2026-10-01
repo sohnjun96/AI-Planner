@@ -1,15 +1,34 @@
 export type TaskStatus = "NOT_DONE" | "ON_HOLD" | "DONE" | "CANCELED";
 export type RecurrencePattern = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
 
+export interface RoutineRecurrence {
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  interval: number;
+  startDate: string;
+  /** Monday = 1, Sunday = 7. */
+  weekdays: number[];
+  months: number[];
+  monthMode: "dates" | "ordinal";
+  monthDays: Array<number | "last">;
+  ordinal: 1 | 2 | 3 | 4 | 5 | -1;
+  ordinalWeekdays: number[];
+  missingDate: "clamp" | "skip";
+  weekend: "none" | "previous" | "next";
+  excludeDates: string[];
+  end: { type: "never" } | { type: "date"; date: string } | { type: "count"; count: number };
+}
+
 export interface Routine {
   id: string;
   title: string;
   content: string;
   projectId: string;
   taskTypeId: string;
-  intervalMonths: number;
-  startMonth: string;
-  dayOfMonth: number;
+  recurrence?: RoutineRecurrence;
+  /** Legacy monthly inputs are accepted and normalized when saved. */
+  intervalMonths?: number;
+  startMonth?: string;
+  dayOfMonth?: number;
   time: string;
   leadDays: number;
   mode: "schedule" | "remind";

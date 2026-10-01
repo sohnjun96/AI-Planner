@@ -3,6 +3,8 @@ import JSZip from "jszip";
 import { encodeBackupFile, decodeBackupFile, MAX_BACKUP_BYTES } from "../src/utils/backupArchive";
 import { isTaskDisplayedOnDate, isTaskOverdue, selectUpcomingAlarmTasks } from "../src/utils/taskTiming";
 import { buildTaskConflictMap, findTaskConflictsForRange } from "../src/utils/taskConflicts";
+import { applyLunchMateAliasGroups, extractLunchMateCandidates } from "../src/utils/archiveInsights";
+import { LUNCH_PROJECT_ID } from "../src/constants";
 import type { Task } from "../src/models";
 
 const now = new Date(2026, 8, 8, 12).getTime();
@@ -28,6 +30,46 @@ assert.deepEqual(buildTaskConflictMap([a, b]), { a: [], b: [] });
 assert.equal(findTaskConflictsForRange([a], b.startAt, b.endAt).length, 0);
 assert.equal(findTaskConflictsForRange([a], new Date(now + 1_800_000).toISOString(), b.endAt).length, 1);
 assert.equal(findTaskConflictsForRange([a], a.startAt, a.startAt).length, 0);
+
+const lunchTasks = [
+  { ...task("lunch-1", now), projectId: LUNCH_PROJECT_ID, title: "(점) 김 태정 / 김태정님 / 박민수 / 혼자" },
+  { ...task("lunch-2", now), projectId: LUNCH_PROJECT_ID, title: "(점심) 김태정" },
+  { ...task("work", now), title: "박민수" },
+];
+assert.deepEqual(extractLunchMateCandidates(lunchTasks, {}, {}), [
+  { name: "김태정님", count: 2 },
+  { name: "박민수", count: 1 },
+]);
+// The canonical name can belong to a different month; only current-period counts apply.
+assert.deepEqual(applyLunchMateAliasGroups([
+  { name: "태정", count: 2 },
+  { name: "박민수", count: 3 },
+  { name: "이서연", count: 2 },
+], [
+  { displayName: "김태정", aliases: ["김태정", "태정"], count: 10, confidence: 0.95 },
+  { displayName: "지난메이트", aliases: ["지난메이트"], count: 5, confidence: 1 },
+]), [
+  { displayName: "박민수", aliases: ["박민수"], count: 3, confidence: 1 },
+  { displayName: "김태정", aliases: ["태정"], count: 2, confidence: 0.95 },
+  { displayName: "이서연", aliases: ["이서연"], count: 2, confidence: 1 },
+]);
+// Machine-normalized spellings may choose different representatives between periods.
+// Repeated aliases and overlapping cached groups must count a candidate only once.
+assert.deepEqual(applyLunchMateAliasGroups([
+  { name: "김태정", count: 2 },
+  { name: "태정", count: 1 },
+], [
+  { displayName: "김태정님", aliases: ["김태정님", "태정", "태정"], count: 8, confidence: 0.95 },
+  { displayName: "김 태정", aliases: ["김 태정", "태정"], count: 4, confidence: 0.8 },
+]), [
+  { displayName: "김태정님", aliases: ["김태정", "태정"], count: 3, confidence: 0.95 },
+]);
+assert.deepEqual(applyLunchMateAliasGroups([{ name: "박민수", count: 1 }], undefined), [
+  { displayName: "박민수", aliases: ["박민수"], count: 1, confidence: 1 },
+]);
+assert.deepEqual(applyLunchMateAliasGroups([], [
+  { displayName: "김태정", aliases: ["김태정", "태정"], count: 10, confidence: 0.95 },
+]), []);
 const small = await encodeBackupFile('{"version":5}');
 assert.equal(small.extension, "json");
 assert.equal(await decodeBackupFile(small.blob), '{"version":5}');

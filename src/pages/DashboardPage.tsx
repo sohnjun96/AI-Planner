@@ -3,9 +3,12 @@ import { isTaskDisplayedOnDate } from "../utils/taskTiming";
 import { removeReminder } from "../utils/reminderQueue";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import "./DashboardPage.weekNavigation.css";
+import "./DashboardPage.scheduleFilters.css";
+import "./DashboardPage.holidays.css";
 import { useNavigate, useSearchParams } from "../routing";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { DailyBriefing } from "../components/DailyBriefing";
+import { DashboardScheduleSummary } from "../components/DashboardScheduleSummary";
 import {
   DAY_COMPLETE_CELEBRATION_DURATION_MS,
   DayCompleteCelebration,
@@ -13,6 +16,7 @@ import {
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
 import { ScheduleReminderModal } from "../components/ScheduleReminderModal";
+import { ScheduleBoardFilterModal } from "../components/ScheduleBoardFilterModal";
 import { TaskForm, type TaskFormInteractionState } from "../components/TaskForm";
 import { TaskModal } from "../components/TaskModal";
 import { TaskViewSegmentedControl } from "../components/TaskViewSegmentedControl";
@@ -30,6 +34,7 @@ import {
   shiftIsoToDateKey,
 } from "../utils/date";
 import { GLOBAL_MEMO_KEY } from "../utils/memos";
+import { getKoreanHolidayLabel } from "../utils/holidays";
 import { buildTaskConflictMap } from "../utils/taskConflicts";
 import { shouldCelebrateAllTodayTasksCompleted } from "../utils/dayCompletion";
 import {
@@ -39,6 +44,13 @@ import {
   isTaskVisibleOnBoard,
 } from "../utils/taskStatus";
 import { isLunchTask } from "../utils/lunchTasks";
+import { getDashboardScheduleSummary } from "../utils/dashboardSummary";
+import {
+  createEmptyScheduleBoardFilters,
+  filterScheduleBoardTasks,
+  getActiveScheduleBoardFilterCount,
+  type ScheduleBoardFilters,
+} from "../utils/scheduleBoardFilters";
 
 const DASHBOARD_VIEW_MODE_STORAGE_KEY = "ai-planner:dashboard-view-mode";
 
@@ -154,6 +166,11 @@ function formatWeekday(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
 }
 
+function renderHolidayLabel(dateKey: string) {
+  const label = getKoreanHolidayLabel(dateKey);
+  return label ? <span className="calendar-holiday-label" title={label}>{label}</span> : null;
+}
+
 function formatTimeOnly(value: string, timeFormat: "24h" | "12h"): string {
   return new Intl.DateTimeFormat("ko-KR", {
     hour: "2-digit",
@@ -165,15 +182,6 @@ function formatTimeOnly(value: string, timeFormat: "24h" | "12h"): string {
 function formatTaskTime(task: Task, timeFormat: "24h" | "12h"): string {
   const startTime = formatTimeOnly(task.startAt, timeFormat);
   return task.endAt ? `${startTime} - ${formatTimeOnly(task.endAt, timeFormat)}` : startTime;
-}
-
-function formatShortDateTime(value: string): string {
-  const date = new Date(value);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${month}.${day}. ${hours}:${minutes}`;
 }
 
 function colorWithAlpha(color: string, alpha: number): string {
@@ -223,14 +231,6 @@ function compareByStatusThenStartAt(a: Task, b: Task): number {
     return rankDiff;
   }
   return compareByStartAtAsc(a, b);
-}
-
-function isSubmissionTaskType(task: Task, typeMap: Record<string, TaskType | undefined>): boolean {
-  const taskType = typeMap[task.taskTypeId];
-  if (!taskType) {
-    return false;
-  }
-  return taskType.name.trim().toLowerCase() === "제출";
 }
 
 function isLunchProjectTask(task: Task, projectMap: Record<string, Project | undefined>): boolean {
@@ -513,8 +513,10 @@ export function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
   const [datePopoverKey, setDatePopoverKey] = useState<string | null>(null);
   const [calendarViewMode, setCalendarViewMode] = useState<TaskViewMode>(getInitialCalendarViewMode);
-  const [isTopbarExpanded, setIsTopbarExpanded] = useState(false);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
   const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("NOT_DONE");
+  const [boardFilters, setBoardFilters] = useState<ScheduleBoardFilters>(createEmptyScheduleBoardFilters);
+  const [isBoardFilterOpen, setIsBoardFilterOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<DashboardContextMenu | null>(null);
   const [celebrationRevision, setCelebrationRevision] = useState(0);
   const previousTasksRef = useRef<Task[] | null>(null);
@@ -523,8 +525,23 @@ export function DashboardPage() {
   const handledDeepLinkRef = useRef("");
   const taskModalReturnDateRef = useRef<string | null>(null);
 
-  const today = useMemo(() => new Date(), []);
+  const [today, setToday] = useState(() => new Date());
   const todayKey = getDateKey(today);
+
+  useEffect(() => {
+    const refreshToday = () => {
+      const now = new Date();
+      setToday((current) => getDateKey(current) === getDateKey(now) ? current : now);
+    };
+    const timer = window.setInterval(refreshToday, 30_000);
+    window.addEventListener("focus", refreshToday);
+    document.addEventListener("visibilitychange", refreshToday);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshToday);
+      document.removeEventListener("visibilitychange", refreshToday);
+    };
+  }, []);
 
   useEffect(() => {
     const previousTasks = previousTasksRef.current;
@@ -606,10 +623,13 @@ export function DashboardPage() {
     () => tasks.filter((task) => !isPastCompletedHidden(task, setting.showPastCompleted)),
     [tasks, setting.showPastCompleted],
   );
-  const calendarTasks = tasks;
-
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const typeMap = useMemo(() => Object.fromEntries(taskTypes.map((type) => [type.id, type])), [taskTypes]);
+  const calendarTasks = useMemo(
+    () => filterScheduleBoardTasks(tasks, boardFilters, projectMap, typeMap),
+    [tasks, boardFilters, projectMap, typeMap],
+  );
+  const activeBoardFilterCount = getActiveScheduleBoardFilterCount(boardFilters);
   const generalProjectId = useMemo(
     () => projects.find((project) => project.id === DEFAULT_PROJECT_ID)?.id ?? projects.find((project) => project.name === "일반")?.id ?? projects[0]?.id ?? DEFAULT_PROJECT_ID,
     [projects],
@@ -620,20 +640,17 @@ export function DashboardPage() {
   );
   const memoMap = useMemo(() => Object.fromEntries(memos.map((memo) => [memo.date, memo])), [memos]);
   const conflictMap = useMemo(() => buildTaskConflictMap(visibleTasks), [visibleTasks]);
-  const calendarConflictMap = useMemo(() => buildTaskConflictMap(calendarTasks), [calendarTasks]);
+  // 숨겨진 일정과의 충돌도 유지한다. 필터는 표시할 일정만 제한한다.
+  const calendarConflictMap = useMemo(() => buildTaskConflictMap(tasks), [tasks]);
 
   const todayTasks = useMemo(
     () => tasks.filter((task) => isTaskDisplayedOnDate(task, todayKey) && isTaskVisibleOnBoard(task)).sort(compareByStatusThenStartAt),
     [tasks, todayKey],
   );
 
-  const submissionTasks = useMemo(
-    () =>
-      tasks
-        .filter((task) => isSubmissionTaskType(task, typeMap))
-        .filter(isTaskVisibleOnBoard)
-        .sort(compareByStatusThenStartAt),
-    [tasks, typeMap],
+  const scheduleSummary = useMemo(
+    () => getDashboardScheduleSummary(tasks, typeMap, todayKey),
+    [tasks, typeMap, todayKey],
   );
 
   const calendarListGroups = useMemo(() => groupTasksByDate(calendarTasks), [calendarTasks]);
@@ -1189,46 +1206,6 @@ export function DashboardPage() {
     );
   }
 
-  function renderMarkdownChecklist(
-    items: Task[],
-    options: {
-      title: string;
-      formatLabel: (task: Task) => string;
-      emptyText: string;
-    },
-  ) {
-    return (
-      <section className="dashboard-markdown-block" aria-label={options.title}>
-        <h3>{options.title}</h3>
-        {items.length === 0 ? (
-          <p className="dashboard-markdown-empty">{options.emptyText}</p>
-        ) : (
-          <ul className="dashboard-markdown-list">
-            {items.map((task) => (
-              <li key={`${options.title}-${task.id}`} className={`dashboard-markdown-item ${task.status === "DONE" ? "done" : ""}`}>
-                <div className="dashboard-markdown-row">
-                  <input
-                    type="checkbox"
-                    checked={task.status === "DONE"}
-                    onChange={(event) => toggleTaskCompletion(task, event.target.checked)}
-                    aria-label={`${task.title} 완료 여부`}
-                  />
-                  <button
-                    type="button"
-                    className={`dashboard-markdown-line ${task.isMajor ? "major" : ""}`}
-                    onClick={() => openEditTask(task.id)}
-                  >
-                    {options.formatLabel(task)}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    );
-  }
-
   function renderCalendarTaskCards(items: Task[], emptyText: string) {
     if (items.length === 0) {
       return <p className="empty-text">{emptyText}</p>;
@@ -1318,6 +1295,7 @@ export function DashboardPage() {
           <div>
             <span>선택일</span>
             <strong>{formatDateLabel(dateKey)}</strong>
+            {renderHolidayLabel(dateKey)}
           </div>
           <button type="button" className="btn btn-soft" onClick={() => openCreateTask(dateKey)}>
             일정 추가
@@ -1370,57 +1348,40 @@ export function DashboardPage() {
   return (
     <div className="dashboard-workspace">
       {celebrationRevision > 0 ? <DayCompleteCelebration key={celebrationRevision} /> : null}
-      <section className={`dashboard-topbar compact-dashboard-topbar ${isTopbarExpanded ? "expanded" : "collapsed"}`}>
+      <section className="dashboard-topbar compact-dashboard-topbar">
         <div className="dashboard-summary-heading">
-          <button
-            type="button"
-            className="dashboard-summary-trigger"
-            onClick={() => setIsTopbarExpanded((prev) => !prev)}
-            aria-expanded={isTopbarExpanded}
-            aria-controls="dashboard-summary-panel"
-            aria-label={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
-            title={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
-          >
+          <div className="dashboard-summary-date">
             <p className="eyebrow">TODAY</p>
-            <h2>{formatFullDate(today)}</h2>
-          </button>
+            <h2>
+              <button
+                type="button"
+                className="dashboard-summary-date-toggle"
+                onClick={() => setIsSummaryExpanded((expanded) => !expanded)}
+                aria-expanded={isSummaryExpanded}
+                aria-controls="dashboard-summary-panel"
+                aria-label={`${formatFullDate(today)} 일정 요약 ${isSummaryExpanded ? "접기" : "펼치기"}`}
+                title={isSummaryExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
+              >
+                <span>{formatFullDate(today)}</span>
+                <svg className="dashboard-summary-date-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+            </h2>
+          </div>
           <DailyBriefing />
         </div>
-        <div className="dashboard-hero-actions">
-          <TaskViewSegmentedControl
-            value={calendarViewMode}
-            onChange={handleCalendarViewModeChange}
-            ariaLabel="대시보드 일정 보기 방식"
-          />
-          {/* 제목 버튼과 같은 패널을 여닫는 보조 버튼 — 보조기술에는 중복이라 숨긴다 */}
-          <button
-            type="button"
-            className={`btn btn-soft dashboard-summary-toggle ${isTopbarExpanded ? "expanded" : ""}`}
-            onClick={() => setIsTopbarExpanded((prev) => !prev)}
-            aria-hidden="true"
-            tabIndex={-1}
-            title={isTopbarExpanded ? "일정 요약 접기" : "일정 요약 펼치기"}
-          >
-            {isTopbarExpanded ? "요약 접기" : "요약 펼치기"}
-          </button>
-        </div>
-        <div
-          id="dashboard-summary-panel"
-          className={`dashboard-summary-row dashboard-markdown-summary ${isTopbarExpanded ? "expanded" : "collapsed"}`}
-          hidden={!isTopbarExpanded}
-        >
-          {renderMarkdownChecklist(todayTasks, {
-            title: "오늘 일정",
-            formatLabel: (task) => `${formatTimeOnly(task.startAt, setting.timeFormat)} ${task.title}`,
-            emptyText: "오늘 일정이 없습니다.",
-          })}
-          <div className="dashboard-markdown-divider" aria-hidden="true" />
-          {renderMarkdownChecklist(submissionTasks, {
-            title: "제출 일정",
-            formatLabel: (task) => `${formatShortDateTime(task.startAt)} ${task.title}`,
-            emptyText: "제출 일정이 없습니다.",
-          })}
-        </div>
+        <DashboardScheduleSummary
+          expanded={isSummaryExpanded}
+          summary={scheduleSummary}
+          projectMap={projectMap}
+          typeMap={typeMap}
+          todayKey={todayKey}
+          timeFormat={setting.timeFormat}
+          onOpenTask={openEditTask}
+          onCompleteTask={toggleTaskCompletion}
+          onContextMenu={openTaskContextMenu}
+        />
       </section>
 
       {tasks.length === 0 && notes.length === 0 ? (
@@ -1452,17 +1413,44 @@ export function DashboardPage() {
               <p className="eyebrow">CALENDAR</p>
               <h3>일정 보드</h3>
             </div>
-            <button type="button" className="btn btn-primary dashboard-ai-add-button" onClick={() => openAiSchedule("")}>
-              AI 일정 추가
-            </button>
+            <div className="dashboard-calendar-header-actions">
+              <div className="dashboard-board-primary-actions">
+                <button
+                  type="button"
+                  className={`btn btn-soft dashboard-board-filter-button ${activeBoardFilterCount > 0 ? "is-active" : ""}`}
+                  aria-label="일정 보드 필터"
+                  aria-haspopup="dialog"
+                  aria-description={activeBoardFilterCount > 0 ? `필터 ${activeBoardFilterCount}개 적용 중` : undefined}
+                  onClick={() => setIsBoardFilterOpen(true)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 5h16l-6 7v6l-4 2v-8z" />
+                  </svg>
+                  필터
+                  {activeBoardFilterCount > 0 ? <span className="dashboard-board-filter-count" aria-hidden="true">{activeBoardFilterCount}</span> : null}
+                </button>
+                <button type="button" className="btn btn-primary dashboard-ai-add-button" onClick={() => openAiSchedule("")}>
+                  AI 일정 추가
+                </button>
+              </div>
+              <TaskViewSegmentedControl
+                value={calendarViewMode}
+                onChange={handleCalendarViewModeChange}
+                ariaLabel="대시보드 일정 보기 방식"
+              />
+            </div>
           </header>
 
           {calendarViewMode === "MONTH" ? (
             <div className="dashboard-calendar-month">
+              {activeBoardFilterCount > 0 && calendarTasks.length === 0 ? (
+                <p className="dashboard-board-filter-empty">현재 필터 조건에 맞는 일정이 없습니다.</p>
+              ) : null}
               <MonthCalendar
                 selectedDate={selectedDate}
                 weekStartsOn={setting.weekStartsOn}
                 daySummaryByDate={daySummaryByDate}
+                getHolidayLabelForDate={getKoreanHolidayLabel}
                 onSelectDate={handleCalendarDateSelect}
                 onDropTaskToDate={handleDropTaskToDate}
                 onCreateTaskAtDate={openCreateTask}
@@ -1499,19 +1487,24 @@ export function DashboardPage() {
                 </div>
               </header>
               {renderScheduleStatGrid(weekViewSummary)}
+              {activeBoardFilterCount > 0 && weekVisibleTaskCount === 0 ? (
+                <p className="dashboard-board-filter-empty">이번 주에 현재 필터 조건에 맞는 일정이 없습니다.</p>
+              ) : null}
               <div className="week-agenda">
                 {weekDays.map((day) => {
                   const visibleDayTasks = getFilteredScheduleTasks(day.tasks, scheduleViewMode);
                   const isToday = day.key === todayKey;
                   const isEmpty = visibleDayTasks.length === 0;
+                  const holidayLabel = getKoreanHolidayLabel(day.key);
                   return (
-                    <section key={day.key} className={`week-day-row ${isToday ? "today" : ""} ${isEmpty ? "empty" : ""}`}>
+                    <section key={day.key} className={`week-day-row ${isToday ? "today" : ""} ${isEmpty ? "empty" : ""} ${holidayLabel ? "has-holiday" : ""}`}>
                       <div className="week-day-head">
                         <div className="week-day-date">
                           <span className="week-day-dow">{formatWeekday(day.date)}</span>
                           <strong className="week-day-num">{day.date.getDate()}</strong>
                           {isToday ? <span className="week-day-today-badge">오늘</span> : null}
                         </div>
+                        {renderHolidayLabel(day.key)}
                         <div className="week-day-meta">
                           <span>{isEmpty ? "일정 없음" : `${visibleDayTasks.length}/${day.tasks.length}개`}</span>
                           <button
@@ -1553,7 +1546,9 @@ export function DashboardPage() {
               {visibleCalendarListGroups.length === 0 ? (
                 <div className="empty-state compact">
                   <p>
-                    {listViewSourceTasks.length === 0 || scheduleViewMode === "all"
+                    {activeBoardFilterCount > 0
+                      ? "현재 필터 조건에 맞는 일정이 없습니다."
+                      : listViewSourceTasks.length === 0 || scheduleViewMode === "all"
                       ? "등록된 일정이 없습니다."
                       : `${STATUS_LABELS[scheduleViewMode]} 상태의 일정이 없습니다.`}
                   </p>
@@ -1561,10 +1556,11 @@ export function DashboardPage() {
               ) : null}
               {visibleCalendarListGroups.map((group) => {
                 const visibleGroupTasks = getFilteredScheduleTasks(group.tasks, scheduleViewMode);
+                const holidayLabel = getKoreanHolidayLabel(group.dateKey);
                 return (
-                  <section key={group.dateKey} className="task-date-group dashboard-list-date-group">
+                  <section key={group.dateKey} className={`task-date-group dashboard-list-date-group ${holidayLabel ? "has-holiday" : ""}`}>
                     <header>
-                      <h3>{group.title}</h3>
+                      <h3 className="dashboard-date-title">{group.title}{renderHolidayLabel(group.dateKey)}</h3>
                       <span>{visibleGroupTasks.length}/{group.tasks.length}개</span>
                     </header>
                     {renderCalendarTaskCards(visibleGroupTasks, "일정이 없습니다.")}
@@ -1594,7 +1590,7 @@ export function DashboardPage() {
           <header className="dashboard-card-header">
             <div>
               <p className="eyebrow">SELECTED DAY</p>
-              <h3>{formatDateLabel(selectedDate)} 일정</h3>
+              <h3 className="dashboard-date-title">{formatDateLabel(selectedDate)} 일정{renderHolidayLabel(selectedDate)}</h3>
             </div>
             <button type="button" className="btn btn-soft btn-compact" onClick={() => openCreateTask(selectedDate)}>
               일정 추가
@@ -1646,7 +1642,7 @@ export function DashboardPage() {
 
           {renderCalendarTaskCards(
             selectedDayFilteredTasks,
-            selectedDayFilter === "all" ? "이 날짜에 일정이 없습니다." : "해당 상태의 일정이 없습니다.",
+            activeBoardFilterCount > 0 ? "이 날짜에 현재 필터 조건에 맞는 일정이 없습니다." : selectedDayFilter === "all" ? "이 날짜에 일정이 없습니다." : "해당 상태의 일정이 없습니다.",
           )}
         </section>
       ) : null}
@@ -1671,6 +1667,20 @@ export function DashboardPage() {
           title={getContextMenuTitle()}
           items={getContextMenuItems()}
           onClose={() => setContextMenu(null)}
+        />
+      ) : null}
+
+      {isBoardFilterOpen ? (
+        <ScheduleBoardFilterModal
+          projects={projects}
+          taskTypes={taskTypes}
+          filters={boardFilters}
+          onApply={(filters) => {
+            setBoardFilters({ ...filters, keyword: filters.keyword.trim() });
+            setIsBoardFilterOpen(false);
+            setDatePopoverKey(null);
+          }}
+          onClose={() => setIsBoardFilterOpen(false)}
         />
       ) : null}
 

@@ -10,7 +10,9 @@ export async function saveRoutine(input: RoutineInput, existing?: Routine): Prom
     if (!(await db.projects.get(input.projectId)) || !(await db.taskTypes.get(input.taskTypeId))) throw new Error("프로젝트 또는 종류를 찾을 수 없습니다.");
     if (existing && (await db.routines.get(existing.id))?.updatedAt !== existing.updatedAt) throw new Error("루틴이 변경되었습니다. 다시 열어 주세요.");
     if (!existing && await db.routines.count() >= MAX_ROUTINES) throw new Error("루틴은 최대 500개까지 등록할 수 있습니다.");
-    const now = new Date().toISOString();
+    // Keep the optimistic concurrency token distinct even for edits within
+    // the same millisecond, so a stale modal cannot overwrite a newer rule.
+    const now = new Date(Math.max(Date.now(), existing ? Date.parse(existing.updatedAt) + 1 : 0)).toISOString();
     await db.routines.put({ ...normalized, id: existing?.id ?? `routine-${crypto.randomUUID()}`, createdAt: existing?.createdAt ?? now, updatedAt: now });
   });
 }
@@ -29,7 +31,7 @@ export async function actOnRoutine(routine: Routine, cycleId: string, action: Ro
     if (!current || !current.isActive || current.updatedAt !== routine.updatedAt) throw new Error("루틴 설정이 바뀌었습니다. 목록에서 다시 확인해 주세요.");
     const records = await db.routineOccurrences.where("routineId").equals(routine.id).toArray();
     const cycle = getRoutineCycle(current, records);
-    if (cycle.id !== cycleId || !cycle.needsAttention) throw new Error("이미 처리했거나 안내일이 바뀐 회차입니다.");
+    if (cycle.ended || cycle.id !== cycleId || !cycle.needsAttention) throw new Error("이미 처리했거나 안내일이 바뀐 회차입니다.");
     if (!records.some((record) => record.id === cycleId) && await db.routineOccurrences.count() >= MAX_ROUTINE_OCCURRENCES) throw new Error("루틴 처리 이력 한도에 도달했습니다. 사용하지 않는 루틴을 정리해 주세요.");
     const now = new Date().toISOString();
     let taskId: string | undefined;

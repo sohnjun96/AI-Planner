@@ -1,0 +1,115 @@
+.calendar-day.has-holiday .calendar-day-number,
+.week-day-row.has-holiday .week-day-num,
+.week-day-row.has-holiday .week-day-dow {
+  color: #c23f4a;
+}
+
+.calendar-day.has-holiday:not(.has-marker-leave):not(.has-marker-trip) {
+  background: linear-gradient(180deg, #fff1f2, #fff8f8 68%);
+}
+
+.calendar-day.has-holiday:not(.has-marker-leave):not(.has-marker-trip):not(.selected):not(.today) {
+  border-color: #f4cdd1;
+}
+
+.calendar-holiday-mark,
+.calendar-holiday-label,
+.task-date-group header .calendar-holiday-label,
+.calendar-day-detail-popover header .calendar-holiday-label {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 7px;
+  border: 1px solid #f4cdd1;
+  border-radius: 7px;
+  background: #fff1f2;
+  color: #ad3440;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.calendar-holiday-mark {
+  align-self: start;
+}
+
+.calendar-holiday-compact {
+  display: none;
+}
+
+@media (hover: hover) {
+  .calendar-day.has-holiday:not(.selected):hover .calendar-day-number {
+    color: #c23f4a;
+  }
+}
+
+.dashboard-date-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.week-day-row.has-holiday .week-day-head,
+.dashboard-list-date-group.has-holiday > header,
+.dashboard-selected-day-card .dashboard-card-header > div {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .week-day-row.has-holiday .week-day-head {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .week-day-row.has-holiday .week-day-meta {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .calendar-day.has-holiday,
+  .dashboard-calendar-card .calendar-day.has-holiday {
+    padding-right: 3px;
+    padding-left: 3px;
+  }
+
+  .calendar-holiday-mark {
+    display: block;
+    justify-self: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 11px;
+    line-height: 1.3;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .calendar-holiday-name {
+    display: none;
+  }
+
+  .calendar-holiday-compact {
+    display: inline;
+  }
+
+  .calendar-day.has-holiday.today .calendar-day-number {
+    background: #c23f4a;
+    color: #fff;
+  }
+
+  .dashboard-list-date-group.has-holiday > header {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .dashboard-list-date-group.has-holiday > header > span {
+    flex-shrink: 0;
+  }
+}

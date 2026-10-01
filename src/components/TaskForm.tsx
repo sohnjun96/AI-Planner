@@ -594,6 +594,7 @@ export function TaskForm({
           </span>
           <textarea
             name="content"
+            className={isEdit ? "task-form-content-editor-expanded" : undefined}
             value={form.content}
             onChange={(event) => updateFormField("content", event.target.value)}
             placeholder="준비할 내용이나 완료 기준을 적어 주세요."

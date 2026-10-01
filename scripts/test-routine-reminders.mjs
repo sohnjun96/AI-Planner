@@ -14,22 +14,37 @@ try {
   await page.goto(`${base}#/dashboard`);
   await page.waitForFunction(() => document.querySelector("main") && !document.querySelector(".loading-screen"));
   await worker.evaluate(async () => {
-    await chrome.storage.local.set({ schedule_routine_payload_v1: { enabled: true, items: [{ id: "routine:test:2026-09:2026-09-12", when: Date.now() + 60_000 }] } });
+    await chrome.storage.local.set({ schedule_routine_delivered_v1: ["legacy:2026-09:2026-09-12"],
+      schedule_routine_payload_v1: { enabled: true, items: [{ id: "legacy:2026-09-25:2026-09-12", when: Date.now() + 60_000 }] } });
+    await queueRoutineSync();
+    await showRoutineReminder("routine-reminder:legacy:2026-09-25:2026-09-12");
+  });
+  await expect.poll(() => worker.evaluate(async () => (await chrome.alarms.getAll()).filter((item) => item.name.startsWith("routine-reminder:")).length)).toBe(0);
+  await expect(page).toHaveURL(/#\/dashboard/);
+  assert.deepEqual(await worker.evaluate(async () => (await chrome.storage.local.get("schedule_routine_delivered_v1")).schedule_routine_delivered_v1), ["legacy:2026-09:2026-09-12"]);
+  await worker.evaluate(async () => {
+    await chrome.storage.local.set({ schedule_routine_payload_v1: { enabled: true,
+      items: [{ id: "legacy:2026-09-25:2026-09-15", when: Date.now() + 60_000 }] } });
+    await queueRoutineSync();
+  });
+  await expect.poll(() => worker.evaluate(async () => (await chrome.alarms.getAll()).filter((item) => item.name.startsWith("routine-reminder:")).map((item) => item.name))).toEqual(["routine-reminder:legacy:2026-09-25:2026-09-15"]);
+  await worker.evaluate(async () => {
+    await chrome.storage.local.set({ schedule_routine_payload_v1: { enabled: true, items: [{ id: "routine:test:2026-09-25:2026-09-12", when: Date.now() + 60_000 }] } });
     await queueRoutineSync();
   });
   await expect.poll(() => worker.evaluate(async () => (await chrome.alarms.getAll()).filter((item) => item.name.startsWith("routine-reminder:")).length)).toBe(1);
   const pageCount = context.pages().length;
-  await worker.evaluate('showRoutineReminder("routine-reminder:routine:test:2026-09:2026-09-12")');
+  await worker.evaluate('showRoutineReminder("routine-reminder:routine:test:2026-09-25:2026-09-12")');
   await expect(page.getByRole("heading", { name: "나의 루틴", exact: true })).toBeVisible();
   assert.equal(context.pages().length, pageCount, "기존 탭 재사용");
   await page.getByRole("link", { name: "대시보드", exact: true }).click();
-  await worker.evaluate('showRoutineReminder("routine-reminder:routine:test:2026-09:2026-09-12")');
+  await worker.evaluate('showRoutineReminder("routine-reminder:routine:test:2026-09-25:2026-09-12")');
   await expect(page).toHaveURL(/#\/dashboard/);
   await worker.evaluate(async () => {
-    await chrome.storage.local.set({ schedule_routine_payload_v1: { enabled: true, items: [{ id: "routine:test:2026-09:2026-09-15", when: Date.now() + 86_400_000 }] } });
+    await chrome.storage.local.set({ schedule_routine_payload_v1: { enabled: true, items: [{ id: "routine:test:2026-09-25:2026-09-15", when: Date.now() + 86_400_000 }] } });
     await queueRoutineSync();
   });
-  await expect.poll(() => worker.evaluate(async () => (await chrome.alarms.getAll()).filter((item) => item.name.startsWith("routine-reminder:")).map((item) => item.name))).toEqual(["routine-reminder:routine:test:2026-09:2026-09-15"]);
+  await expect.poll(() => worker.evaluate(async () => (await chrome.alarms.getAll()).filter((item) => item.name.startsWith("routine-reminder:")).map((item) => item.name))).toEqual(["routine-reminder:routine:test:2026-09-25:2026-09-15"]);
   await worker.evaluate(async () => { await chrome.alarms.clearAll(); await queueRoutineSync(); });
   await expect.poll(() => worker.evaluate(async () => (await chrome.alarms.getAll()).length)).toBe(1);
   await worker.evaluate(async () => { await chrome.storage.local.set({ schedule_routine_payload_v1: { enabled: false, items: [] } }); await queueRoutineSync(); });

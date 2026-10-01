@@ -17,7 +17,11 @@ const result = await build({
     "tests/featureGaps.test.ts",
     "tests/scheduleReminders.test.ts",
     "tests/routines.test.ts",
+    "tests/routineBackup.compat.test.ts",
     "tests/scheduleTime.test.ts",
+    "tests/dashboardSummary.test.ts",
+    "tests/scheduleBoardFilters.test.ts",
+    "tests/holidays.test.ts",
   ],
   outdir: path.join(rootDir, ".test-output"),
   bundle: true,
@@ -32,7 +36,7 @@ const result = await build({
   },
 });
 
-if (result.outputFiles.length !== 10) throw new Error("테스트 번들을 생성하지 못했습니다.");
+if (result.outputFiles.length !== 14) throw new Error("테스트 번들을 생성하지 못했습니다.");
 for (const output of result.outputFiles) {
   await import(`data:text/javascript;base64,${Buffer.from(output.contents).toString("base64")}`);
 }

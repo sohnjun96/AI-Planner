@@ -16,7 +16,8 @@ export function useRoutines() {
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, []);
   const rows = useMemo(() => (routines ?? []).map((routine) => ({ routine, cycle: getRoutineCycle(routine, records ?? [], today) }))
-    .sort((a, b) => a.cycle.notifyDate.localeCompare(b.cycle.notifyDate) || a.routine.title.localeCompare(b.routine.title)), [routines, records, today]);
+    .sort((a, b) => Number(Boolean(a.cycle.ended)) - Number(Boolean(b.cycle.ended))
+      || a.cycle.notifyDate.localeCompare(b.cycle.notifyDate) || a.routine.title.localeCompare(b.routine.title)), [routines, records, today]);
   return { rows, records: records ?? [], ready: routines !== undefined && records !== undefined, today,
     dueCount: rows.filter((row) => row.cycle.needsAttention).length };
 }

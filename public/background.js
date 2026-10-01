@@ -243,12 +243,19 @@ function normalizeRoutinePayload(value) {
 function normalizeDelivered(value) {
   return Array.isArray(value) ? value.filter((id) => typeof id === "string" && /^[A-Za-z0-9._:-]{1,180}$/.test(id)).slice(-2000) : [];
 }
+function wasRoutineDelivered(delivered, id) {
+  if (delivered.has(id)) return true;
+  // v6 used a monthly occurrence ID. Preserve delivery history when v7
+  // switches to actual dates, while allowing a changed reminder date.
+  const prior = id.match(/^(.*):(\d{4}-\d{2})-\d{2}:(\d{4}-\d{2}-\d{2})$/);
+  return Boolean(prior && delivered.has(`${prior[1]}:${prior[2]}:${prior[3]}`));
+}
 let routineSyncQueue = Promise.resolve();
 function queueRoutineSync() {
   routineSyncQueue = routineSyncQueue.catch(() => undefined).then(async () => {
     const payload = normalizeRoutinePayload(await storageGet(ROUTINE_PAYLOAD_KEY));
     const delivered = new Set(normalizeDelivered(await storageGet(ROUTINE_DELIVERED_KEY)));
-    const wanted = new Map((payload.enabled ? payload.items : []).filter((item) => !delivered.has(item.id))
+    const wanted = new Map((payload.enabled ? payload.items : []).filter((item) => !wasRoutineDelivered(delivered, item.id))
       .sort((a, b) => a.when - b.when).slice(0, 80).map((item) => [`${ROUTINE_ALARM_PREFIX}${item.id}`, Math.max(Date.now() + 1_000, item.when)]));
     const alarms = (await alarmGetAll()).filter((alarm) => alarm.name.startsWith(ROUTINE_ALARM_PREFIX));
     await runInBatches(alarms.filter((alarm) => !wanted.has(alarm.name)), (alarm) => alarmClear(alarm.name));
@@ -263,7 +270,7 @@ function showRoutineReminder(name) {
     const id = name.slice(ROUTINE_ALARM_PREFIX.length);
     const payload = normalizeRoutinePayload(await storageGet(ROUTINE_PAYLOAD_KEY));
     const delivered = normalizeDelivered(await storageGet(ROUTINE_DELIVERED_KEY));
-    if (!payload.enabled || !payload.items.some((item) => item.id === id) || delivered.includes(id)) return;
+    if (!payload.enabled || !payload.items.some((item) => item.id === id) || wasRoutineDelivered(new Set(delivered), id)) return;
     await openPlanner(undefined, true);
     await chrome.storage.local.set({ [ROUTINE_DELIVERED_KEY]: [...delivered, id].slice(-2000) });
     await queueRoutineSync();

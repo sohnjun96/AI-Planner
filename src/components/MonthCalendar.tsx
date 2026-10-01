@@ -37,6 +37,7 @@ interface MonthCalendarProps {
   selectedDate: string;
   weekStartsOn: "sun" | "mon";
   daySummaryByDate: Record<string, CalendarDaySummary>;
+  getHolidayLabelForDate?: (dateKey: string) => string;
   onSelectDate: (date: string) => void;
   onDropTaskToDate?: (taskId: string, dateKey: string) => Promise<void> | void;
   onCreateTaskAtDate?: (dateKey: string) => void;
@@ -132,6 +133,7 @@ export function MonthCalendar({
   selectedDate,
   weekStartsOn,
   daySummaryByDate,
+  getHolidayLabelForDate,
   onSelectDate,
   onDropTaskToDate,
   onCreateTaskAtDate,
@@ -339,6 +341,7 @@ export function MonthCalendar({
           const key = getDateKey(date);
           const isOtherMonth = date.getMonth() !== visibleMonth.getMonth();
           const summary = daySummaryByDate[key] ?? EMPTY_SUMMARY;
+          const holidayLabel = getHolidayLabelForDate?.(key) ?? "";
           const markers = sortCalendarMarkers(summary.markers ?? []);
           const events = sortCalendarEvents(summary.titles);
           const topMarkers = markers.filter((marker) => marker.tone !== "lunch");
@@ -353,6 +356,7 @@ export function MonthCalendar({
 
           const ariaLabel = [
             `${key}`,
+            holidayLabel ? `공휴일: ${holidayLabel}` : "",
             summary.total > 0 ? `총 ${summary.total}건` : "일정 없음",
             summary.pending > 0 ? `미완료 ${summary.pending}건` : "",
             summary.onHold > 0 ? `보류 ${summary.onHold}건` : "",
@@ -384,7 +388,7 @@ export function MonthCalendar({
                   todayKey === key ? "today" : ""
                 } ${isOtherMonth ? "muted" : ""} ${isWeekend ? "weekend" : ""} ${
                   dragOverDateKey === key ? "drag-target" : ""
-                } ${markerClassName}`}
+                } ${markerClassName} ${holidayLabel ? "has-holiday" : ""}`}
                 tabIndex={focusedDateKey === key ? 0 : -1}
                 aria-pressed={selectedKey === key}
                 aria-current={todayKey === key ? "date" : undefined}
@@ -486,6 +490,13 @@ export function MonthCalendar({
                     ) : null}
                   </div>
                 </div>
+
+                {holidayLabel ? (
+                  <span className="calendar-holiday-mark" title={holidayLabel}>
+                    <span className="calendar-holiday-name">{holidayLabel}</span>
+                    <span className="calendar-holiday-compact" aria-hidden="true">휴일</span>
+                  </span>
+                ) : null}
 
                 <div className="calendar-progress" aria-hidden="true">
                   <span style={{ width: `${completionRatio}%` }} />

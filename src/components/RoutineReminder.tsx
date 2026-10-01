@@ -86,7 +86,7 @@ function RoutineReminderCard({ row, count, index, onCollapse, onSelect }: {
         <p className="routine-reminder-date"><span>{isSchedule ? "생성할 일정" : "예정일"}</span><time dateTime={isSchedule ? draft.startAt : cycle.dueDate}>{dateLabel}</time></p>
         <div className="routine-reminder-tags">
           <span>{projects.find((project) => project.id === routine.projectId)?.name ?? "프로젝트"}</span>
-          <span>{taskTypes.find((taskType) => taskType.id === routine.taskTypeId)?.name ?? "일정 종류"}</span>
+          {isSchedule && <span>{taskTypes.find((taskType) => taskType.id === routine.taskTypeId)?.name ?? "일정 종류"}</span>}
         </div>
         {memo && <p className="routine-reminder-memo">{memo.length > 140 ? `${memo.slice(0, 140)}…` : memo}</p>}
       </div>
