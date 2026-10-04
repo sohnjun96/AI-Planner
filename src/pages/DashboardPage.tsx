@@ -1429,9 +1429,6 @@ export function DashboardPage() {
                   필터
                   {activeBoardFilterCount > 0 ? <span className="dashboard-board-filter-count" aria-hidden="true">{activeBoardFilterCount}</span> : null}
                 </button>
-                <button type="button" className="btn btn-primary dashboard-ai-add-button" onClick={() => openAiSchedule("")}>
-                  AI 일정 추가
-                </button>
               </div>
               <TaskViewSegmentedControl
                 value={calendarViewMode}

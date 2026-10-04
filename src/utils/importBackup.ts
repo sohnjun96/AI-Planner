@@ -156,7 +156,7 @@ function parseRoutine(value: unknown, version: number): Routine {
     projectId: id(item.projectId, "routine.projectId"), taskTypeId: id(item.taskTypeId, "routine.taskTypeId"),
     ...repetition,
     time: text(item.time, "routine.time", 5), leadDays: integer(item.leadDays, "routine.leadDays", 0, 30)!,
-    mode: oneOf(item.mode, "routine.mode", ["schedule", "remind"]), isActive: bool(item.isActive, "routine.isActive"),
+    mode: oneOf(item.mode, "routine.mode", ["schedule", "remind", "auto"]), isActive: bool(item.isActive, "routine.isActive"),
   });
   return { ...input, id: id(item.id, "routine.id"), createdAt: iso(item.createdAt, "routine.createdAt")!, updatedAt: iso(item.updatedAt, "routine.updatedAt")! };
 }

@@ -59,6 +59,15 @@ assert.equal(getRoutineCycle({ ...daily, leadDays: 30 }, [], "2026-10-02").dueDa
 assert.throws(() => validateRoutine({ ...routine, intervalMonths: 0 }));
 assert.throws(() => validateRoutine({ ...routine, dayOfMonth: 32 }));
 assert.throws(() => validateRoutine({ ...routine, startMonth: "2026-13" }));
+for (const mode of ["schedule", "remind", "auto"] as const) {
+  const valid = validateRoutine({ ...routine, mode });
+  assert.equal(valid.mode, mode, "validation preserves the selected guidance mode");
+  assert.equal(valid.leadDays, 7);
+  assert.equal(valid.time, "09:00");
+}
+for (const mode of [undefined, null, "", "automatic", "AUTO", true, 1] as unknown[]) {
+  assert.throws(() => validateRoutine({ ...routine, mode: mode as Routine["mode"] }), /루틴 설정/);
+}
 const normalized = validateRoutine(routine);
 assert.equal(normalized.recurrence?.startDate, "2026-01-01");
 assert.deepEqual(normalized.recurrence?.monthDays, [25]);

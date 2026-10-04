@@ -39,6 +39,19 @@ const restored = read(current);
 assert.deepEqual(restored.routines[0].recurrence, recurrence);
 assert.deepEqual(restored.routineOccurrences, migrated.routineOccurrences);
 assert.equal(restored.routines[0].dayOfMonth, undefined);
+for (const mode of ["schedule", "remind", "auto"] as const) {
+  const modePayload = read({ ...current, routines: [{ ...legacyRoutine, recurrence, mode, leadDays: 7, time: "10:30" }] });
+  const roundTripped = read(modePayload);
+  assert.equal(roundTripped.version, 7);
+  assert.equal(roundTripped.routines[0].mode, mode, "backup round-trip preserves the selected guidance mode");
+  assert.equal(roundTripped.routines[0].leadDays, 7, "automatic creation keeps the advance date setting");
+  assert.equal(roundTripped.routines[0].time, "10:30", "automatic creation keeps the schedule time");
+  assert.deepEqual(roundTripped.routines[0].recurrence, recurrence);
+  assert.deepEqual(roundTripped.routineOccurrences, migrated.routineOccurrences, "creation history survives the mode round-trip");
+}
+for (const mode of [undefined, null, "", "automatic", "AUTO", true, 1]) {
+  assert.throws(() => read({ ...current, routines: [{ ...legacyRoutine, recurrence, mode }] }), /routine.mode/);
+}
 assert.throws(() => read({ ...current, routines: [legacyRoutine] }), /반복/);
 assert.throws(() => read({ ...current, routineOccurrences: [legacyOccurrence] }), /날짜|회차/);
 assert.throws(() => read({ ...current, routineOccurrences: [{ ...migrated.routineOccurrences[0], period: "2026-09-24" }] }), /날짜/);

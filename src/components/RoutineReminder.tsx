@@ -49,9 +49,10 @@ function RoutineReminderCard({ row, count, index, onCollapse, onSelect }: {
   const [error, setError] = useState("");
   const pending = useRef(false);
   const { routine, cycle } = row;
-  const isSchedule = routine.mode === "schedule";
+  const createsSchedule = routine.mode !== "remind";
+  const isAuto = routine.mode === "auto";
   const draft = routineTaskDraft(routine, cycle.dueDate);
-  const dateLabel = isSchedule ? formatDateTime(draft.startAt, setting.timeFormat)
+  const dateLabel = createsSchedule ? formatDateTime(draft.startAt, setting.timeFormat)
     : new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" })
       .format(new Date(`${cycle.dueDate}T12:00:00`));
   const memo = routine.content.replace(/\s+/g, " ").trim();
@@ -64,7 +65,7 @@ function RoutineReminderCard({ row, count, index, onCollapse, onSelect }: {
       await actOnRoutine(routine, cycle.id, action, action === "created" ? draft : undefined,
         action === "snoozed" ? getDateKey(addDays(new Date(), 1)) : undefined);
       showToast(action === "created" ? "이번 회차의 일정을 만들었습니다."
-        : action === "snoozed" ? "내일 다시 알려드릴게요." : "이번 회차를 확인했습니다.");
+        : action === "snoozed" ? isAuto ? "내일 앱을 열면 이 회차의 일정을 자동으로 만듭니다." : "내일 다시 알려드릴게요." : "이번 회차를 확인했습니다.");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "루틴을 처리하지 못했습니다.");
     } finally {
@@ -80,26 +81,26 @@ function RoutineReminderCard({ row, count, index, onCollapse, onSelect }: {
         <button type="button" className="routine-reminder-text-button" aria-label="루틴 알림 접기" aria-expanded={true}
           disabled={busy} onClick={onCollapse}>접기</button>
       </header>
-      <p className="routine-reminder-prompt">{isSchedule ? "이 일정을 만들까요?" : "챙길 때가 되었어요"}</p>
+      <p className="routine-reminder-prompt">{isAuto ? "자동으로 만들 일정이 대기 중이에요" : createsSchedule ? "이 일정을 만들까요?" : "챙길 때가 되었어요"}</p>
       <h2>{routine.title}</h2>
       <div className="routine-reminder-summary">
-        <p className="routine-reminder-date"><span>{isSchedule ? "생성할 일정" : "예정일"}</span><time dateTime={isSchedule ? draft.startAt : cycle.dueDate}>{dateLabel}</time></p>
+        <p className="routine-reminder-date"><span>{createsSchedule ? "생성할 일정" : "예정일"}</span><time dateTime={createsSchedule ? draft.startAt : cycle.dueDate}>{dateLabel}</time></p>
         <div className="routine-reminder-tags">
           <span>{projects.find((project) => project.id === routine.projectId)?.name ?? "프로젝트"}</span>
-          {isSchedule && <span>{taskTypes.find((taskType) => taskType.id === routine.taskTypeId)?.name ?? "일정 종류"}</span>}
+          {createsSchedule && <span>{taskTypes.find((taskType) => taskType.id === routine.taskTypeId)?.name ?? "일정 종류"}</span>}
         </div>
         {memo && <p className="routine-reminder-memo">{memo.length > 140 ? `${memo.slice(0, 140)}…` : memo}</p>}
       </div>
-      <p className="routine-reminder-frequency">{routineFrequency(routine)} · {routine.leadDays ? `${routine.leadDays}일 전 안내` : "당일 안내"}</p>
+      <p className="routine-reminder-frequency">{routineFrequency(routine)} · {routine.leadDays ? `${routine.leadDays}일 전` : "당일"} {isAuto ? "자동 생성" : "안내"}</p>
       {error && <p className="routine-reminder-error" role="alert">{error}</p>}
       <div className="routine-reminder-actions">
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void handleAction(isSchedule ? "created" : "acknowledged")}>
-          {busy ? "처리 중…" : isSchedule ? "일정 만들기" : "확인했어요"}
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void handleAction(createsSchedule ? "created" : "acknowledged")}>
+          {busy ? "처리 중…" : createsSchedule ? "일정 만들기" : "확인했어요"}
         </button>
-        {isSchedule && <button type="button" className="btn btn-soft" disabled={busy} onClick={() => setEditing(true)}>수정 후 만들기</button>}
+        {createsSchedule && <button type="button" className="btn btn-soft" disabled={busy} onClick={() => setEditing(true)}>수정 후 만들기</button>}
       </div>
       <footer className="routine-reminder-footer">
-        <button type="button" className="routine-reminder-text-button" disabled={busy} onClick={() => void handleAction("snoozed")}>내일 다시 알림</button>
+        <button type="button" className="routine-reminder-text-button" disabled={busy} onClick={() => void handleAction("snoozed")}>{isAuto ? "내일 자동으로 만들기" : "내일 다시 알림"}</button>
         <button type="button" className="routine-reminder-text-button" disabled={busy} onClick={() => { onCollapse(); navigate("/routines"); }}>전체 보기</button>
         {count > 1 && <div className="routine-reminder-pagination" role="group" aria-label="루틴 알림 순서">
           <button type="button" aria-label="이전 루틴 알림" disabled={busy} onClick={() => onSelect(-1)}>‹</button>

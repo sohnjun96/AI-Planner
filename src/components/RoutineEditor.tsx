@@ -51,6 +51,8 @@ export function RoutineEditor({ routine, onClose }: { routine?: Routine; onClose
   const [excludeError, setExcludeError] = useState("");
   const [customLead, setCustomLead] = useState(![0, 1, 3, 7].includes(form.leadDays));
   const rule = form.recurrence!;
+  const createsSchedule = form.mode !== "remind";
+  const modeLabel = form.mode === "auto" ? "일정 자동으로 만들기" : form.mode === "schedule" ? "일정 만들지 물어보기" : "알림만 받기";
   const today = getDateKey(new Date());
   const availableProjects = projects.filter((project) => project.isActive || project.id === form.projectId);
   const availableTypes = taskTypes.filter((type) => type.isActive || type.id === form.taskTypeId);
@@ -99,7 +101,7 @@ export function RoutineEditor({ routine, onClose }: { routine?: Routine; onClose
       try {
         if (missingConnections) throw new Error("프로젝트와 일정 종류를 먼저 등록하거나 선택해 주세요.");
         await saveRoutine(form, routine);
-        showToast(routine ? "루틴을 수정했습니다." : "루틴을 등록했습니다. 때가 되면 알려드릴게요."); onClose();
+        showToast(routine ? "루틴을 수정했습니다." : form.mode === "auto" ? "루틴을 등록했습니다. 안내일에 일정을 자동으로 만듭니다." : "루틴을 등록했습니다. 때가 되면 알려드릴게요."); onClose();
       } catch (caught) { setError(caught instanceof Error ? caught.message : "저장하지 못했습니다."); }
       finally { savingRef.current = false; setBusy(false); }
     }}>
@@ -127,24 +129,24 @@ export function RoutineEditor({ routine, onClose }: { routine?: Routine; onClose
           <p className="routine-preview-eyebrow">이렇게 반복해요</p><p className="routine-preview-summary" aria-live="polite">{summary}</p>
           {rule.interval > 1 && ["weekly", "yearly"].includes(rule.frequency) && <p className="routine-editor-help">{rule.startDate}을 기준으로 {rule.interval}{rule.frequency === "weekly" ? "주" : "년"}마다 반복합니다.</p>}
           <h3>다음 예정일 <span>{preview.length}회</span></h3>
-          {previewError ? <p className="error-text" role="status">{previewError}</p> : preview.length === 0 ? <p className="routine-editor-help">반복이 종료되었거나 조건에 맞는 다음 예정일이 없습니다.</p> : <ol className="routine-preview-occurrences">{preview.map((cycle, index) => <li key={cycle.id}><time dateTime={cycle.dueDate}>{formatDate(cycle.dueDate)}</time>{index === 0 && <span className="routine-next-badge">다음</span>}{adjusted(cycle) && <span className="routine-adjusted-badge">날짜 조정</span>}<small>알림 <time dateTime={cycle.notifyDate}>{formatDate(cycle.notifyDate)}</time></small></li>)}</ol>}
-          <p className="routine-preview-notify">{form.leadDays === 0 ? "당일" : `${form.leadDays}일 전`} 안내 · {form.mode === "schedule" ? "일정 만들지 물어보기" : "알림만 받기"}</p>
-          {firstNoticePassed && <p className="routine-preview-warning">첫 예정일의 안내일이 지났습니다. 등록하면 바로 확인할 수 있어요.</p>}
-          {overlappingNotice && <p className="routine-preview-warning">다음 회차의 안내일이 이전 예정일보다 빠르거나 같습니다. 최근 안내 대상 한 회차를 표시합니다.</p>}
-          <p className="routine-editor-help">오래 접속하지 않아도 최근 안내 대상 한 회차를 챙겨드려요.</p>
+          {previewError ? <p className="error-text" role="status">{previewError}</p> : preview.length === 0 ? <p className="routine-editor-help">반복이 종료되었거나 조건에 맞는 다음 예정일이 없습니다.</p> : <ol className="routine-preview-occurrences">{preview.map((cycle, index) => <li key={cycle.id}><time dateTime={cycle.dueDate}>{formatDate(cycle.dueDate)}</time>{index === 0 && <span className="routine-next-badge">다음</span>}{adjusted(cycle) && <span className="routine-adjusted-badge">날짜 조정</span>}<small>{form.mode === "auto" ? "자동 생성" : "알림"} <time dateTime={cycle.notifyDate}>{formatDate(cycle.notifyDate)}</time></small></li>)}</ol>}
+          <p className="routine-preview-notify">{form.leadDays === 0 ? "당일" : `${form.leadDays}일 전`} {form.mode === "auto" ? "자동 생성" : "안내"} · {modeLabel}</p>
+          {firstNoticePassed && <p className="routine-preview-warning">첫 예정일의 안내일이 지났습니다. {form.mode === "auto" ? "등록하면 안내일이 지난 미처리 회차의 일정을 바로 만듭니다." : "등록하면 바로 확인할 수 있어요."}</p>}
+          {overlappingNotice && <p className="routine-preview-warning">다음 회차의 안내일이 이전 예정일보다 빠르거나 같습니다. {form.mode === "auto" ? "안내일이 된 미처리 회차의 일정을 차례로 만듭니다." : "최근 안내 대상 한 회차를 표시합니다."}</p>}
+          <p className="routine-editor-help">{form.mode === "auto" ? "앱이 열려 있으면 안내일에 자동으로 만듭니다. 닫혀 있으면 다음에 열 때 만들며, 예정일이 지난 미처리 회차는 가장 최근 한 회차만 만듭니다." : "오래 접속하지 않아도 최근 안내 대상 한 회차를 챙겨드려요."}</p>
         </aside>
         <section className="routine-editor-settings" aria-label="추가 루틴 설정">
-          <details className="routine-editor-details"><summary>알림과 연결 <span>{form.leadDays === 0 ? "당일" : `${form.leadDays}일 전`} · {form.mode === "schedule" ? "일정 제안" : "알림만"}</span></summary><div>
+          <details className="routine-editor-details"><summary>알림과 연결 <span>{form.leadDays === 0 ? "당일" : `${form.leadDays}일 전`} · {form.mode === "auto" ? "일정 자동 생성" : form.mode === "schedule" ? "일정 제안" : "알림만"}</span></summary><div>
             <div className="routine-editor-dual"><label className="routine-editor-field">미리 알림<select aria-label="미리 알림" value={customLead ? "custom" : form.leadDays} onChange={(event) => { setCustomLead(event.target.value === "custom"); if (event.target.value !== "custom") change("leadDays", Number(event.target.value)); }}><option value="0">당일</option><option value="1">1일 전</option><option value="3">3일 전</option><option value="7">7일 전</option><option value="custom">직접 지정</option></select></label>
-              <label className="routine-editor-field">안내 방식<select aria-label="안내 방식" value={form.mode} onChange={(event) => change("mode", event.target.value as RoutineInput["mode"])}><option value="schedule">일정을 만들지 물어보기</option><option value="remind">알림만 받기</option></select></label></div>
+              <label className="routine-editor-field">안내 방식<select aria-label="안내 방식" value={form.mode} onChange={(event) => change("mode", event.target.value as RoutineInput["mode"])}><option value="schedule">일정을 만들지 물어보기</option><option value="auto">일정 자동으로 만들기</option><option value="remind">알림만 받기</option></select></label></div>
             {customLead && <label className="routine-editor-field">며칠 전에 알려드릴까요?<input type="number" required min={0} max={30} value={inputNumber(form.leadDays)} onChange={(event) => change("leadDays", numberValue(event.target.value))} /></label>}
-            <p className="routine-editor-help">확장 프로그램 안내는 설정을 켜면 안내일 오전 9시에 표시됩니다.</p>
+            <p className="routine-editor-help">{form.mode === "auto" ? "미리 알림에서 선택한 안내일에, 예정일과 아래 시간으로 일정을 자동 생성합니다. 앱이 닫혀 있으면 다음에 열 때 만듭니다." : "확장 프로그램 안내는 설정을 켜면 안내일 오전 9시에 표시됩니다."}</p>
           </div></details>
-          <details className="routine-editor-details" open={missingConnections || undefined}><summary>프로젝트·일정 설정 <span>{projectName}{form.mode === "schedule" ? ` · ${typeName}` : ""}</span></summary><div>
+          <details className="routine-editor-details" open={missingConnections || undefined}><summary>프로젝트·일정 설정 <span>{projectName}{createsSchedule ? ` · ${typeName}` : ""}</span></summary><div>
             <label className="routine-editor-field">프로젝트<select required value={form.projectId} onChange={(event) => change("projectId", event.target.value)}>{!form.projectId && <option value="">프로젝트를 선택해 주세요</option>}{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
-            {form.mode === "schedule" && <div className="routine-editor-dual"><label className="routine-editor-field">일정 종류<select required value={form.taskTypeId} onChange={(event) => change("taskTypeId", event.target.value)}>{!form.taskTypeId && <option value="">일정 종류를 선택해 주세요</option>}{availableTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label><label className="routine-editor-field">생성할 일정 시간<input type="time" required value={form.time} onChange={(event) => change("time", event.target.value)} /></label></div>}
+            {createsSchedule && <div className="routine-editor-dual"><label className="routine-editor-field">일정 종류<select required value={form.taskTypeId} onChange={(event) => change("taskTypeId", event.target.value)}>{!form.taskTypeId && <option value="">일정 종류를 선택해 주세요</option>}{availableTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label><label className="routine-editor-field">생성할 일정 시간<input type="time" required value={form.time} onChange={(event) => change("time", event.target.value)} /></label></div>}
             {missingConnections && <p className="error-text" role="status">활성 프로젝트와 일정 종류가 필요합니다. 프로젝트와 설정 화면에서 먼저 등록해 주세요.</p>}
-            <p className="routine-editor-help">{form.mode === "schedule" ? "안내 카드를 확인한 뒤 일정을 만듭니다." : "일정을 만들지 않고 루틴만 확인합니다."}</p>
+            <p className="routine-editor-help">{form.mode === "auto" ? "안내일에 이 프로젝트와 일정 종류로 예정일의 일정을 자동 생성합니다." : form.mode === "schedule" ? "안내 카드를 확인한 뒤 일정을 만듭니다." : "일정을 만들지 않고 루틴만 확인합니다."}</p>
           </div></details>
           <details className="routine-editor-details"><summary>종료·예외 설정 <span>{rule.end.type === "never" ? "계속 반복" : rule.end.type === "date" ? `${rule.end.date}까지` : `${rule.end.count}회`}{rule.excludeDates.length > 0 ? ` · 제외 ${rule.excludeDates.length}일` : ""}</span></summary><div>
             <label className="routine-editor-field">반복 종료<select aria-label="반복 종료" value={rule.end.type} onChange={(event) => changeRule("end", event.target.value === "date" ? { type: "date", date: rule.startDate } : event.target.value === "count" ? { type: "count", count: 10 } : { type: "never" })}><option value="never">계속 반복</option><option value="date">날짜 지정</option><option value="count">횟수 지정</option></select></label>

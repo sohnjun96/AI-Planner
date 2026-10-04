@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from "react";
+import { useLayoutEffect, useRef, type CSSProperties, type MouseEvent } from "react";
 import { STATUS_LABELS } from "../constants";
 import type { Project, Task, TaskType } from "../models";
 import { getDateKey } from "../utils/date";
@@ -23,6 +23,34 @@ export function DashboardScheduleSummary({
   expanded, summary, projectMap, typeMap, todayKey, timeFormat,
   onOpenTask, onCompleteTask, onContextMenu,
 }: Props) {
+  const heldListRef = useRef<HTMLDivElement>(null);
+  const submissionListRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    const lists = [heldListRef.current, submissionListRef.current]
+      .filter((list): list is HTMLDivElement => list !== null);
+
+    const visibleRows = (list: HTMLElement) =>
+      Array.from(list.querySelectorAll<HTMLElement>(".dashboard-summary-task-row")).slice(0, 5);
+    const updateHeight = (list: HTMLElement) => {
+      const rows = visibleRows(list);
+      if (rows.length === 0) {
+        list.style.removeProperty("--summary-list-height");
+        return;
+      }
+      const height = Math.ceil(rows.reduce((sum, row) => sum + row.getBoundingClientRect().height, 0));
+      if (height > 0) list.style.setProperty("--summary-list-height", `${height}px`);
+    };
+    const observer = new ResizeObserver(() => lists.forEach(updateHeight));
+    lists.forEach((list) => {
+      updateHeight(list);
+      if (list.firstElementChild) observer.observe(list.firstElementChild);
+      visibleRows(list).forEach((row) => observer.observe(row));
+    });
+    return () => observer.disconnect();
+  }, [expanded, summary.heldTasks, summary.submissionTasks]);
+
   const periodTasks: Task[] = [];
   const timedTasks: Task[] = [];
   for (const task of summary.todayTasks) {
@@ -107,13 +135,17 @@ export function DashboardScheduleSummary({
           <header className="dashboard-summary-section-header">
             <h3 id="dashboard-held-schedules-title">보류된 일정</h3>
           </header>
-          {renderTasks(summary.heldTasks, "보류된 일정이 없습니다.", "side")}
+          <div ref={heldListRef} className="dashboard-summary-scroll-list" role="region" aria-label="보류된 일정 목록" tabIndex={0}>
+            {renderTasks(summary.heldTasks, "보류된 일정이 없습니다.", "side")}
+          </div>
         </section>
         <section aria-labelledby="dashboard-submission-schedules-title">
           <header className="dashboard-summary-section-header">
             <h3 id="dashboard-submission-schedules-title">제출 일정</h3>
           </header>
-          {renderTasks(summary.submissionTasks, "미완료 제출 일정이 없습니다.", "side")}
+          <div ref={submissionListRef} className="dashboard-summary-scroll-list" role="region" aria-label="제출 일정 목록" tabIndex={0}>
+            {renderTasks(summary.submissionTasks, "미완료 제출 일정이 없습니다.", "side")}
+          </div>
         </section>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { ThinkingOrb } from "thinking-orbs";
 
 /** Keep both phases mounted during the crossfade so their motion stays continuous.
- * Match the approved preview: draw the 64px preset at 48 CSS pixels.
+ * Use the same larger, stronger dots in the floating button and modal.
  */
 export function AiScheduleOrb({ active }: { active: boolean }) {
   return (
@@ -12,17 +12,19 @@ export function AiScheduleOrb({ active }: { active: boolean }) {
             className="ai-add-orb-layer ai-add-orb-listening"
             state="listening"
             size={64}
-            color="#2563eb"
+            color="#1d4ed8"
+            dotSize={1.6}
             theme="light"
-            style={{ width: 48, height: 48 }}
+            style={{ width: 52, height: 52 }}
           />
           <ThinkingOrb
             className="ai-add-orb-layer ai-add-orb-solving"
             state="solving"
             size={64}
-            color="#2563eb"
+            color="#1d4ed8"
+            dotSize={1.6}
             theme="light"
-            style={{ width: 48, height: 48 }}
+            style={{ width: 52, height: 52 }}
           />
         </>
       ) : null}

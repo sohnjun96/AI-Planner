@@ -44,7 +44,8 @@ export function RoutineCard({ routine, cycle, history, busy, grouped, onCreate, 
   const ended = Boolean(cycle.ended);
   const paused = !routine.isActive && !ended;
   const snoozed = cycle.record?.status === "snoozed";
-  const status = ended ? "반복 종료" : paused ? "일시 중지" : cycle.needsAttention ? "확인 필요" : snoozed ? "다시 알림" : "예정";
+  const createsSchedule = routine.mode !== "remind";
+  const status = ended ? "반복 종료" : paused ? "일시 중지" : cycle.needsAttention ? routine.mode === "auto" ? "자동 생성 대기" : "확인 필요" : snoozed ? "다시 알림" : "예정";
   const menuItems: ContextMenuItem[] = [];
   if (onEdit) menuItems.push({ id: "edit", label: "수정", disabled: busy, onSelect: () => onEdit(routine) });
   if (onToggle && !ended && !paused) menuItems.push({ id: "pause", label: "일시 중지", disabled: busy, onSelect: () => onToggle(routine) });
@@ -68,15 +69,20 @@ export function RoutineCard({ routine, cycle, history, busy, grouped, onCreate, 
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>
       </button>}
     </div>
-    <h3 className="routine-card-title" aria-label={routine.title}>
+    <div className="routine-card-title-row">
+      <h3 className="routine-card-title" aria-label={routine.title}>
+        {onEdit ? <button type="button" className="routine-title-edit" aria-label={`${routine.title} 수정`}
+          aria-haspopup="dialog" disabled={busy} onClick={() => onEdit(routine)}>
+          <span className="routine-title-text">{routine.title}</span>
+        </button> : <span className="routine-title-text">{routine.title}</span>}
+      </h3>
       <button ref={detailsToggle} type="button" className="routine-details-toggle" aria-label={`${routine.title} 상세`} aria-expanded={expanded}
         aria-controls={detailsId} onClick={() => setExpanded((value) => !value)}>
-        <span className="routine-title-text">{routine.title}</span>
         <span className="routine-details-label" aria-hidden="true">상세
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 9 6 6 6-6" /></svg>
         </span>
       </button>
-    </h3>
+    </div>
     <div className="routine-card-schedule">
       <div className="routine-card-dates">
         {!ended && !paused && <time className="routine-due-date" dateTime={cycle.dueDate}>{formatRoutineDate(cycle.dueDate, true)}</time>}
@@ -87,17 +93,17 @@ export function RoutineCard({ routine, cycle, history, busy, grouped, onCreate, 
       {ended && onEdit && <button type="button" className="btn btn-soft routine-resume" disabled={busy} onClick={() => onEdit(routine)}>반복 설정</button>}
     </div>
     {!ended && !paused && (snoozed || !cycle.needsAttention || cycle.adjusted) && <p className="routine-notify-date">
-      {(snoozed || !cycle.needsAttention) && <><time dateTime={cycle.notifyDate}>{formatRoutineDate(cycle.notifyDate)}</time> {snoozed ? "다시 알림" : cycle.notifyDate === cycle.dueDate ? "당일 알림" : "알림"}</>}
+      {(snoozed || !cycle.needsAttention) && <><time dateTime={cycle.notifyDate}>{formatRoutineDate(cycle.notifyDate)}</time> {routine.mode === "auto" ? snoozed ? "자동 생성 재시도" : "자동 생성" : snoozed ? "다시 알림" : cycle.notifyDate === cycle.dueDate ? "당일 알림" : "알림"}</>}
       {cycle.adjusted && <span>{snoozed || !cycle.needsAttention ? " · " : ""}날짜 조정됨</span>}
     </p>}
     {cycle.needsAttention && <div className="routine-prompt">
-      <button type="button" className="btn btn-primary" disabled={busy} onClick={routine.mode === "schedule" ? onCreate : () => { detailsToggle.current?.focus(); onAcknowledge(); }}>{routine.mode === "schedule" ? "일정 만들기" : "확인했어요"}</button>
+      <button type="button" className="btn btn-primary" disabled={busy} onClick={createsSchedule ? onCreate : () => { detailsToggle.current?.focus(); onAcknowledge(); }}>{createsSchedule ? "일정 만들기" : "확인했어요"}</button>
       <button type="button" className="btn btn-soft" disabled={busy} onClick={onSnooze}>나중에</button>
     </div>}
     <div id={detailsId} className="routine-card-details" hidden={!expanded}>
       <dl className="routine-detail-fields">
         <dt>반복</dt><dd>{frequency}</dd>
-        <dt>알림</dt><dd>{paused ? "일시 중지 · " : ""}{routine.leadDays === 0 ? "당일" : `${routine.leadDays}일 전`} · {routine.mode === "schedule" ? "일정 만들기 제안" : "알림만 받기"}</dd>
+        <dt>{routine.mode === "auto" ? "자동 생성" : "알림"}</dt><dd>{paused ? "일시 중지 · " : ""}{routine.leadDays === 0 ? "당일" : `${routine.leadDays}일 전`} · {routine.mode === "auto" ? "일정 자동으로 만들기" : routine.mode === "schedule" ? "일정 만들기 제안" : "알림만 받기"}</dd>
         {!ended && cycle.adjusted && <><dt>날짜 조정</dt><dd>{cycle.sourceDates?.map((date) => formatRoutineDate(date)).join(", ")} → {formatRoutineDate(cycle.dueDate)}</dd></>}
         {routine.content && <><dt>메모</dt><dd className="routine-content">{routine.content}</dd></>}
       </dl>

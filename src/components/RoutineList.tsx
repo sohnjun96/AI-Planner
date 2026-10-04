@@ -42,7 +42,9 @@ export function RoutineList({ rows, groupByStatus = false, onEdit, onToggle, onD
     try {
       await actOnRoutine(row.routine, row.cycle.id, action, undefined, date);
       setSnooze(undefined);
-      showToast(action === "skipped" ? "이번 회차를 건너뛰었습니다." : action === "snoozed" ? "선택한 날에 다시 알려드릴게요." : "이번 회차를 확인했습니다.");
+      showToast(action === "skipped" ? "이번 회차를 건너뛰었습니다." : action === "snoozed"
+        ? row.routine.mode === "auto" ? "선택한 날에 앱을 열면 이 회차의 일정을 자동으로 만듭니다." : "선택한 날에 다시 알려드릴게요."
+        : "이번 회차를 확인했습니다.");
     } catch (e) { setError(e instanceof Error ? e.message : "처리하지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -69,14 +71,14 @@ export function RoutineList({ rows, groupByStatus = false, onEdit, onToggle, onD
           setDraft(undefined); showToast("이번 회차의 일정을 만들었습니다.");
         }} />
     </TaskModal>}
-    {snooze && <TaskModal title="언제 다시 알려드릴까요?" onCancel={() => setSnooze(undefined)} isBusy={busy}>
+    {snooze && <TaskModal title={snooze.routine.mode === "auto" ? "언제 자동으로 만들까요?" : "언제 다시 알려드릴까요?"} onCancel={() => setSnooze(undefined)} isBusy={busy}>
       <form className="routine-form" onSubmit={(event) => { event.preventDefault(); void act(snooze, "snoozed", snoozeDate); }}>
         <p>{snooze.routine.title} · {snooze.cycle.dueDate} 예정</p>
         <div className="button-row">{[1, 3, 7].map((days) => <button key={days} type="button" className="btn btn-soft" onClick={() => setSnoozeDate(getDateKey(addDays(new Date(), days)))}>{days === 1 ? "내일" : `${days}일 뒤`}</button>)}</div>
-        <label>다시 안내할 날짜<input type="date" required min={getDateKey(addDays(new Date(), 1))} value={snoozeDate} onChange={(event) => setSnoozeDate(event.target.value)} /></label>
-        <p className="description-text">예정일은 유지됩니다. 선택한 날에 이 회차를 다시 안내합니다.</p>
+        <label>{snooze.routine.mode === "auto" ? "자동 생성할 날짜" : "다시 안내할 날짜"}<input type="date" required min={getDateKey(addDays(new Date(), 1))} value={snoozeDate} onChange={(event) => setSnoozeDate(event.target.value)} /></label>
+        <p className="description-text">예정일은 유지됩니다. {snooze.routine.mode === "auto" ? "선택한 날에 앱이 열려 있으면 이 회차의 일정을 자동 생성합니다." : "선택한 날에 이 회차를 다시 안내합니다."}</p>
         {error && <p className="error-text" role="alert">{error}</p>}
-        <button className="btn btn-primary" disabled={busy}>{busy ? "저장 중…" : "이날 다시 알려주세요"}</button>
+        <button className="btn btn-primary" disabled={busy}>{busy ? "저장 중…" : snooze.routine.mode === "auto" ? "이날 자동으로 만들어 주세요" : "이날 다시 알려주세요"}</button>
       </form>
     </TaskModal>}
   </>;

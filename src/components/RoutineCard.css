@@ -10,10 +10,14 @@
 .routine-status.is-due { color: var(--status-on-hold-text); background: var(--status-on-hold-bg); }
 .routine-more-button { display: grid; place-items: center; flex: 0 0 32px; width: 32px; min-height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--body-muted); cursor: pointer; }
 .routine-more-button:hover:not(:disabled) { color: var(--ink); background: var(--surface-soft); }
-.routine-card .routine-card-title { min-width: 0; margin: 3px 0 4px; font-size: 18px; line-height: 1.45; letter-spacing: -.025em; }
-.routine-details-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 30px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--ink); text-align: left; font: inherit; font-weight: 650; cursor: pointer; }
+.routine-card-title-row { display: flex; align-items: center; gap: 12px; min-width: 0; margin: 3px 0 4px; }
+.routine-card .routine-card-title { flex: 1; min-width: 0; margin: 0; font-size: 18px; line-height: 1.45; letter-spacing: -.025em; font-weight: 650; }
+.routine-title-edit, .routine-details-toggle { display: flex; align-items: center; min-height: 30px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.routine-title-edit { width: 100%; letter-spacing: inherit; }
+.routine-details-toggle { flex-shrink: 0; }
 .routine-title-text { min-width: 0; overflow-wrap: anywhere; }
-.routine-details-toggle:hover .routine-title-text { color: var(--primary-focus); }
+.routine-title-edit:hover:not(:disabled) { color: var(--primary-focus); }
+.routine-details-toggle:hover .routine-details-label { color: var(--ink); }
 .routine-details-label { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 12px; letter-spacing: 0; font-weight: 400; color: var(--body-muted); }
 .routine-details-toggle[aria-expanded="true"] .routine-details-label svg { transform: rotate(180deg); }
 .routine-card-schedule { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
@@ -47,10 +51,10 @@
 @media (max-width: 600px) {
   .routine-card { padding: 10px 12px 12px; }
   .routine-card .routine-card-title { font-size: 17px; }
-  .routine-details-toggle { gap: 8px; }
+  .routine-card-title-row { gap: 8px; }
 }
 @media (pointer: coarse) {
   .routine-card .routine-prompt .btn, .routine-card .routine-resume, .routine-card .routine-history .btn { min-height: 44px; }
   .routine-more-button { flex-basis: 44px; width: 44px; min-height: 44px; }
-  .routine-details-toggle { min-height: 44px; }
+  .routine-title-edit, .routine-details-toggle { min-height: 44px; }
 }

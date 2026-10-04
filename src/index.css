@@ -171,12 +171,73 @@ a {
 }
 
 .app-shell {
+  --ai-schedule-fab-size: 60px;
+  --ai-schedule-fab-inset: 24px;
+  --ai-schedule-fab-bottom: calc(24px + env(safe-area-inset-bottom));
   width: 100%;
   min-width: 0;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+}
+
+.app-shell:has(.notes-workspace.has-selection) {
+  --ai-schedule-fab-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+
+/* Outside route-transition so route animations never move the fixed button. */
+.ai-schedule-fab {
+  position: fixed;
+  right: var(--ai-schedule-fab-inset);
+  bottom: var(--ai-schedule-fab-bottom);
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ai-schedule-fab-size);
+  height: var(--ai-schedule-fab-size);
+  padding: 0;
+  border: 1px solid #b8cef3;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--canvas), #eff6ff);
+  box-shadow: 0 5px 22px rgba(33, 84, 165, 0.15), 0 1px 3px rgba(33, 84, 165, 0.09);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.ai-schedule-fab:hover {
+  border-color: #2563eb;
+  box-shadow: 0 7px 25px rgba(33, 84, 165, 0.23);
+}
+
+.ai-schedule-fab:focus-visible {
+  outline: 2px solid var(--primary-focus);
+  outline-offset: 4px;
+}
+
+.ai-schedule-fab[hidden],
+body:has(.modal-backdrop:not([hidden])) .ai-schedule-fab {
+  display: none;
+}
+
+.ai-schedule-fab-plus {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 2px solid var(--canvas);
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  pointer-events: none;
+}
+
+.ai-schedule-fab-plus svg {
+  display: block;
 }
 
 .skip-link {
@@ -1017,6 +1078,16 @@ textarea:focus-visible,
   flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
+}
+
+.calendar-day.today .calendar-day-top {
+  flex-wrap: wrap;
+}
+
+.calendar-today-badge {
+  flex: 0 0 auto;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .calendar-day-number {
@@ -2857,8 +2928,8 @@ textarea:focus-visible,
   display: grid;
   isolation: isolate;
   flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   place-items: center;
 }
 
@@ -5036,13 +5107,6 @@ textarea:focus-visible,
   gap: 16px;
 }
 
-.dashboard-ai-add-button {
-  margin-inline-start: auto;
-  align-self: center;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
 .dashboard-calendar-header-actions {
   display: flex;
   align-items: center;
@@ -5052,10 +5116,6 @@ textarea:focus-visible,
   min-width: 0;
   max-width: 100%;
   margin-inline-start: auto;
-}
-
-.dashboard-calendar-header-actions > .dashboard-ai-add-button {
-  margin-inline-start: 0;
 }
 
 .dashboard-calendar-header-actions > .segmented-control {
@@ -5151,7 +5211,7 @@ textarea:focus-visible,
 }
 
 .dashboard-today-schedules {
-  align-self: stretch;
+  align-self: start;
   border: 1px solid color-mix(in srgb, var(--hairline) 72%, var(--tint-cream));
   border-radius: 8px;
   padding: 10px 16px;
@@ -5213,6 +5273,33 @@ textarea:focus-visible,
   gap: 24px;
   border-left: 1px solid var(--hairline);
   padding-left: 22px;
+}
+
+.dashboard-summary-side > section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dashboard-summary-side .dashboard-summary-section-header {
+  flex-shrink: 0;
+}
+
+.dashboard-summary-scroll-list {
+  min-height: 0;
+  max-height: calc(var(--summary-list-height, 340px) + 8px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  padding: 4px;
+  margin: -4px;
+}
+
+.dashboard-summary-scroll-list:focus-visible {
+  outline: 2px solid var(--primary-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .dashboard-summary-section-header {
@@ -5749,6 +5836,7 @@ textarea:focus-visible,
   line-height: 1;
 }
 
+.calendar-today-badge,
 .week-day-today-badge {
   font-size: 10px;
   font-weight: 700;
@@ -8781,6 +8869,11 @@ textarea:focus-visible,
   border-radius: 0;
   background: color-mix(in srgb, var(--surface-pearl) 88%, var(--canvas));
   box-shadow: 0 5px 12px -12px rgba(15, 23, 42, 0.5);
+}
+
+/* 노트 팝업은 body 포털에 렌더링되므로 고정 툴바(4)보다 위에 표시한다. */
+.note-mdx-editor.mdxeditor-popup-container {
+  z-index: 5;
 }
 
 .note-mdx-editor .mdxeditor-toolbar button,
@@ -11817,6 +11910,16 @@ textarea:focus-visible,
     gap: 0;
   }
 
+  .calendar-day.today .calendar-day-top-meta {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .calendar-today-badge {
+    padding: 1px 3px;
+    font-size: 9px;
+  }
+
   .calendar-day-count {
     min-width: 14px;
     max-width: 100%;
@@ -12437,11 +12540,18 @@ body:has(.modal-backdrop:not([hidden])) {
 
 @media (max-width: 900px) {
   .app-shell {
+    --ai-schedule-fab-inset: 16px;
+    --ai-schedule-fab-bottom: calc(92px + env(safe-area-inset-bottom));
     padding-bottom: calc(74px + env(safe-area-inset-bottom));
   }
 
-  .toast-host {
-    bottom: calc(82px + env(safe-area-inset-bottom));
+  .app-shell:has(.notes-workspace.has-selection) {
+    --ai-schedule-fab-bottom: calc(128px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell .toast-host,
+  .app-shell:has(.notes-workspace.has-selection) .toast-host {
+    bottom: calc(var(--ai-schedule-fab-bottom) + var(--ai-schedule-fab-size) + 12px);
   }
 
   .weekly-backup-reminder {

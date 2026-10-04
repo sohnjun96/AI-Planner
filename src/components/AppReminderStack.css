@@ -1,13 +1,13 @@
 .app-reminder-stack {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: var(--ai-schedule-fab-inset, 24px);
+  bottom: calc(var(--ai-schedule-fab-bottom, 24px) + var(--ai-schedule-fab-size, 60px) + 12px);
   z-index: 1800;
   display: flex;
   flex-direction: column;
   gap: 12px;
   width: min(420px, calc(100vw - 32px));
-  max-height: calc(100dvh - 120px);
+  max-height: calc(100dvh - var(--ai-schedule-fab-bottom, 24px) - var(--ai-schedule-fab-size, 60px) - 100px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -76,11 +76,8 @@
 .routine-reminder-collapsed strong { flex: 1; font-size: 13px; }
 .routine-reminder-collapsed > span:last-child { color: var(--body-muted); font-size: 11px; }
 
-@media (min-width: 881px) {
-  .app-shell:has(.notes-workspace.has-selection) .app-reminder-stack { bottom: 80px; max-height: calc(100dvh - 176px); }
-}
 @media (max-width: 900px) {
-  .app-reminder-stack { right: 12px; bottom: calc(82px + env(safe-area-inset-bottom)); width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 160px - env(safe-area-inset-bottom)); }
+  .app-reminder-stack { right: 12px; width: min(420px, calc(100vw - 24px)); }
 }
 @media (max-width: 420px) {
   .routine-reminder { padding: 14px 16px 10px; }

@@ -478,6 +478,9 @@ export function MonthCalendar({
                 <div className="calendar-day-top">
                   <span className="calendar-day-number">{date.getDate()}</span>
                   <div className="calendar-day-top-meta">
+                    {todayKey === key ? (
+                      <span className="calendar-today-badge" aria-hidden="true">오늘</span>
+                    ) : null}
                     {topMarkers.map((marker) => (
                       <span key={marker.id} className={`calendar-special-mark ${marker.tone}`}>
                         {formatMarkerCount(marker)}
@@ -491,16 +494,16 @@ export function MonthCalendar({
                   </div>
                 </div>
 
+                <div className="calendar-progress" aria-hidden="true">
+                  <span style={{ width: `${completionRatio}%` }} />
+                </div>
+
                 {holidayLabel ? (
                   <span className="calendar-holiday-mark" title={holidayLabel}>
                     <span className="calendar-holiday-name">{holidayLabel}</span>
                     <span className="calendar-holiday-compact" aria-hidden="true">휴일</span>
                   </span>
                 ) : null}
-
-                <div className="calendar-progress" aria-hidden="true">
-                  <span style={{ width: `${completionRatio}%` }} />
-                </div>
 
                 <div className="calendar-event-stack">
                   {events.slice(0, 3).map((event) => (

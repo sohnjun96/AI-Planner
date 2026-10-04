@@ -182,10 +182,11 @@ try {
     const placement = await board.locator(".dashboard-calendar-header-actions").evaluate((element) => {
       const buttons = [...element.querySelectorAll("button")];
       const filter = buttons.find((button) => button.getAttribute("aria-label") === "일정 보드 필터").getBoundingClientRect();
-      const ai = buttons.find((button) => button.textContent.trim() === "AI 일정 추가").getBoundingClientRect();
-      return { isLeft: filter.right <= ai.left + 1, sameRow: Math.abs(filter.top - ai.top) < 2 };
+      const view = buttons.find((button) => button.textContent.trim() === "목록").getBoundingClientRect();
+      const sameRow = Math.abs(filter.top - view.top) < 2;
+      return { ordered: sameRow ? filter.right <= view.left + 1 : filter.bottom <= view.top + 1 };
     });
-    expect(placement).toEqual({ isLeft: true, sameRow: true });
+    expect(placement).toEqual({ ordered: true });
   }
 
   await seedFixture();
@@ -194,7 +195,9 @@ try {
   await expectHeaderFilterState(0);
   const headerButtons = await board.locator(".dashboard-calendar-header-actions button").allTextContents();
   expect(headerButtons.findIndex((text) => text.includes("필터")))
-    .toBeLessThan(headerButtons.findIndex((text) => text.trim() === "AI 일정 추가"));
+    .toBeLessThan(headerButtons.findIndex((text) => text.trim() === "목록"));
+  await expect(board.getByRole("button", { name: "AI 일정 추가", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "AI 일정 추가", exact: true })).toBeVisible();
   const baselineToday = await todaySnapshot();
   const tomorrowCell = board.locator('[data-calendar-date="2026-10-02"]');
   await expect(tomorrowCell).toHaveAccessibleName(/총 3건/);

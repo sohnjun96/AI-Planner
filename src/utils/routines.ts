@@ -35,7 +35,7 @@ export function validateRoutine(input: RoutineInput): RoutineInput {
   const recurrence = getRoutineRule(input);
   if (!Number.isInteger(input.leadDays) || input.leadDays < 0 || input.leadDays > 30) throw new Error("미리 알림은 0~30일 전으로 정해 주세요.");
   if (typeof input.time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time)) throw new Error("일정 시간을 확인해 주세요.");
-  if (!["schedule", "remind"].includes(input.mode) || typeof input.isActive !== "boolean") throw new Error("루틴 설정을 확인해 주세요.");
+  if (!["schedule", "remind", "auto"].includes(input.mode) || typeof input.isActive !== "boolean") throw new Error("루틴 설정을 확인해 주세요.");
   if (![input.projectId, input.taskTypeId].every(id => typeof id === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(id))) throw new Error("프로젝트와 종류를 선택해 주세요.");
   return { title, content: input.content.trim(), recurrence, projectId: input.projectId, taskTypeId: input.taskTypeId,
     time: input.time, leadDays: input.leadDays, mode: input.mode, isActive: input.isActive };

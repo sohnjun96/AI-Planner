@@ -1,6 +1,6 @@
 import { RoutineNotifications } from "./RoutineNotifications";
 import { useRoutines } from "../hooks/useRoutines";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { NavLink, useLocation, useNavigate } from "../routing";
@@ -37,12 +37,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [aiSessionRevision, setAiSessionRevision] = useState(0);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAskOpen, setIsAskOpen] = useState(false);
+  const aiFabRef = useRef<HTMLButtonElement>(null);
+  const openedFromAiFab = useRef(false);
   const aiDialogRef = useDialogFocus<HTMLElement>({
     isOpen: isAiAddOpen,
     onClose: closeAiScheduleSession,
   });
 
   function openAiScheduleSession(initialDraft = "") {
+    openedFromAiFab.current = document.activeElement === aiFabRef.current;
     setAiInitialDraft(initialDraft);
     setAiSessionRevision((revision) => revision + 1);
     setIsAiAddOpen(true);
@@ -50,6 +53,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   function closeAiScheduleSession() {
     setIsAiAddOpen(false);
+    // Hiding the trigger can move focus to body before useDialogFocus remembers it.
+    if (openedFromAiFab.current) {
+      openedFromAiFab.current = false;
+      window.requestAnimationFrame(() => aiFabRef.current?.focus());
+    }
   }
 
   const openNewNote = useCallback(() => {
@@ -209,6 +217,26 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <footer className="app-copyright">(c) 2026. 손준혁 All rights reserved.</footer>
 
+      <button
+        ref={aiFabRef}
+        type="button"
+        className="ai-schedule-fab"
+        aria-label="AI 일정 추가"
+        aria-haspopup="dialog"
+        aria-expanded={isAiAddOpen}
+        aria-controls="ai-schedule-dialog"
+        title="AI 일정 추가 (A)"
+        hidden={isAiAddOpen || isHelpOpen || isAskOpen}
+        onClick={() => openAiScheduleSession()}
+      >
+        <AiScheduleOrb active={!isAiAddOpen && !isHelpOpen && !isAskOpen} />
+        <span className="ai-schedule-fab-plus" aria-hidden="true">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" focusable="false">
+            <path d="M6 2v8M2 6h8" />
+          </svg>
+        </span>
+      </button>
+
       <ModalBackdrop
         className="modal-backdrop"
         hidden={!isAiAddOpen}
@@ -216,6 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
           <section
             ref={aiDialogRef}
+            id="ai-schedule-dialog"
             className="modal-card panel ai-add-modal-card"
             role="dialog"
             aria-modal="true"

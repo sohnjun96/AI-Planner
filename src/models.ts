@@ -31,7 +31,7 @@ export interface Routine {
   dayOfMonth?: number;
   time: string;
   leadDays: number;
-  mode: "schedule" | "remind";
+  mode: "schedule" | "remind" | "auto";
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
