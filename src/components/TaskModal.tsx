@@ -46,7 +46,7 @@ export function TaskModal({ title, onCancel, children, hasUnsavedChanges = false
       >
         <header className="panel-header task-modal-header">
           <div>
-            <p className="eyebrow">{eyebrow}</p>
+            {eyebrow && <p className="eyebrow">{eyebrow}</p>}
             <h2 id={titleId}>{title}</h2>
           </div>
           <button

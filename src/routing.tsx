@@ -45,7 +45,7 @@ function normalizeRoute(raw: string): string {
     return `/dashboard${search}`;
   }
   if (rawPath === "/types") {
-    return "/settings?section=general";
+    return "/settings?section=types";
   }
   return ALLOWED_PATHS.has(rawPath) ? `${rawPath}${search}` : "/dashboard";
 }

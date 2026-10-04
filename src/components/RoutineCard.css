@@ -1,18 +1,18 @@
 .routine-list-group-title { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 6px; margin: 10px 0 -6px; font-size: 13px; line-height: 1.5; font-weight: 600; color: var(--body-muted); }
 .routine-list-group-title:first-child { margin-top: 0; }
 .routine-list-group-title > span { font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 400; }
-.routine-card { min-width: 0; padding: 12px 16px 14px; border: 1px solid var(--hairline); border-left: 3px solid var(--routine-project-color); border-radius: 15px; background: var(--canvas); color: var(--ink); }
+.routine-card { min-width: 0; padding: 12px 16px 14px; border: 1px solid var(--hairline); border-left: 3px solid var(--routine-project-color); border-radius: var(--radius-lg); background: var(--canvas); color: var(--ink); }
 .routine-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
 .routine-card-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
 .routine-project { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--body-muted); overflow-wrap: anywhere; }
 .routine-project-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--routine-project-color); }
-.routine-status { flex-shrink: 0; padding: 2px 6px; border-radius: 5px; font-size: 11px; line-height: 1.5; color: var(--body-muted); background: var(--surface-soft); }
+.routine-status { flex-shrink: 0; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 11px; line-height: 1.5; color: var(--body-muted); background: var(--surface-soft); }
 .routine-status.is-due { color: var(--status-on-hold-text); background: var(--status-on-hold-bg); }
-.routine-more-button { display: grid; place-items: center; flex: 0 0 32px; width: 32px; min-height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--body-muted); cursor: pointer; }
+.routine-more-button { display: grid; place-items: center; flex: 0 0 32px; width: 32px; min-height: 30px; padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--body-muted); cursor: pointer; }
 .routine-more-button:hover:not(:disabled) { color: var(--ink); background: var(--surface-soft); }
 .routine-card-title-row { display: flex; align-items: center; gap: 12px; min-width: 0; margin: 3px 0 4px; }
 .routine-card .routine-card-title { flex: 1; min-width: 0; margin: 0; font-size: 18px; line-height: 1.45; letter-spacing: -.025em; font-weight: 650; }
-.routine-title-edit, .routine-details-toggle { display: flex; align-items: center; min-height: 30px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.routine-title-edit, .routine-details-toggle { display: flex; align-items: center; min-height: 30px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
 .routine-title-edit { width: 100%; letter-spacing: inherit; }
 .routine-details-toggle { flex-shrink: 0; }
 .routine-title-text { min-width: 0; overflow-wrap: anywhere; }
@@ -27,9 +27,7 @@
 .routine-due-date + .routine-summary::before { content: "·"; margin-right: 8px; }
 .routine-notify-date { margin: 3px 0 0; font-size: 12px; line-height: 1.6; color: var(--body-muted); overflow-wrap: anywhere; }
 .routine-prompt { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
-.routine-card .routine-prompt .btn, .routine-card .routine-resume { min-height: 36px; padding: 7px 12px; font-size: 13px; line-height: 1.5; border-radius: 8px; font-weight: 600; }
-.routine-card .btn-soft { border-color: var(--hairline-strong); background: var(--canvas); color: var(--ink); box-shadow: none; }
-.routine-card .btn-soft:hover:not(:disabled) { background: var(--surface-soft); }
+.routine-card .routine-prompt .btn, .routine-card .routine-resume { min-height: 36px; padding: 7px 12px; font-size: 13px; line-height: 1.5; }
 .routine-card .routine-resume { margin-left: auto; flex-shrink: 0; }
 .routine-card-details { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--hairline); }
 .routine-card-details[hidden] { display: none; }

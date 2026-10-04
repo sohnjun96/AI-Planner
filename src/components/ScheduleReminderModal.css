@@ -1,0 +1,484 @@
+.reminder-review-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(5px);
+  animation: modal-backdrop-in 180ms var(--motion-ease-out) both;
+}
+
+.reminder-review-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(470px, 100%);
+  max-height: calc(100dvh - 32px);
+  min-width: 0;
+  overflow: hidden;
+  color: #172554;
+  border: 1px solid #dbe5f4;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 20px 46px rgba(15, 23, 42, 0.2);
+  outline: none;
+}
+
+.reminder-review-modal-grouped {
+  width: min(560px, 100%);
+}
+
+.reminder-review-modal * {
+  box-sizing: border-box;
+}
+
+.reminder-review-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e7edf7;
+}
+
+.reminder-review-header-title {
+  min-width: 0;
+}
+
+.reminder-review-header p,
+.reminder-review-kicker {
+  margin: 0;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.reminder-review-count-title {
+  margin: 5px 0 0;
+  color: #172554;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.reminder-review-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  margin: 0 3px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.reminder-review-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #41608d;
+  background: #f1f5fb;
+  cursor: pointer;
+}
+
+.reminder-review-close svg {
+  display: block;
+}
+
+.reminder-review-close:hover:not(:disabled) {
+  background: #e4edf9;
+}
+
+.reminder-review-content {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 20px 20px 12px;
+}
+
+.reminder-review-focus-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reminder-review-focus-heading h2 {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #172554;
+  font-size: clamp(26px, 5vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.reminder-review-ai-edit {
+  flex: 0 0 auto;
+  min-height: 28px;
+  margin-top: 2px;
+  padding: 3px 10px;
+  border: 1px solid #c9daf7;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reminder-review-ai-edit:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.reminder-review-time {
+  margin: 0;
+  color: #49627f;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.reminder-review-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 1px 0 3px;
+}
+
+.reminder-review-details div {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid #d9e4f4;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.reminder-review-details dt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.reminder-review-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #31517d;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reminder-review-error {
+  margin: 0;
+  color: #b4233b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.reminder-review-actions {
+  flex: 0 0 auto;
+  padding: 0 20px 10px;
+}
+
+.reminder-review-primary-actions,
+.reminder-review-secondary-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.reminder-review-primary-actions button,
+.reminder-review-secondary-actions button {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.reminder-action-complete {
+  color: #fff;
+  background: #2563eb;
+}
+
+.reminder-action-snooze {
+  color: #8a5a08;
+  background: #fff8df;
+}
+
+.reminder-action-cancel {
+  color: #b4233b;
+  border-color: #f2c7d0 !important;
+  background: #fff5f6;
+}
+
+.reminder-action-postpone {
+  color: #31517d;
+  border-color: #d9e4f4 !important;
+  background: #fff;
+}
+
+.reminder-review-more-toggle,
+.reminder-review-text-action {
+  min-height: 30px;
+  padding: 5px 0;
+  border: 0;
+  color: #31517d;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reminder-review-more-toggle {
+  display: block;
+  margin: 3px 0 0 auto;
+}
+
+.reminder-more-options {
+  margin-top: 3px;
+}
+
+.reminder-postpone-options {
+  width: 100%;
+  margin-top: 7px;
+  padding: 8px;
+  border: 1px solid #d9e4f4;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.reminder-postpone-options p {
+  margin: 0 0 7px;
+  color: #49627f;
+  font-size: 11px;
+}
+
+.reminder-postpone-options > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.reminder-postpone-options button {
+  flex: 1 1 100px;
+  min-height: 32px;
+  padding: 6px;
+  border: 1px solid #d9e4f4;
+  border-radius: 7px;
+  color: #31517d;
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reminder-review-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-top: 1px solid #e7edf7;
+}
+
+.reminder-review-group-title {
+  margin: 0;
+  padding: 8px 20px 6px;
+  color: #49627f;
+  background: #f8fbff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reminder-review-group-title.is-soon,
+.reminder-review-relative.is-soon {
+  color: #2563eb;
+}
+
+.reminder-review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  min-height: 57px;
+  padding: 9px 20px;
+  border: 0;
+  border-bottom: 1px solid #e7edf7;
+  color: #172554;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.reminder-review-row:hover:not(:disabled) {
+  background: #f8fbff;
+}
+
+.reminder-review-row.is-selected,
+.reminder-review-row.is-selected:hover:not(:disabled) {
+  background: #eff6ff;
+  box-shadow: inset 3px 0 #2563eb;
+}
+
+.reminder-review-row-main {
+  min-width: 0;
+}
+
+.reminder-review-row-title,
+.reminder-review-row-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reminder-review-row-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.reminder-review-row-meta {
+  margin-top: 3px;
+  color: #49627f;
+  font-size: 11px;
+}
+
+.reminder-review-relative {
+  color: #49627f;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.reminder-review-relative.is-past {
+  color: #97551d;
+}
+
+.reminder-review-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  padding: 7px 20px;
+  border-top: 1px solid #e7edf7;
+  background: #f8fbff;
+}
+
+.reminder-review-text-action {
+  color: #1d4ed8;
+}
+
+.reminder-review-modal button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.reminder-review-modal button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+@media (max-width: 520px) {
+  .reminder-review-backdrop {
+    padding: 12px;
+  }
+
+  .reminder-review-modal {
+    max-height: calc(100dvh - 24px);
+  }
+
+  .reminder-review-header {
+    padding: 12px 14px;
+  }
+
+  .reminder-review-content {
+    gap: 7px;
+    padding: 16px 14px 10px;
+  }
+
+  .reminder-review-actions {
+    padding: 0 14px 7px;
+  }
+
+  .reminder-review-primary-actions button,
+  .reminder-review-secondary-actions button {
+    min-height: 40px;
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .reminder-review-group-title {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .reminder-review-row {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .reminder-review-footer {
+    padding: 6px 14px;
+  }
+}
+
+@media (max-height: 620px) {
+  .reminder-review-header {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .reminder-review-content {
+    padding-top: 10px;
+  }
+
+  .reminder-review-focus-heading h2 {
+    font-size: 24px;
+  }
+
+  .reminder-review-details {
+    flex-wrap: nowrap;
+  }
+}

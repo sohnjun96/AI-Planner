@@ -1,5 +1,7 @@
 const ALARM_PAYLOAD_KEY = "schedule_alarm_payload_v1";
 const TASK_ALARM_PREFIX = "task-reminder:";
+const SNOOZE_ALARM_PREFIX = "task-reminder-snooze:";
+const SNOOZE_STORAGE_KEY = "schedule_reminder_snoozes_v1";
 const MAX_PAYLOAD_TASKS = 2_000;
 const MAX_SCHEDULED_ALARMS = 400;
 const ALARM_BATCH_SIZE = 25;
@@ -124,6 +126,7 @@ async function lockStorageToTrustedContexts() {
   await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 }
 
+let reminderSequence = 0;
 function getPlannerUrl(taskId, currentUrl = "") {
   const params = new URLSearchParams(currentUrl.split("?")[1] || "");
   const ids = params.get("review") === "1" ? params.getAll("taskId") : [];
@@ -131,6 +134,7 @@ function getPlannerUrl(taskId, currentUrl = "") {
   const query = new URLSearchParams();
   for (const id of ids) query.append("taskId", id);
   if (ids.length) query.set("review", "1");
+  if (ids.length) query.set("reminderBatch", `${Date.now().toString(36)}-${(++reminderSequence).toString(36)}`);
   return chrome.runtime.getURL(`index.html#/dashboard${ids.length ? `?${query}` : ""}`);
 }
 
@@ -143,7 +147,12 @@ async function waitForPlannerNavigation(tabId, url) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     const tab = await chrome.tabs.get(tabId);
-    if (tab.url === url && tab.status !== "loading") return;
+    const expectedBatch = new URLSearchParams(url.split("?")[1] || "").get("reminderBatch");
+    const actualBatch = new URLSearchParams((tab.url || "").split("?")[1] || "").get("reminderBatch");
+    // The UI stores the IDs and consumes their review link immediately. Keep
+    // the batch marker until the worker observes that navigation has committed.
+    if (tab.status !== "loading" && (tab.url === url || (expectedBatch && expectedBatch === actualBatch
+      && tab.url?.split("#")[0] === url.split("#")[0]))) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("플래너 탭의 알림 이동을 완료하지 못했습니다.");
@@ -209,6 +218,23 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name.startsWith(ROUTINE_ALARM_PREFIX)) {
     void showRoutineReminder(alarm.name).catch((error) => console.error("루틴 알림 실패", error));
+    return;
+  }
+  if (alarm.name.startsWith(SNOOZE_ALARM_PREFIX)) {
+    const taskId = alarm.name.slice(SNOOZE_ALARM_PREFIX.length);
+    if (!/^[A-Za-z0-9._:-]{1,128}$/.test(taskId)) return;
+    void Promise.all([storageGet(SNOOZE_STORAGE_KEY), storageGet(ALARM_PAYLOAD_KEY)])
+      .then(([snoozes, payload]) => {
+        const when = snoozes && Object.hasOwn(snoozes, taskId) ? snoozes[taskId] : undefined;
+        const normalized = normalizePayload(payload);
+        const task = normalized?.tasks.find((item) => item.id === taskId);
+        if (typeof when === "number" && Number.isFinite(when) && when > 0 && when <= Date.now() + 1_000
+          && normalized?.settings.notificationsEnabled && task && task.status !== "DONE" && task.status !== "CANCELED") {
+          return openPlanner(taskId);
+        }
+        return undefined;
+      })
+      .catch((error) => console.error("다시 알림을 열지 못했습니다.", error));
     return;
   }
   if (!alarm.name.startsWith(TASK_ALARM_PREFIX)) return;

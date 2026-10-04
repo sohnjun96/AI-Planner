@@ -1,6 +1,5 @@
 import { DashboardRoutines } from "../components/RoutineList";
 import { isTaskDisplayedOnDate } from "../utils/taskTiming";
-import { removeReminder } from "../utils/reminderQueue";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import "./DashboardPage.weekNavigation.css";
 import "./DashboardPage.scheduleFilters.css";
@@ -15,7 +14,6 @@ import {
 } from "../components/DayCompleteCelebration";
 import { MarkdownMemo } from "../components/MarkdownMemo";
 import { MonthCalendar, type CalendarDayMarker, type CalendarDaySummary } from "../components/MonthCalendar";
-import { ScheduleReminderModal } from "../components/ScheduleReminderModal";
 import { ScheduleBoardFilterModal } from "../components/ScheduleBoardFilterModal";
 import { TaskForm, type TaskFormInteractionState } from "../components/TaskForm";
 import { TaskModal } from "../components/TaskModal";
@@ -28,7 +26,6 @@ import {
   addDays,
   combineDateTimeToIso,
   compareByStartAtAsc,
-  formatDateTime,
   getDateKey,
   isPastCompletedHidden,
   shiftIsoToDateKey,
@@ -53,6 +50,17 @@ import {
 } from "../utils/scheduleBoardFilters";
 
 const DASHBOARD_VIEW_MODE_STORAGE_KEY = "ai-planner:dashboard-view-mode";
+const DASHBOARD_SUMMARY_EXPANDED_STORAGE_KEY = "ai-planner:dashboard-summary-expanded";
+let summaryExpandedForSession: boolean | undefined;
+
+function getInitialSummaryExpanded(): boolean {
+  if (summaryExpandedForSession !== undefined) return summaryExpandedForSession;
+  try {
+    return window.localStorage.getItem(DASHBOARD_SUMMARY_EXPANDED_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
 
 function getInitialCalendarViewMode(): TaskViewMode {
   try {
@@ -504,7 +512,6 @@ export function DashboardPage() {
   const [memoSaved, setMemoSaved] = useState("");
   const [memoError, setMemoError] = useState("");
   const [taskModalState, setTaskModalState] = useState<TaskModalState>(null);
-  const [reminderReviewTaskId, setReminderReviewTaskId] = useState<string | null>(null);
   const [taskFormInteraction, setTaskFormInteraction] = useState<TaskFormInteractionState>({
     isDirty: false,
     isBusy: false,
@@ -513,7 +520,7 @@ export function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(() => getDateKey(new Date()));
   const [datePopoverKey, setDatePopoverKey] = useState<string | null>(null);
   const [calendarViewMode, setCalendarViewMode] = useState<TaskViewMode>(getInitialCalendarViewMode);
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(getInitialSummaryExpanded);
   const [scheduleViewMode, setScheduleViewMode] = useState<AgendaViewMode>("NOT_DONE");
   const [boardFilters, setBoardFilters] = useState<ScheduleBoardFilters>(createEmptyScheduleBoardFilters);
   const [isBoardFilterOpen, setIsBoardFilterOpen] = useState(false);
@@ -585,6 +592,10 @@ export function DashboardPage() {
         setSelectedDate((current) => (current === dateParam ? current : dateParam));
       }
 
+      if (searchParams.get("review") === "1") {
+        handledDeepLinkRef.current = "";
+        return;
+      }
       const taskId = searchParams.get("taskId");
       if (!taskId) {
         handledDeepLinkRef.current = "";
@@ -592,9 +603,10 @@ export function DashboardPage() {
       }
 
       const task = tasks.find((item) => item.id === taskId);
-      if (!task || (searchParams.get("review") === "1" && (task.status === "DONE" || task.status === "CANCELED"))) {
-        const nextParams = removeReminder(searchParams, taskId);
-        setReminderReviewTaskId(null);
+      if (!task) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("taskId");
+        nextParams.delete("review");
         handledDeepLinkRef.current = "";
         setSearchParams(nextParams, { replace: true });
         return;
@@ -609,11 +621,7 @@ export function DashboardPage() {
       if (!isValidDateKey(dateParam)) {
         setSelectedDate(getDateKey(task.startAt));
       }
-      if (searchParams.get("review") === "1") {
-        setReminderReviewTaskId(taskId);
-      } else {
-        setTaskModalState({ mode: "edit", taskId });
-      }
+      setTaskModalState({ mode: "edit", taskId });
     }, 250);
 
     return () => window.clearTimeout(timerId);
@@ -768,10 +776,6 @@ export function DashboardPage() {
     }
     return tasks.find((task) => task.id === taskModalState.taskId);
   }, [taskModalState, tasks]);
-  const reminderReviewTask = useMemo(
-    () => (reminderReviewTaskId ? tasks.find((task) => task.id === reminderReviewTaskId) : undefined),
-    [reminderReviewTaskId, tasks],
-  );
   const contextTask = useMemo(() => {
     if (!contextMenu || contextMenu.kind !== "task") {
       return undefined;
@@ -798,60 +802,6 @@ export function DashboardPage() {
         document.querySelector<HTMLButtonElement>(`[data-calendar-date="${returnDateKey}"]`)?.focus();
       });
     }
-  }
-
-  function closeReminderReview() {
-    setReminderReviewTaskId(null);
-    handledDeepLinkRef.current = "";
-    // Read the current hash because another alarm may have updated it before
-    // React has rendered the new search params.
-    const currentParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
-    const nextParams = removeReminder(currentParams, reminderReviewTaskId ?? "");
-    setSearchParams(nextParams, { replace: true });
-  }
-
-  function openReminderAiEdit() {
-    if (!reminderReviewTask) {
-      return;
-    }
-    const dateLabel = formatContextDateLabel(getDateKey(reminderReviewTask.startAt));
-    const timeLabel = formatTaskTime(reminderReviewTask, setting.timeFormat);
-    closeReminderReview();
-    openAiSchedule(
-      `다음 기존 일정을 수정해줘.\n- 날짜: ${dateLabel}\n- 시간: ${timeLabel}\n- 제목: ${reminderReviewTask.title}\n- 상태: ${STATUS_LABELS[reminderReviewTask.status]}\n\n수정 요청: `,
-    );
-  }
-
-  async function updateReminderTaskStatus(status: TaskStatus) {
-    if (!reminderReviewTask) {
-      return;
-    }
-    await updateTask(reminderReviewTask.id, {
-      ...toTaskInput(reminderReviewTask),
-      status,
-    });
-    closeReminderReview();
-  }
-
-  async function postponeReminderTask(days: 1 | 3 | 7) {
-    if (!reminderReviewTask) return;
-    const start = new Date(reminderReviewTask.startAt);
-    const nextStart = addDays(start, days);
-    const offset = nextStart.getTime() - start.getTime();
-    const nextStartAt = nextStart.toISOString();
-    const nextEndAt = reminderReviewTask.endAt
-      ? new Date(new Date(reminderReviewTask.endAt).getTime() + offset).toISOString()
-      : undefined;
-    const formatPeriod = (startAt: string, endAt?: string) =>
-      `${formatDateTime(startAt, "24h")}${endAt ? ` ~ ${formatDateTime(endAt, "24h")}` : ""}`;
-    const postponeMemo = `[일정 연기] ${formatPeriod(reminderReviewTask.startAt, reminderReviewTask.endAt)} → ${formatPeriod(nextStartAt, nextEndAt)}`;
-    await updateTask(reminderReviewTask.id, {
-      ...toTaskInput(reminderReviewTask),
-      startAt: nextStartAt,
-      endAt: nextEndAt,
-      content: `${reminderReviewTask.content}${reminderReviewTask.content ? "\n\n" : ""}${postponeMemo}`,
-    });
-    closeReminderReview();
   }
 
   // 노트 탭에서 "일정 열기"로 넘어오면 해당 일정 수정창을 연다.
@@ -990,6 +940,18 @@ export function DashboardPage() {
 
   function openEditTask(taskId: string) {
     setTaskModalState({ mode: "edit", taskId });
+  }
+
+  function toggleSummaryExpanded() {
+    const expanded = !isSummaryExpanded;
+    setIsSummaryExpanded(expanded);
+    // 저장소 접근이 제한되어도 같은 앱에서 탭을 이동하면 선택을 유지한다.
+    summaryExpandedForSession = expanded;
+    try {
+      window.localStorage.setItem(DASHBOARD_SUMMARY_EXPANDED_STORAGE_KEY, String(expanded));
+    } catch {
+      // 새로고침 후 복원만 건너뛰고 현재 앱의 선택은 유지한다.
+    }
   }
 
   function handleCalendarViewModeChange(mode: TaskViewMode) {
@@ -1356,7 +1318,7 @@ export function DashboardPage() {
               <button
                 type="button"
                 className="dashboard-summary-date-toggle"
-                onClick={() => setIsSummaryExpanded((expanded) => !expanded)}
+                onClick={toggleSummaryExpanded}
                 aria-expanded={isSummaryExpanded}
                 aria-controls="dashboard-summary-panel"
                 aria-label={`${formatFullDate(today)} 일정 요약 ${isSummaryExpanded ? "접기" : "펼치기"}`}
@@ -1728,19 +1690,6 @@ export function DashboardPage() {
         </TaskModal>
       ) : null}
 
-      {reminderReviewTask ? (
-        <ScheduleReminderModal
-          key={reminderReviewTask.id}
-          task={reminderReviewTask}
-          project={projectMap[reminderReviewTask.projectId]}
-          taskType={typeMap[reminderReviewTask.taskTypeId]}
-          timeFormat={setting.timeFormat}
-          onStatusChange={updateReminderTaskStatus}
-          onPostpone={postponeReminderTask}
-          onAiEdit={openReminderAiEdit}
-          onClose={closeReminderReview}
-        />
-      ) : null}
     </div>
   );
 }

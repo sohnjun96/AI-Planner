@@ -3,6 +3,7 @@ import { useRoutines } from "../hooks/useRoutines";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAppData } from "../context/AppDataContext";
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import { useScheduleReminders } from "../hooks/useScheduleReminders";
 import { NavLink, useLocation, useNavigate } from "../routing";
 import { showToast } from "../utils/toast";
 import { AiAssistantWorkspace } from "./AiAssistantWorkspace";
@@ -12,6 +13,7 @@ import { HelpModal } from "./HelpModal";
 import { ModalBackdrop } from "./ModalBackdrop";
 import { ToastHost } from "./ToastHost";
 import { AppReminderStack } from "./AppReminderStack";
+import { ScheduleReminderModal } from "./ScheduleReminderModal";
 
 const planaiLogo = __PLANAI_APP_ICON_URL__;
 
@@ -28,7 +30,7 @@ type AiScheduleOpenDetail = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { undoLastChange } = useAppData();
+  const { undoLastChange, projects, taskTypes, setting } = useAppData();
   const { dueCount } = useRoutines();
   const location = useLocation();
   const navigate = useNavigate();
@@ -37,6 +39,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [aiSessionRevision, setAiSessionRevision] = useState(0);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAskOpen, setIsAskOpen] = useState(false);
+  const [hasOtherDialog, setHasOtherDialog] = useState(false);
+  const reminders = useScheduleReminders(openAiScheduleSession);
+  const isReminderOpen = reminders.isOpen && !hasOtherDialog && !isAiAddOpen && !isHelpOpen && !isAskOpen;
   const aiFabRef = useRef<HTMLButtonElement>(null);
   const openedFromAiFab = useRef(false);
   const aiDialogRef = useDialogFocus<HTMLElement>({
@@ -59,6 +64,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.requestAnimationFrame(() => aiFabRef.current?.focus());
     }
   }
+
+  // Wait until an existing editing dialog closes before presenting reminders.
+  useEffect(() => {
+    const checkDialogs = () => setHasOtherDialog(Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'))
+      .some((dialog) => dialog.id !== "schedule-reminder-dialog" && dialog.getClientRects().length > 0));
+    const observer = new MutationObserver(checkDialogs);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "style", "class"] });
+    const timer = window.setTimeout(checkDialogs, 0);
+    return () => { window.clearTimeout(timer); observer.disconnect(); };
+  }, []);
 
   const openNewNote = useCallback(() => {
     if (location.pathname !== "/notes") {
@@ -197,6 +212,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="top-nav-actions">
+            <button type="button" className="btn btn-soft top-nav-reminders" onClick={reminders.open}
+              aria-label={`일정 알림${reminders.pendingTasks.length ? ` ${reminders.pendingTasks.length}건` : ""}`}
+              title="일정 알림" aria-haspopup="dialog" aria-expanded={isReminderOpen} aria-controls="schedule-reminder-dialog">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+              </svg>
+              <span className="top-nav-reminders-label">알림</span>
+              {reminders.pendingTasks.length > 0 ? <span className="top-nav-reminders-count" aria-hidden="true">{reminders.pendingTasks.length > 99 ? "99+" : reminders.pendingTasks.length}</span> : null}
+            </button>
             <button type="button" className="btn btn-soft" onClick={() => setIsAskOpen(true)} aria-label="내 데이터에 질문">
               질문
             </button>
@@ -226,10 +250,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         aria-expanded={isAiAddOpen}
         aria-controls="ai-schedule-dialog"
         title="AI 일정 추가 (A)"
-        hidden={isAiAddOpen || isHelpOpen || isAskOpen}
+        hidden={isAiAddOpen || isHelpOpen || isAskOpen || isReminderOpen}
         onClick={() => openAiScheduleSession()}
       >
-        <AiScheduleOrb active={!isAiAddOpen && !isHelpOpen && !isAskOpen} />
+        <AiScheduleOrb active={!isAiAddOpen && !isHelpOpen && !isAskOpen && !isReminderOpen} />
         <span className="ai-schedule-fab-plus" aria-hidden="true">
           <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" focusable="false">
             <path d="M6 2v8M2 6h8" />
@@ -302,6 +326,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} /> : null}
 
       {isAskOpen ? <AskDataModal onClose={() => setIsAskOpen(false)} /> : null}
+
+      {isReminderOpen && reminders.selectedTask ? (
+        <ScheduleReminderModal tasks={reminders.pendingTasks} selectedTaskId={reminders.selectedTask.id}
+          projects={projects} taskTypes={taskTypes} timeFormat={setting.timeFormat}
+          onSelectTask={reminders.select} onStatusChange={reminders.changeStatus} onPostpone={reminders.postpone}
+          onSnooze={reminders.snooze} onAcknowledge={reminders.acknowledgeSelected}
+          onAcknowledgeAll={reminders.acknowledgeAll} onAiEdit={reminders.editWithAi} onClose={reminders.close} />
+      ) : null}
 
       <AppReminderStack compact={location.pathname === "/notes"} />
 

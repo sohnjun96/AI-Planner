@@ -103,6 +103,7 @@ async function runBuild() {
   }
   const iconSvg = await readFile(path.join(rootDir, "icon.svg"), "utf8");
   const orbLicense = await readFile(path.join(rootDir, "public/licenses/thinking-orbs.txt"), "utf8");
+  const settingsIconLicense = await readFile(path.join(rootDir, "public/licenses/reicon.txt"), "utf8");
   const iconUrl = dataUrl("image/svg+xml", iconSvg);
   const result = await build({
     absWorkingDir: rootDir,
@@ -153,6 +154,9 @@ async function runBuild() {
   const html = `<!doctype html>
 <!-- thinking-orbs 0.3.2 — MIT license
 ${orbLicense.replace(/--/g, "- -")}
+-->
+<!-- Settings navigation icons — Reicon
+${settingsIconLicense.replace(/--/g, "- -")}
 -->
 <html lang="ko">
   <head>

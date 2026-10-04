@@ -26,10 +26,10 @@ try {
   async function open(title) {
     await add.click();
     await expect(modal).toBeVisible();
-    await expect(modal.getByLabel("어떤 일을 챙길까요?")).toBeFocused();
+    await expect(modal.getByLabel("루틴 이름")).toBeFocused();
     await expect(modal.getByRole("radio", { name: "매주", exact: true })).toBeChecked();
     await expect(preview.locator(".routine-preview-summary")).toContainText(/월요일.*수요일.*금요일/);
-    if (title) await modal.getByLabel("어떤 일을 챙길까요?").fill(title);
+    if (title) await modal.getByLabel("루틴 이름").fill(title);
   }
   async function save(checkDuplicate = false) {
     if (checkDuplicate) await modal.locator("form").evaluate((form) => { form.requestSubmit(); form.requestSubmit(); });
@@ -45,10 +45,10 @@ try {
   await modal.getByRole("button", { name: "루틴 등록", exact: true }).focus();
   await page.keyboard.press("Tab");
   await expect(modal.getByRole("button", { name: "나의 루틴 추가 창 닫기" })).toBeFocused();
-  await modal.getByLabel("어떤 일을 챙길까요?").fill("취소할 초안");
+  await modal.getByLabel("루틴 이름").fill("취소할 초안");
   page.once("dialog", (dialog) => dialog.dismiss());
   await page.keyboard.press("Escape");
-  await expect(modal.getByLabel("어떤 일을 챙길까요?")).toHaveValue("취소할 초안");
+  await expect(modal.getByLabel("루틴 이름")).toHaveValue("취소할 초안");
   page.once("dialog", (dialog) => dialog.accept());
   await modal.getByRole("button", { name: "취소", exact: true }).click();
   await expect(modal).toHaveCount(0);
@@ -58,12 +58,12 @@ try {
   await open("주간 운동");
   await modal.getByLabel("반복 간격", { exact: true }).fill("2");
   await expect(preview).toContainText("2주마다");
-  await expand("알림과 연결");
+  await expand("알림 설정");
   await modal.getByLabel("미리 알림", { exact: true }).selectOption("7");
   await expect(preview).toContainText("이전 예정일보다 빠르거나 같습니다");
   await expect(preview).toContainText("안내일이 지났습니다");
   await modal.getByLabel("미리 알림", { exact: true }).selectOption("custom");
-  await modal.getByLabel("며칠 전에 알려드릴까요?").fill("2");
+  await modal.getByLabel("알림 일수").fill("2");
   await expect(preview).toContainText("2일 전 안내");
   await modal.locator(".routine-editor-scroll").evaluate((element) => { element.scrollTop = 0; });
   const desktopInterval = await modal.locator(".routine-interval").evaluate((element) => {
@@ -101,7 +101,7 @@ try {
   await modal.getByRole("button", { name: "2026-10-30 제외 해제", exact: true }).click();
   await expect(preview.locator('li > time[datetime="2026-10-30"]')).toBeVisible();
   await modal.getByLabel("반복 종료", { exact: true }).selectOption("count");
-  await modal.getByLabel("총 몇 회 반복할까요?").fill("2");
+  await modal.getByLabel("반복 횟수").fill("2");
   await expect(preview.locator(".routine-preview-occurrences li")).toHaveCount(2);
   await page.screenshot({ path: `${outputDirectory}/desktop-monthly.png` });
   await save();
@@ -109,7 +109,7 @@ try {
   await open("마지막 금요일 점검");
   await modal.getByRole("radio", { name: "매월", exact: true }).check();
   await modal.getByRole("radio", { name: "요일로 지정", exact: true }).check();
-  await modal.getByLabel("몇 번째 요일인가요?").selectOption("-1");
+  await modal.getByLabel("요일 순서").selectOption("-1");
   for (const day of ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]) {
     const checkbox = modal.getByRole("checkbox", { name: day, exact: true });
     if (day === "금요일") await checkbox.check(); else await checkbox.uncheck();
@@ -145,7 +145,7 @@ try {
   // A processed occurrence is excluded from edit previews, including a routine that has ended.
   await open("매일 확인");
   await modal.getByRole("radio", { name: "매일", exact: true }).check();
-  await expand("알림과 연결");
+  await expand("알림 설정");
   await modal.getByLabel("안내 방식", { exact: true }).selectOption("remind");
   await expand("프로젝트·일정 설정");
   await expect(modal.getByLabel("일정 종류", { exact: true })).toHaveCount(0);
@@ -158,7 +158,7 @@ try {
   await page.keyboard.press("Escape");
   await open("한 번만 확인");
   await modal.getByRole("radio", { name: "매일", exact: true }).check();
-  await expand("알림과 연결");
+  await expand("알림 설정");
   await modal.getByLabel("안내 방식", { exact: true }).selectOption("remind");
   await expand("종료·예외 설정");
   await modal.getByLabel("반복 종료", { exact: true }).selectOption("date");

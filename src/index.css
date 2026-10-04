@@ -2429,227 +2429,6 @@ textarea:focus-visible,
   animation: modal-backdrop-in 180ms var(--motion-ease-out) both;
 }
 
-/* Alarm-triggered schedule review: intentionally distinct from the regular task form. */
-.reminder-review-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 2100;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgba(15, 23, 42, 0.3);
-  backdrop-filter: blur(5px);
-  animation: modal-backdrop-in 180ms var(--motion-ease-out) both;
-}
-
-.reminder-review-modal {
-  width: min(470px, 100%);
-  overflow: hidden;
-  color: #172554;
-  border: 1px solid #dbe5f4;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 20px 46px rgba(15, 23, 42, 0.2);
-  outline: none;
-}
-
-.reminder-review-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 54px;
-  padding: 0 18px;
-  border-bottom: 1px solid #e7edf7;
-}
-
-.reminder-review-header p,
-.reminder-review-kicker {
-  margin: 0;
-  color: #2563eb;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.reminder-review-close {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 50%;
-  color: #41608d;
-  background: #f1f5fb;
-  cursor: pointer;
-  font-size: 22px;
-  line-height: 1;
-}
-
-.reminder-review-close:hover:not(:disabled) {
-  background: #e4edf9;
-}
-
-.reminder-review-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.reminder-review-ai-edit {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid #c9daf7;
-  border-radius: 999px;
-  color: #1d4ed8;
-  background: #eff6ff;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.reminder-review-ai-edit:hover:not(:disabled) {
-  background: #dbeafe;
-}
-
-.reminder-review-content {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 20px 20px 16px;
-}
-
-.reminder-review-content h2 {
-  margin: 0;
-  color: #172554;
-  font-size: clamp(26px, 5vw, 32px);
-  line-height: 1.18;
-  letter-spacing: -0.045em;
-  overflow-wrap: anywhere;
-}
-
-.reminder-review-time {
-  margin: 0 0 5px;
-  color: #49627f;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.reminder-review-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 1px 0 3px;
-}
-
-.reminder-review-details div {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 5px 9px;
-  border: 1px solid #d9e4f4;
-  border-radius: 8px;
-  background: #f8fbff;
-}
-
-.reminder-review-details dd {
-  margin: 0;
-  overflow: hidden;
-  color: #31517d;
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reminder-review-error {
-  margin: 0;
-  color: #fee2e2;
-  font-size: 13px;
-}
-
-.reminder-review-primary-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  padding: 12px 14px 14px;
-  border-top: 1px solid #e7edf7;
-  background: #f8fbff;
-}
-
-.reminder-review-primary-actions button {
-  min-height: 42px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.reminder-action-complete {
-  color: #fff;
-  background: #2563eb;
-}
-
-.reminder-action-cancel {
-  color: #b4233b;
-  border-color: #f2c7d0 !important;
-  background: #fff5f6;
-}
-
-.reminder-action-postpone {
-  color: #8a5a08;
-  background: #fff8df;
-}
-
-.reminder-postpone-options {
-  grid-column: 1 / -1;
-  justify-self: end;
-  display: grid;
-  width: max(33.333%, 180px);
-  max-width: 100%;
-  gap: 4px;
-  padding: 6px;
-  border: 1px solid #e7d8af;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 4px 12px #1e293b14;
-}
-
-.reminder-postpone-options button {
-  padding: 8px 12px;
-  text-align: left;
-  color: #725014;
-  background: #fffaf0;
-}
-
-.reminder-review-primary-actions button:hover:not(:disabled) {
-  filter: brightness(1.07);
-  transform: translateY(-1px);
-}
-
-.reminder-review-modal button:disabled {
-  cursor: wait;
-  opacity: 0.58;
-}
-
-@media (max-width: 520px) {
-  .reminder-review-backdrop {
-    padding: 14px;
-  }
-
-  .reminder-review-content {
-    padding: 18px 16px 14px;
-  }
-
-  .reminder-review-primary-actions {
-    padding: 10px;
-  }
-
-  .reminder-review-primary-actions button {
-    min-height: 40px;
-    font-size: 12px;
-  }
-}
-
 @keyframes modal-backdrop-in {
   from {
     opacity: 0;
@@ -5224,7 +5003,7 @@ textarea:focus-visible,
 }
 
 .dashboard-today-schedules > .dashboard-summary-task-list:not(.dashboard-summary-period-list) {
-  --summary-time-column: 72px;
+  --summary-time-column: 88px;
   --summary-time-gap: 24px;
   --summary-margin-offset: 8px;
   position: relative;
@@ -5250,13 +5029,18 @@ textarea:focus-visible,
   column-gap: var(--summary-time-gap);
 }
 
+.dashboard-today-schedules > .dashboard-summary-task-list:not(.dashboard-summary-period-list) .dashboard-summary-task-time,
+.dashboard-today-schedules > .dashboard-summary-task-list:not(.dashboard-summary-period-list) .dashboard-summary-task-title {
+  font-size: 18px;
+}
+
 .dashboard-today-schedules > .dashboard-summary-task-list:not(.dashboard-summary-period-list) .dashboard-summary-task-badges {
   align-self: start;
 }
 
 .dashboard-today-schedules > .dashboard-summary-task-list:not(.dashboard-summary-period-list) .dashboard-summary-completion {
   align-items: flex-start;
-  padding-top: 1.5px;
+  padding-top: 4.5px;
 }
 
 .dashboard-today-schedules .dashboard-summary-task-row {
@@ -5547,7 +5331,8 @@ textarea:focus-visible,
   }
 
   .dashboard-today-schedules > .dashboard-summary-task-list:not(.dashboard-summary-period-list) {
-    --summary-time-column: 52px;
+    --summary-time-column: 72px;
+    --summary-time-gap: 16px;
   }
 
   .dashboard-summary-task-row:not(.side-row):not(.period-row) .dashboard-summary-task-detail {
@@ -10534,101 +10319,284 @@ textarea:focus-visible,
 
 /* ===== Ask-your-data ===== */
 .ask-data-modal {
-  width: min(640px, 94vw);
-  max-height: 88vh;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+  width: min(560px, calc(100vw - 2 * var(--space-md)));
+  min-width: 0;
+  max-width: 100%;
+  max-height: 90dvh;
+  display: block;
+  overflow-y: auto;
   padding: var(--space-lg);
   background: var(--canvas);
   border-radius: var(--radius-xl);
+  transition: width 260ms var(--motion-ease-out);
 }
 
-.ask-input-row {
-  display: block;
+.ask-data-modal.is-expanded {
+  width: min(880px, calc(100vw - 2 * var(--space-md)));
 }
 
-.ask-textarea {
-  width: 100%;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-sm);
-  resize: vertical;
+.ask-data-modal.has-original {
+  width: min(1120px, calc(100vw - 2 * var(--space-md)));
 }
 
-.ask-submit-row {
+.ask-header {
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.ask-header h2 {
+  font-size: 21px;
+  line-height: 1.3;
+}
+
+.ask-search-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-sm);
+  padding: var(--space-xs);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
 }
 
-.ask-submit-row .btn {
+.ask-search-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: var(--space-sm);
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+}
+
+.ask-search-row .btn {
   flex: 0 0 auto;
 }
 
-.ask-textarea:focus {
-  outline: none;
-  border-color: var(--primary);
-}
-
-.ask-examples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xxs);
-}
-
-.ask-example-chip {
-  border: 1px dashed var(--hairline-strong);
-  background: var(--surface-pearl);
-  border-radius: var(--radius-pill);
-  padding: 4px var(--space-sm);
-  font-size: 12.5px;
+.ask-search-status {
   color: var(--body-muted);
-  cursor: pointer;
+  font-size: 13px;
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
-.ask-example-chip:hover {
-  border-color: var(--primary);
-  color: var(--primary-focus);
+.ask-search-status:empty {
+  display: none;
 }
 
-.ask-answer {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
+.ask-result-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-md);
+  animation: ask-results-in 220ms var(--motion-ease-out) both;
 }
 
-.ask-references {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xxs);
-  padding-top: var(--space-xs);
+@keyframes ask-results-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ask-result-layout.has-original {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 34%);
+}
+
+.ask-list-column,
+.ask-original {
+  min-width: 0;
+}
+
+.ask-result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.ask-result-list > li + li {
   border-top: 1px solid var(--hairline);
 }
 
-.ask-references-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--body-muted);
-  margin-right: var(--space-xxs);
-}
-
-.ask-reference-chip {
-  border: 1px solid var(--hairline);
-  background: var(--canvas);
-  border-radius: var(--radius-pill);
-  padding: 4px var(--space-sm);
-  font-size: 12.5px;
-  cursor: pointer;
+.ask-result-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
   color: var(--ink);
+  background: var(--canvas);
+  border: 0;
+  padding: var(--space-md);
+  cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
-.ask-reference-chip:hover {
-  border-color: var(--primary);
+.ask-result-row:hover,
+.ask-result-row[aria-expanded="true"] {
+  background: var(--surface-pearl);
+}
+
+.ask-result-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.ask-record-actions {
+  padding: 0 var(--space-md) var(--space-sm);
+}
+
+.ask-record-open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
   color: var(--primary-focus);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ask-record-open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.ask-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--body-muted);
+  font-size: 12px;
+  margin: 0 0 var(--space-xs);
+}
+
+.ask-record-type {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ink);
+  padding: 1px 6px;
+  background: var(--surface-pearl);
+  border-radius: var(--radius-sm);
+}
+
+.ask-record-title {
+  display: block;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--primary-focus);
+  margin-bottom: var(--space-xs);
+}
+
+.ask-record-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ask-result-row mark {
+  background: var(--surface-pearl);
+  color: var(--primary-focus);
+}
+
+.ask-more {
+  margin-top: var(--space-sm);
+}
+
+.ask-original {
+  padding: var(--space-md);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+  overflow-wrap: anywhere;
+}
+
+.ask-original-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.ask-original-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+.ask-original h3 {
+  font-size: 16px;
+  margin: var(--space-sm) 0;
+}
+
+.ask-original-body {
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--space-sm);
+  margin-top: var(--space-md);
+  font-size: 13px;
+}
+
+.ask-original-plain {
+  white-space: pre-wrap;
+  line-height: 1.8;
+}
+
+.ask-original .markdown-renderer {
+  min-width: 0;
+}
+
+@media (max-width: 800px) {
+  .ask-result-layout.has-original {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .ask-data-modal {
+    padding: var(--space-sm);
+  }
+
+  .ask-search-row {
+    flex-wrap: wrap;
+  }
+
+  .ask-search-input {
+    flex-basis: 100%;
+    font-size: 16px;
+  }
+
+  .ask-search-row .btn {
+    margin-left: auto;
+  }
+
+  .ask-result-row {
+    padding: var(--space-sm);
+  }
+
+  .ask-record-actions {
+    padding-inline: var(--space-sm);
+  }
+}
+
+@media (pointer: coarse) {
+  .ask-record-open {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-data-modal {
+    transition: none;
+  }
+
+  .ask-result-layout {
+    animation: none;
+  }
 }
 
 /* ===== 디자인 일관성 패스 ===== */
@@ -12821,4 +12789,18 @@ body:has(.modal-backdrop:not([hidden])) {
       transform: none;
     }
   }
+}
+
+/* Persistent schedule reminder entry in the shared header. */
+.top-nav-reminders { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; color: #1d4ed8; }
+.top-nav-reminders svg { flex: 0 0 auto; }
+.top-nav-reminders-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #2563eb; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+@media (max-width: 900px) {
+  .top-nav-reminders { width: 44px; min-width: 44px; padding: 0; }
+  .top-nav-reminders-label { display: none; }
+  .top-nav-reminders-count { position: absolute; right: -4px; top: -4px; border: 2px solid #fff; min-width: 21px; height: 21px; padding: 0 4px; font-size: 10px; }
+}
+@media (max-width: 420px) {
+  .top-nav-actions { gap: 6px; }
+  .top-nav-actions > .btn:not(.top-nav-reminders):not(.top-nav-settings) { padding-inline: 12px; }
 }

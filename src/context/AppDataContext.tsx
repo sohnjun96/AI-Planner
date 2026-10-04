@@ -45,6 +45,8 @@ import type {
 import { readStoredAutoBackups, storeAutoBackup, removeStoredAutoBackup, type StoredAutoBackupEntry } from "../utils/autoBackupStore";
 import { deleteTasksWithLinks, restoreDeletedTasks, deleteEmptyProject, type DeletedTasks } from "../utils/taskLifecycle";
 import { selectUpcomingAlarmTasks } from "../utils/taskTiming";
+import { parseReminderState, SCHEDULE_REMINDER_STORAGE_KEY } from "../utils/reminderQueue";
+import { resetScheduleReminders } from "../utils/reminderSnooze";
 import { showToast } from "../utils/toast";
 import { toIsoNow } from "../utils/date";
 import {
@@ -186,6 +188,7 @@ const ALARM_SYNC_STORAGE_KEY = "schedule_alarm_payload_v1";
 const LLM_CREDENTIAL_STORAGE_KEY = "planai_llm_credential_v1";
 const IMPORT_BATCH_SIZE = 500;
 const MAX_ALARM_SYNC_TASKS = 2_000;
+const EMPTY_TASKS: Task[] = [];
 const AUTOSAVE_VERSION_COALESCE_MS = 5 * 60 * 1_000;
 const LIVE_QUERY_LIMITS = {
   tasks: 20_000,
@@ -766,7 +769,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const tasks = useLiveQuery(() => db.tasks.orderBy("startAt").limit(LIVE_QUERY_LIMITS.tasks).toArray(), [], []);
+  const queriedTasks = useLiveQuery(() => db.tasks.orderBy("startAt").limit(LIVE_QUERY_LIMITS.tasks).toArray());
+  const tasks = queriedTasks ?? EMPTY_TASKS;
   const projects = useLiveQuery(() => db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(), [], []);
   const taskTypes = useLiveQuery(() => db.taskTypes.orderBy("order").limit(LIVE_QUERY_LIMITS.taskTypes).toArray(), [], []);
   const memos = useLiveQuery(() => db.memos.orderBy("date").reverse().limit(LIVE_QUERY_LIMITS.memos).toArray(), [], []);
@@ -1887,6 +1891,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
     undoStackRef.current = [];
     setUndoStack([]);
+    await resetScheduleReminders().catch(() => showToast("기존 다시 알림 예약을 정리하지 못했습니다.", { tone: "error" }));
     await bootstrapDatabase();
   }, []);
 
@@ -1957,10 +1962,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [setting.autoBackupEnabled, setting.autoBackupIntervalMinutes, createAutoBackup]);
 
+  const [reminderRevision, setReminderRevision] = useState(0);
   useEffect(() => {
+    const changed = () => setReminderRevision((previous) => previous + 1);
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === SCHEDULE_REMINDER_STORAGE_KEY || event.key === null) changed();
+    };
+    window.addEventListener("ai-planner:schedule-reminders-changed", changed);
+    window.addEventListener("storage", storageChanged);
+    return () => {
+      window.removeEventListener("ai-planner:schedule-reminders-changed", changed);
+      window.removeEventListener("storage", storageChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (queriedTasks === undefined) return;
     const futureTasks = selectUpcomingAlarmTasks(
       tasks, setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES, Date.now(), MAX_ALARM_SYNC_TASKS,
     );
+    let reminderIds = new Set<string>();
+    try { reminderIds = new Set(parseReminderState(window.localStorage.getItem(SCHEDULE_REMINDER_STORAGE_KEY)).ids); }
+    catch { /* In-memory reminders continue to work when web storage is unavailable. */ }
+    const reminderTasks = tasks.filter((task) => reminderIds.has(task.id) && task.status !== "DONE" && task.status !== "CANCELED");
+    const syncTasks = [...new Map([...reminderTasks, ...futureTasks].map((task) => [task.id, task])).values()].slice(0, MAX_ALARM_SYNC_TASKS);
     const timerId = window.setTimeout(() => {
       void writeAlarmSyncPayload({
       updatedAt: toIsoNow(),
@@ -1968,7 +1993,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         notificationsEnabled: Boolean(setting.notificationsEnabled),
         notifyBeforeMinutes: Math.max(0, Math.floor(setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES)),
       },
-      tasks: futureTasks.map((task) => ({
+      tasks: syncTasks.map((task) => ({
           id: task.id,
           startAt: task.startAt,
           status: task.status,
@@ -1979,9 +2004,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }, 300);
 
     return () => window.clearTimeout(timerId);
-  }, [tasks, setting.notificationsEnabled, setting.notifyBeforeMinutes]);
+  }, [tasks, queriedTasks, setting.notificationsEnabled, setting.notifyBeforeMinutes, reminderRevision]);
 
-  const isReady = Boolean(rawSetting) && isLlmCredentialReady;
+  const isReady = Boolean(rawSetting) && isLlmCredentialReady && queriedTasks !== undefined;
 
   const value = useMemo<AppDataContextValue>(
     () => ({

@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
-import { useNavigate } from "../routing";
+import { useNavigate, useSearchParams } from "../routing";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { ModalBackdrop } from "../components/ModalBackdrop";
 import { NoteCard } from "../components/NoteCard";
@@ -125,6 +125,7 @@ export function NotesPage() {
   } = useAppData();
 
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [filterNode, setFilterNode] = useState<NoteFilterNode>({ kind: "all" });
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -165,6 +166,7 @@ export function NotesPage() {
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; noteId: string } | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const sourceLinkFocusRef = useRef<string | null>(null);
   const loadedNoteIdRef = useRef<string | null>(null);
   const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const abortRef = useRef<AbortController | null>(null);
@@ -351,6 +353,36 @@ export function NotesPage() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedNoteId]);
+
+  // 검색 결과의 실제 노트 링크를 현재 필터와 무관하게 연다.
+  useEffect(() => {
+    const noteId = searchParams.get("noteId");
+    const note = notes.find((item) => item.id === noteId);
+    if (!note) return;
+    // Clear both the immediate and deferred filter before selecting a linked note.
+    // Otherwise the existing search-selection guard can immediately deselect it.
+    if (search) setSearch("");
+    if (deferredSearch.trim()) return;
+    setFilterNode({ kind: note.status === "archived" ? "archived" : "all" });
+    sourceLinkFocusRef.current = note.id;
+    setSelectedNoteId(note.id);
+    setIsMobileExplorerOpen(false);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("noteId");
+    setSearchParams(nextParams, { replace: true });
+  }, [notes, search, deferredSearch, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!selectedNoteId || !draft || sourceLinkFocusRef.current !== selectedNoteId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const titleInput = document.querySelector<HTMLInputElement>(".note-title-input");
+      if (titleInput) {
+        titleInput.focus({ preventScroll: true });
+        sourceLinkFocusRef.current = null;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedNoteId, draft, searchParams]);
 
   // 다른 탭(일정)에서 노트로 바로가기
   useEffect(() => {

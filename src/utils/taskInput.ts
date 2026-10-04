@@ -1,4 +1,9 @@
-import type { TaskFormInput } from "../models";
+import type { Task, TaskFormInput } from "../models";
+
+export function toTaskInput(task: Task): TaskFormInput {
+  return { title: task.title, content: task.content, taskTypeId: task.taskTypeId,
+    projectId: task.projectId, status: task.status, startAt: task.startAt, endAt: task.endAt, isMajor: task.isMajor };
+}
 
 export function trimTaskInput(input: TaskFormInput): TaskFormInput {
   const title = input.title.trim();

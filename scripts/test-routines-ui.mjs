@@ -12,7 +12,7 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${pathToFileURL(path.resolve("dist-web/planai.html")).href}#/routines`);
   await expect(page.getByRole("heading", { name: "나의 루틴", exact: true })).toBeVisible();
-  await expect(page.getByText("매번 기억하지 않아도 괜찮아요.")).toBeVisible();
+  await expect(page.getByText("등록된 루틴이 없습니다.")).toBeVisible();
   const card = (title) => page.locator(".routine-card").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
   async function collapseReminder() {
     const collapse = page.getByRole("button", { name: "루틴 알림 접기", exact: true });
@@ -29,19 +29,19 @@ try {
   }
   async function addRoutine(title, mode = "schedule", { memo = "", endsAfter } = {}) {
     await page.getByRole("button", { name: "+ 루틴 추가", exact: true }).click();
-    await page.getByLabel("어떤 일을 챙길까요?").fill(title);
+    await page.getByLabel("루틴 이름").fill(title);
     await page.getByRole("radio", { name: "매월", exact: true }).check();
-    await page.locator(".routine-editor-details summary").filter({ hasText: "알림과 연결" }).click();
+    await page.locator(".routine-editor-details summary").filter({ hasText: "알림 설정" }).click();
     await page.getByLabel("미리 알림").selectOption("0");
     await page.getByLabel("안내 방식").selectOption(mode);
     if (memo) {
-      await page.locator(".routine-editor-details summary").filter({ hasText: "함께 기억할 내용" }).click();
+      await page.locator(".routine-editor-details summary").filter({ hasText: "메모" }).click();
       await page.getByLabel("메모", { exact: true }).fill(memo);
     }
     if (endsAfter) {
       await page.locator(".routine-editor-details summary").filter({ hasText: "종료·예외 설정" }).click();
       await page.getByLabel("반복 종료", { exact: true }).selectOption("count");
-      await page.getByLabel("총 몇 회 반복할까요?").fill(String(endsAfter));
+      await page.getByLabel("반복 횟수").fill(String(endsAfter));
     }
     await page.getByRole("button", { name: "루틴 등록", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -113,7 +113,7 @@ try {
   await expect(completed.locator(".routine-history li")).toContainText("· 확인");
   await completed.getByRole("button", { name: "반복 설정", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "루틴 수정" })).toBeVisible();
-  await expect(page.getByLabel("어떤 일을 챙길까요?")).toHaveValue("마지막 확인");
+  await expect(page.getByLabel("루틴 이름")).toHaveValue("마지막 확인");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await addRoutine("정기 보고서");

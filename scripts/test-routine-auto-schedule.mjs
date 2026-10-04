@@ -58,11 +58,11 @@ try {
   await page.reload();
   await page.getByRole("button", { name: "+ 루틴 추가", exact: true }).click();
   const modal = page.getByRole("dialog");
-  await modal.getByLabel("어떤 일을 챙길까요?").fill("자동 영수증 취합");
+  await modal.getByLabel("루틴 이름").fill("자동 영수증 취합");
   await modal.getByRole("radio", { name: "매월", exact: true }).check();
   await modal.getByRole("checkbox", { name: "매월 1일", exact: true }).uncheck();
   await modal.getByRole("checkbox", { name: "매월 8일", exact: true }).check();
-  await modal.locator("summary").filter({ hasText: "알림과 연결" }).click();
+  await modal.locator("summary").filter({ hasText: "알림 설정" }).click();
   await expect(modal.getByRole("option", { name: "일정 자동으로 만들기", exact: true })).toHaveCount(1);
   await modal.getByLabel("안내 방식", { exact: true }).selectOption("auto");
   await modal.getByLabel("미리 알림", { exact: true }).selectOption("7");
@@ -70,7 +70,7 @@ try {
   await modal.locator("summary").filter({ hasText: "프로젝트·일정 설정" }).click();
   await expect(modal.getByRole("combobox", { name: "일정 종류", exact: true })).toBeVisible();
   await modal.locator('input[type="time"]').fill("16:45");
-  await modal.locator("summary").filter({ hasText: "함께 기억할 내용" }).click();
+  await modal.locator("summary").filter({ hasText: "메모" }).click();
   await modal.getByRole("textbox", { name: "메모", exact: true }).fill("영수증을 자동 일정으로 준비");
   await mkdir(output, { recursive: true });
   for (const width of [1440, 390, 320]) {
@@ -92,7 +92,7 @@ try {
   await page.getByRole("button", { name: "자동 영수증 취합 상세", exact: true }).click();
   await expect(page.locator(".routine-history li")).toContainText("일정 생성");
   await page.getByRole("button", { name: "자동 영수증 취합 수정", exact: true }).click();
-  await modal.locator("summary").filter({ hasText: "알림과 연결" }).click();
+  await modal.locator("summary").filter({ hasText: "알림 설정" }).click();
   await expect(modal.getByLabel("안내 방식", { exact: true })).toHaveValue("auto");
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
