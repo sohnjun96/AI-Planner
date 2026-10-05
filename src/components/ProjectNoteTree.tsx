@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Note, Project, ProjectSubcategory } from "../models";
 
 export type NoteFilterNode =
@@ -17,7 +17,7 @@ interface ProjectNoteTreeProps {
   openChecklistCount: number;
   selected: NoteFilterNode;
   onSelect: (node: NoteFilterNode) => void;
-  onAddSubcategory: (projectId: string, name: string) => void;
+  onAddSubcategory: (projectId: string, name: string) => Promise<void>;
 }
 
 export function ProjectNoteTree({ projects, subcategories, notes, openChecklistCount, selected, onSelect, onAddSubcategory }: ProjectNoteTreeProps) {
@@ -30,6 +30,9 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
   });
   const [addingProjectId, setAddingProjectId] = useState<string | null>(null);
   const [addName, setAddName] = useState("");
+  const [addError, setAddError] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const addingRef = useRef(false);
 
   const counts = useMemo(() => {
     const project = new Map<string, number>();
@@ -70,13 +73,26 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
     });
   }
 
-  function submitAdd(projectId: string) {
+  async function submitAdd(projectId: string) {
+    if (addingRef.current) return;
     const value = addName.trim();
-    if (value) {
-      onAddSubcategory(projectId, value);
+    if (!value || value.length > 200) {
+      setAddError("세부 항목 이름을 1~200자로 입력하세요.");
+      return;
     }
-    setAddName("");
-    setAddingProjectId(null);
+    addingRef.current = true;
+    setIsAdding(true);
+    setAddError("");
+    try {
+      await onAddSubcategory(projectId, value);
+      setAddName("");
+      setAddingProjectId(null);
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : "세부 항목을 추가하지 못했습니다.");
+    } finally {
+      addingRef.current = false;
+      setIsAdding(false);
+    }
   }
 
   return (
@@ -84,6 +100,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
       <button
         type="button"
         className={`note-tree-row root ${selected.kind === "all" ? "active" : ""}`}
+        aria-current={selected.kind === "all" || undefined}
         onClick={() => onSelect({ kind: "all" })}
       >
         <span className="note-tree-label">전체 노트</span>
@@ -92,6 +109,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
       <button
         type="button"
         className={`note-tree-row root ${selected.kind === "pinned" ? "active" : ""}`}
+        aria-current={selected.kind === "pinned" || undefined}
         onClick={() => onSelect({ kind: "pinned" })}
       >
         <span className="note-tree-label">고정됨</span>
@@ -100,6 +118,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
       <button
         type="button"
         className={`note-tree-row root ${selected.kind === "checklist" ? "active" : ""}`}
+        aria-current={selected.kind === "checklist" || undefined}
         onClick={() => onSelect({ kind: "checklist" })}
       >
         <span className="note-tree-label">체크리스트</span>
@@ -121,7 +140,9 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
               <button
                 type="button"
                 className="note-tree-expander"
-                aria-label={isOpen ? "접기" : "펼치기"}
+                aria-label={`${project.name} ${isOpen ? "접기" : "펼치기"}`}
+                aria-expanded={isOpen}
+                aria-controls={`note-project-children-${project.id}`}
                 onClick={() => toggleExpand(project.id)}
               >
                 {isOpen ? "▾" : "▸"}
@@ -129,6 +150,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
               <button
                 type="button"
                 className="note-tree-project-name"
+                aria-current={(selected.kind === "project" && selected.projectId === project.id) || undefined}
                 onClick={() => onSelect({ kind: "project", projectId: project.id })}
                 style={{ "--note-project-color": project.color } as CSSProperties}
               >
@@ -141,9 +163,11 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
                 className="note-tree-project-more"
                 aria-label={`${project.name} 세부 항목 추가`}
                 title="세부 항목 추가"
+                disabled={isAdding}
                 onClick={() => {
                   setAddingProjectId(project.id);
                   setAddName("");
+                  setAddError("");
                   if (!isOpen) {
                     toggleExpand(project.id);
                   }
@@ -154,7 +178,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
             </div>
 
             {isOpen ? (
-              <div className="note-tree-children">
+              <div className="note-tree-children" id={`note-project-children-${project.id}`}>
                 {projectSubs.map((sub) => (
                   <button
                     key={sub.id}
@@ -163,6 +187,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
                       selected.kind === "subcategory" && selected.subcategoryId === sub.id ? "active" : ""
                     }`}
                     onClick={() => onSelect({ kind: "subcategory", projectId: project.id, subcategoryId: sub.id })}
+                    aria-current={(selected.kind === "subcategory" && selected.subcategoryId === sub.id) || undefined}
                   >
                     <span className="note-tree-label">{sub.name}</span>
                     <span className="note-tree-count">{counts.sub.get(sub.id) ?? 0}</span>
@@ -175,6 +200,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
                       selected.kind === "uncategorized" && selected.projectId === project.id ? "active" : ""
                     }`}
                     onClick={() => onSelect({ kind: "uncategorized", projectId: project.id })}
+                    aria-current={(selected.kind === "uncategorized" && selected.projectId === project.id) || undefined}
                   >
                     <span className="note-tree-label">미분류</span>
                     <span className="note-tree-count">{uncat}</span>
@@ -182,24 +208,26 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
                 ) : null}
 
                 {addingProjectId === project.id ? (
-                  <input
+                  <div className="note-tree-add-form"><input
                     className="note-tree-add-input"
                     value={addName}
+                    aria-label={`${project.name} 세부 항목 이름`}
+                    disabled={isAdding}
+                    maxLength={200}
                     autoFocus
                     onChange={(event) => setAddName(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") {
+                      if (event.key === "Enter" && !event.nativeEvent.isComposing && event.keyCode !== 229) {
                         event.preventDefault();
-                        submitAdd(project.id);
+                        void submitAdd(project.id);
                       }
-                      if (event.key === "Escape") {
+                      if (event.key === "Escape" && !isAdding) {
                         setAddingProjectId(null);
                         setAddName("");
                       }
                     }}
-                    onBlur={() => submitAdd(project.id)}
                     placeholder="세부 항목 이름"
-                  />
+                  /><small className="description-text">최대 200자</small>{addError ? <p className="error-text" role="alert">{addError}</p> : null}<div className="button-row"><button type="button" className="btn btn-primary btn-compact" disabled={isAdding} onClick={() => void submitAdd(project.id)}>{isAdding ? "추가 중…" : "추가"}</button><button type="button" className="btn btn-soft btn-compact" disabled={isAdding} onClick={() => setAddingProjectId(null)}>취소</button></div></div>
                 ) : null}
               </div>
             ) : null}
@@ -212,6 +240,7 @@ export function ProjectNoteTree({ projects, subcategories, notes, openChecklistC
       <button
         type="button"
         className={`note-tree-row root muted ${selected.kind === "archived" ? "active" : ""}`}
+        aria-current={selected.kind === "archived" || undefined}
         onClick={() => onSelect({ kind: "archived" })}
       >
         <span className="note-tree-label">보관됨</span>

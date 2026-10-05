@@ -1,13 +1,14 @@
 {
   "name": "planai",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.4.1",
   "type": "module",
   "scripts": {
     "dev": "vite --mode internal",
     "dev:external": "vite --mode external",
     "test": "node scripts/run-tests.mjs",
     "test:integration": "node scripts/test-data-lifecycle.mjs",
+    "test:notes": "node scripts/test-notes-ui.mjs",
     "test:reminders": "node scripts/test-schedule-reminders.mjs",
     "test:holidays": "node scripts/test-holidays-ui.mjs",
     "test:routines": "node scripts/test-routines-ui.mjs && node scripts/test-routine-reminders.mjs && node scripts/test-routine-notifications.mjs && node scripts/test-routine-recurrence-ui.mjs && node scripts/test-routine-auto-schedule.mjs",
@@ -35,6 +36,8 @@
     "react-dom": "19.2.8",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5",
     "thinking-orbs": "0.3.2"
   },
   "devDependencies": {

@@ -63,6 +63,7 @@ export function NoteEditor({
   initialMode = "read",
 }: NoteEditorProps) {
   const [viewMode, setViewMode] = useState<"rich-text" | "source">(initialMode === "edit" ? "source" : "rich-text");
+  const [expandedTools, setExpandedTools] = useState(false);
 
   function handleEditorKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (!(event.ctrlKey || event.metaKey)) return;
@@ -73,7 +74,7 @@ export function NoteEditor({
   }
 
   return (
-    <section className="note-editor-surface note-editor-live" onKeyDown={handleEditorKeyDown}>
+    <section className={`note-editor-surface note-editor-live${expandedTools ? " note-tools-expanded" : ""}`} onKeyDown={handleEditorKeyDown}>
       <header className="note-editor-bar">
         <input
           className="note-title-input"
@@ -123,6 +124,7 @@ export function NoteEditor({
           ))}
         </button>
         <div className="note-toolbar-tools">
+          {viewMode === "rich-text" ? <button type="button" className="btn btn-soft note-tools-toggle" aria-expanded={expandedTools} onClick={() => setExpandedTools((value) => !value)}>{expandedTools ? "기본 도구" : "모든 도구"}</button> : null}
           <div className="note-mode-toggle" role="group" aria-label="노트 보기 방식">
             <button
               type="button"

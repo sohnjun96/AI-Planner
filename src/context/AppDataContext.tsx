@@ -118,6 +118,7 @@ interface AppDataContextValue {
   undoDescription?: string;
   autoBackups: AutoBackupSummary[];
   createTask: (input: TaskFormInput) => Promise<string>;
+  createTasksForNote: (noteId: string, inputs: TaskFormInput[]) => Promise<string[]>;
   updateTask: (id: string, input: TaskFormInput) => Promise<void>;
   removeTask: (id: string) => Promise<void>;
   undoLastChange: () => Promise<void>;
@@ -127,12 +128,13 @@ interface AppDataContextValue {
     sourceNoteIds: string[],
     editType?: NoteVersionEditType,
     aiPrompt?: string,
+    expectedSourceUpdatedAt?: Record<string, string>,
   ) => Promise<string>;
-  updateNote: (id: string, input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string) => Promise<void>;
+  updateNote: (id: string, input: NoteFormInput, editType?: NoteVersionEditType, aiPrompt?: string, expectedUpdatedAt?: string) => Promise<string | undefined>;
   updateNoteTitleIfUnchanged: (id: string, title: string, expectedUpdatedAt: string) => Promise<void>;
   applyNoteAiClassification: (id: string, projectId: string, subcategoryId?: string, expectedUpdatedAt?: string) => Promise<void>;
   removeNote: (id: string) => Promise<void>;
-  restoreNoteVersion: (noteId: string, versionId: string) => Promise<void>;
+  restoreNoteVersion: (noteId: string, versionId: string, expectedUpdatedAt?: string, pendingDraft?: NoteFormInput) => Promise<string | undefined>;
   linkNoteToTask: (noteId: string, taskId: string, source?: NoteTaskLinkSource) => Promise<void>;
   unlinkNoteFromTask: (noteId: string, taskId: string) => Promise<void>;
   createSubcategory: (projectId: string, name: string) => Promise<string>;
@@ -228,6 +230,10 @@ function getId(prefix: string): string {
     return `${prefix}-${crypto.randomUUID()}`;
   }
   return `${prefix}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function nextNoteUpdatedAt(previous: string): string {
+  return new Date(Math.max(Date.now(), new Date(previous).getTime() + 1)).toISOString();
 }
 
 function normalizeNoteInput(input: NoteFormInput): NoteFormInput {
@@ -974,6 +980,42 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [pushUndo],
   );
 
+  const createTasksForNote = useCallback(async (noteId: string, inputs: TaskFormInput[]) => {
+    if (!/^[A-Za-z0-9._:-]{1,128}$/.test(noteId) || !Array.isArray(inputs) || inputs.length > 200) {
+      throw new Error("노트에서 생성할 일정 정보가 올바르지 않습니다.");
+    }
+    if (inputs.length === 0) return [];
+    const normalized = inputs.map(trimTaskInput);
+    if (normalized.some((input) => input.recurrencePattern && input.recurrencePattern !== "NONE")) {
+      throw new Error("노트에서 일괄 생성할 일정은 반복 없이 지정해 주세요.");
+    }
+    const now = toIsoNow();
+    const ids = await db.transaction("rw", [db.notes, db.tasks, db.noteTaskLinks, db.projects, db.taskTypes], async () => {
+      const note = await db.notes.get(noteId);
+      if (!note) throw new Error("연결할 노트를 찾을 수 없습니다.");
+      if (new Set(note.linkedTaskIds).size + normalized.length > 200) {
+        throw new Error("노트와 일정 연결은 항목당 최대 200개까지 허용됩니다.");
+      }
+      await assertCapacity(db.tasks.count(), normalized.length, LIVE_QUERY_LIMITS.tasks, "일정");
+      await assertCapacity(db.noteTaskLinks.count(), normalized.length, LIVE_QUERY_LIMITS.noteTaskLinks, "노트 연결");
+      for (const input of normalized) {
+        const [project, taskType] = await Promise.all([db.projects.get(input.projectId), db.taskTypes.get(input.taskTypeId)]);
+        if (!project || !taskType) throw new Error("선택한 프로젝트 또는 일정 종류를 찾을 수 없습니다.");
+      }
+      const records: Task[] = normalized.map((input) => ({
+        ...toTaskCoreRecord(input), id: getId("task"), linkedNoteIds: [noteId], recurrencePattern: "NONE", createdAt: now, updatedAt: now,
+      }));
+      await db.tasks.bulkAdd(records);
+      await db.noteTaskLinks.bulkAdd(records.map((task) => ({
+        id: getId("notelink"), noteId, taskId: task.id, source: "manual" as const, createdAt: now,
+      })));
+      await db.notes.put({ ...note, linkedTaskIds: [...note.linkedTaskIds, ...records.map((task) => task.id)], updatedAt: nextNoteUpdatedAt(note.updatedAt) });
+      return records.map((task) => task.id);
+    });
+    pushUndo({ kind: "delete_tasks", createdAt: now, description: `노트에서 일정 ${ids.length}건 추가`, taskIds: ids });
+    return ids;
+  }, [pushUndo]);
+
   const updateTask = useCallback(
     async (id: string, input: TaskFormInput) => {
       const existing = await db.tasks.get(id);
@@ -1027,16 +1069,24 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     [pushUndo],
   );
 
-  const pruneNoteVersions = useCallback(async (noteId: string) => {
+  const pruneNoteVersions = useCallback(async (noteId: string, incomingEditType?: NoteVersionEditType, incomingCount = 1) => {
     const versions = await db.noteVersions.where("noteId").equals(noteId).sortBy("createdAt");
     const autosave = versions.filter((version) => version.editType === "autosave");
     const others = versions.filter((version) => version.editType !== "autosave");
     const toDelete: string[] = [];
-    if (autosave.length > MAX_AUTOSAVE_NOTE_VERSIONS) {
-      toDelete.push(...autosave.slice(0, autosave.length - MAX_AUTOSAVE_NOTE_VERSIONS).map((version) => version.id));
+    const autosaveLimit = MAX_AUTOSAVE_NOTE_VERSIONS - (incomingEditType === "autosave" ? incomingCount : 0);
+    const otherLimit = MAX_MANUAL_NOTE_VERSIONS - (incomingEditType && incomingEditType !== "autosave" ? incomingCount : 0);
+    if (autosave.length > autosaveLimit) {
+      toDelete.push(...autosave.slice(0, autosave.length - autosaveLimit).map((version) => version.id));
     }
-    if (others.length > MAX_MANUAL_NOTE_VERSIONS) {
-      toDelete.push(...others.slice(0, others.length - MAX_MANUAL_NOTE_VERSIONS).map((version) => version.id));
+    if (others.length > otherLimit) {
+      toDelete.push(...others.slice(0, others.length - otherLimit).map((version) => version.id));
+    }
+    // Reserve a slot for this note at the global limit as well. Run inside the
+    // save transaction so a failed/conflicting save never removes history.
+    if (incomingEditType) {
+      const additionalSlots = Math.max(0, (await db.noteVersions.count()) - toDelete.length + incomingCount - LIVE_QUERY_LIMITS.noteVersions);
+      toDelete.push(...versions.filter((version) => !toDelete.includes(version.id)).slice(0, additionalSlots).map((version) => version.id));
     }
     if (toDelete.length > 0) {
       await db.noteVersions.bulkDelete(toDelete);
@@ -1091,7 +1141,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createMergedNote = useCallback(
-    async (input: NoteFormInput, sourceNoteIds: string[], editType: NoteVersionEditType = "ai_full", aiPrompt?: string) => {
+    async (input: NoteFormInput, sourceNoteIds: string[], editType: NoteVersionEditType = "ai_full", aiPrompt?: string, expectedSourceUpdatedAt?: Record<string, string>) => {
       const normalized = normalizeNoteInput({ ...input, sourceNoteIds });
       const normalizedSourceIds = normalized.sourceNoteIds ?? [];
       if (normalizedSourceIds.length < 2) {
@@ -1136,11 +1186,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         if (currentSources.some((source) => !source)) {
           throw new Error("통합 처리 중 원본 노트가 변경되었습니다.");
         }
+        if (expectedSourceUpdatedAt && currentSources.some((source) => source && source.updatedAt !== expectedSourceUpdatedAt[source.id])) {
+          throw new Error("AI 통합을 준비한 뒤 원본 노트가 변경되었습니다. 최신 내용으로 다시 통합해 주세요.");
+        }
         await db.notes.add(note);
         await db.notes.bulkPut(
           currentSources
             .filter((source): source is Note => Boolean(source))
-            .map((source) => ({ ...source, status: "archived" as const, updatedAt: now })),
+            .map((source) => ({ ...source, status: "archived" as const, updatedAt: nextNoteUpdatedAt(source.updatedAt) })),
         );
         await db.noteVersions.add({
           id: getId("noteversion"),
@@ -1159,90 +1212,54 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateNote = useCallback(
-    async (id: string, input: NoteFormInput, editType: NoteVersionEditType = "manual", aiPrompt?: string) => {
-      const existing = await db.notes.get(id);
-      if (!existing) {
-        return;
-      }
+    async (id: string, input: NoteFormInput, editType: NoteVersionEditType = "manual", aiPrompt?: string, expectedUpdatedAt?: string) => {
       const normalized = normalizeNoteInput(input);
       if (aiPrompt && aiPrompt.length > 4_000) throw new Error("AI 편집 지시문은 4,000자 이하여야 합니다.");
-      const [project, subcategory] = await Promise.all([
-        db.projects.get(normalized.projectId),
-        normalized.subcategoryId ? db.projectSubcategories.get(normalized.subcategoryId) : undefined,
-      ]);
-      if (!project || (normalized.subcategoryId && (!subcategory || subcategory.projectId !== normalized.projectId))) {
-        throw new Error("선택한 노트 분류를 찾을 수 없습니다.");
-      }
-      const now = toIsoNow();
-      const nextTitle = normalized.title;
-      const nextTags = normalized.tags;
-      const nextSourceNoteIds = normalized.sourceNoteIds ?? [];
-      const contentChanged = existing.content !== normalized.content || existing.title !== nextTitle;
-      const metaChanged =
-        existing.projectId !== normalized.projectId ||
-        (existing.subcategoryId ?? "") !== (normalized.subcategoryId ?? "") ||
-        existing.status !== normalized.status ||
-        existing.isPinned !== normalized.isPinned ||
-        JSON.stringify(existing.tags) !== JSON.stringify(nextTags) ||
-        JSON.stringify(existing.sourceNoteIds ?? []) !== JSON.stringify(nextSourceNoteIds);
-
-      let reusableAutosaveVersion: NoteVersion | undefined;
-      if (contentChanged && editType === "autosave") {
-        const versions = await db.noteVersions.where("noteId").equals(id).sortBy("createdAt");
-        const latest = versions.at(-1);
-        if (
-          latest?.editType === "autosave" &&
-          new Date(now).getTime() - new Date(latest.createdAt).getTime() <= AUTOSAVE_VERSION_COALESCE_MS
-        ) {
-          reusableAutosaveVersion = latest;
-        }
-      }
-
-      if (!contentChanged && !metaChanged) {
-        return;
-      }
-      if (contentChanged && !reusableAutosaveVersion) {
-        await pruneNoteVersions(id);
-        await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
-      }
-
-      await db.transaction("rw", [db.notes, db.noteVersions], async () => {
-        // The note may have been deleted while validation/version pruning was
-        // running. Re-read it inside the write transaction so an old snapshot
-        // can never recreate a deleted note.
+      return db.transaction("rw", [db.notes, db.noteVersions, db.projects, db.projectSubcategories], async () => {
         const current = await db.notes.get(id);
-        if (!current) return;
-        if (current.updatedAt !== existing.updatedAt) {
+        if (!current) return undefined;
+        if (expectedUpdatedAt !== undefined && current.updatedAt !== expectedUpdatedAt) {
           throw new Error("다른 작업에서 노트가 변경되어 저장을 중단했습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요.");
         }
-        await db.notes.put({
-          ...current,
-          title: nextTitle,
-          content: normalized.content,
-          projectId: normalized.projectId,
-          subcategoryId: normalized.subcategoryId,
-          tags: nextTags,
-          status: normalized.status,
-          isPinned: normalized.isPinned,
-          sourceNoteIds: nextSourceNoteIds,
-          updatedAt: now,
-        });
-
+        const [project, subcategory] = await Promise.all([
+          db.projects.get(normalized.projectId),
+          normalized.subcategoryId ? db.projectSubcategories.get(normalized.subcategoryId) : undefined,
+        ]);
+        if (!project || (normalized.subcategoryId && (!subcategory || subcategory.projectId !== normalized.projectId))) {
+          throw new Error("선택한 노트 분류를 찾을 수 없습니다.");
+        }
+        const contentChanged = current.content !== normalized.content || current.title !== normalized.title;
+        const nextSourceNoteIds = normalized.sourceNoteIds ?? [];
+        const metaChanged = current.projectId !== normalized.projectId ||
+          (current.subcategoryId ?? "") !== (normalized.subcategoryId ?? "") || current.status !== normalized.status ||
+          current.isPinned !== normalized.isPinned || JSON.stringify(current.tags) !== JSON.stringify(normalized.tags) ||
+          JSON.stringify(current.sourceNoteIds ?? []) !== JSON.stringify(nextSourceNoteIds);
+        if (!contentChanged && !metaChanged) return current.updatedAt;
+        const now = nextNoteUpdatedAt(current.updatedAt);
+        let reusableAutosaveVersion: NoteVersion | undefined;
+        if (contentChanged && editType === "autosave") {
+          const versions = await db.noteVersions.where("noteId").equals(id).sortBy("createdAt");
+          const latest = versions.at(-1);
+          if (latest?.editType === "autosave" && new Date(now).getTime() - new Date(latest.createdAt).getTime() <= AUTOSAVE_VERSION_COALESCE_MS) {
+            reusableAutosaveVersion = latest;
+          }
+        }
+        if (contentChanged && !reusableAutosaveVersion) {
+          await pruneNoteVersions(id, editType);
+          await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
+        }
+        await db.notes.put({ ...current, title: normalized.title, content: normalized.content, projectId: normalized.projectId,
+          subcategoryId: normalized.subcategoryId, tags: normalized.tags, status: normalized.status, isPinned: normalized.isPinned,
+          sourceNoteIds: nextSourceNoteIds, updatedAt: now });
         if (contentChanged) {
           await db.noteVersions.put({
-            id: reusableAutosaveVersion?.id ?? getId("noteversion"),
-            noteId: id,
-            title: nextTitle,
-            content: normalized.content,
-            editType,
-            aiPrompt,
-            // Keep the beginning of the autosave window fixed. Updating this
-            // timestamp on every keystroke would prevent a new checkpoint from
-            // ever being created during a long editing session.
+            id: reusableAutosaveVersion?.id ?? getId("noteversion"), noteId: id, title: normalized.title,
+            content: normalized.content, editType, aiPrompt,
+            // Fixed checkpoint time creates a new version after five minutes.
             createdAt: reusableAutosaveVersion?.createdAt ?? now,
           });
-          await pruneNoteVersions(id);
         }
+        return now;
       });
     },
     [pruneNoteVersions],
@@ -1265,7 +1282,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         projectId,
         subcategoryId,
         aiClassifiedAt: now,
-        updatedAt: now,
+        updatedAt: nextNoteUpdatedAt(current.updatedAt),
       });
     });
   }, []);
@@ -1276,7 +1293,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     await db.transaction("rw", db.notes, async () => {
       const current = await db.notes.get(id);
       if (!current || current.updatedAt !== expectedUpdatedAt || current.title === normalizedTitle) return;
-      await db.notes.put({ ...current, title: normalizedTitle, updatedAt: toIsoNow() });
+      await db.notes.put({ ...current, title: normalizedTitle, updatedAt: nextNoteUpdatedAt(current.updatedAt) });
     });
   }, []);
 
@@ -1286,14 +1303,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (!note) {
         return;
       }
-      for (const taskId of note.linkedTaskIds ?? []) {
-        await db.tasks
-          .where("id")
-          .equals(taskId)
-          .modify((task) => {
-            task.linkedNoteIds = (task.linkedNoteIds ?? []).filter((noteId) => noteId !== id);
-          });
-      }
+      await db.tasks.filter((task) => (task.linkedNoteIds ?? []).includes(id)).modify((task) => {
+        task.linkedNoteIds = (task.linkedNoteIds ?? []).filter((noteId) => noteId !== id);
+      });
       await db.noteTaskLinks.where("noteId").equals(id).delete();
       await db.noteVersions.where("noteId").equals(id).delete();
       const now = toIsoNow();
@@ -1308,34 +1320,45 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const restoreNoteVersion = useCallback(
-    async (noteId: string, versionId: string) => {
-      const version = await db.noteVersions.get(versionId);
-      if (!version || version.noteId !== noteId) {
-        return;
-      }
-      await pruneNoteVersions(noteId);
-      await assertCapacity(db.noteVersions.count(), 1, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
-      const now = toIsoNow();
-      await db.transaction("rw", [db.notes, db.noteVersions], async () => {
+    async (noteId: string, versionId: string, expectedUpdatedAt?: string, pendingDraft?: NoteFormInput) => {
+      const normalizedPendingDraft = pendingDraft ? normalizeNoteInput(pendingDraft) : undefined;
+      return db.transaction("rw", [db.notes, db.noteVersions, db.projects, db.projectSubcategories], async () => {
         const note = await db.notes.get(noteId);
-        const currentVersion = await db.noteVersions.get(versionId);
-        if (!note || !currentVersion || currentVersion.noteId !== noteId) return;
-        await db.notes.put({
-          ...note,
-          title: currentVersion.title,
-          content: currentVersion.content,
-          updatedAt: now,
-        });
-        await db.noteVersions.add({
-          id: getId("noteversion"),
-          noteId,
-          title: currentVersion.title,
-          content: currentVersion.content,
-          editType: "restore",
-          createdAt: now,
-        });
+        const version = await db.noteVersions.get(versionId);
+        if (!note || !version || version.noteId !== noteId) return undefined;
+        if (expectedUpdatedAt !== undefined && note.updatedAt !== expectedUpdatedAt) {
+          throw new Error("다른 작업에서 노트가 변경되어 복원을 중단했습니다. 최신 내용을 확인한 뒤 다시 시도해 주세요.");
+        }
+        if (normalizedPendingDraft) {
+          const [project, subcategory] = await Promise.all([
+            db.projects.get(normalizedPendingDraft.projectId),
+            normalizedPendingDraft.subcategoryId ? db.projectSubcategories.get(normalizedPendingDraft.subcategoryId) : undefined,
+          ]);
+          if (!project || (normalizedPendingDraft.subcategoryId && (!subcategory || subcategory.projectId !== normalizedPendingDraft.projectId))) {
+            throw new Error("선택한 노트 분류를 찾을 수 없습니다.");
+          }
+        }
+        // Capture the target before reserving both slots: a pending draft must
+        // not prune the oldest version the user has just asked to restore.
+        const incomingCount = normalizedPendingDraft ? 2 : 1;
+        await pruneNoteVersions(noteId, "restore", incomingCount);
+        await assertCapacity(db.noteVersions.count(), incomingCount, LIVE_QUERY_LIMITS.noteVersions, "노트 버전");
+        const pendingAt = nextNoteUpdatedAt(note.updatedAt);
+        const now = normalizedPendingDraft ? nextNoteUpdatedAt(pendingAt) : pendingAt;
+        if (normalizedPendingDraft) {
+          await db.noteVersions.add({ id: getId("noteversion"), noteId, title: normalizedPendingDraft.title,
+            content: normalizedPendingDraft.content, editType: "manual", createdAt: pendingAt });
+        }
+        const nextNote = normalizedPendingDraft ? {
+          ...note, projectId: normalizedPendingDraft.projectId, subcategoryId: normalizedPendingDraft.subcategoryId,
+          tags: normalizedPendingDraft.tags, status: normalizedPendingDraft.status, isPinned: normalizedPendingDraft.isPinned,
+          sourceNoteIds: normalizedPendingDraft.sourceNoteIds,
+        } : note;
+        await db.notes.put({ ...nextNote, title: version.title, content: version.content, updatedAt: now });
+        await db.noteVersions.add({ id: getId("noteversion"), noteId, title: version.title,
+          content: version.content, editType: "restore", createdAt: now });
+        return now;
       });
-      await pruneNoteVersions(noteId);
     },
     [pruneNoteVersions],
   );
@@ -1374,7 +1397,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           .equals(noteId)
           .modify((current) => {
             current.linkedTaskIds = Array.from(new Set([...(current.linkedTaskIds ?? []), taskId]));
-            current.updatedAt = now;
+            current.updatedAt = nextNoteUpdatedAt(current.updatedAt);
           });
         await db.tasks
           .where("id")
@@ -1397,7 +1420,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         .equals(noteId)
         .modify((current) => {
           current.linkedTaskIds = (current.linkedTaskIds ?? []).filter((id) => id !== taskId);
-          current.updatedAt = now;
+          current.updatedAt = nextNoteUpdatedAt(current.updatedAt);
         });
       await db.tasks
         .where("id")
@@ -1449,6 +1472,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         .equals(id)
         .modify((note) => {
           note.subcategoryId = undefined;
+          note.updatedAt = nextNoteUpdatedAt(note.updatedAt);
         });
     });
   }, []);
@@ -1529,13 +1553,26 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   /** 노트 탐색기 드래그앤드롭 순서 저장. updatedAt은 건드리지 않아 최근 수정순 정렬을 오염시키지 않는다. */
   const reorderNotes = useCallback(async (orderedIds: string[]) => {
+    if (new Set(orderedIds).size !== orderedIds.length || orderedIds.length > LIVE_QUERY_LIMITS.notes) {
+      throw new Error("노트 정렬 정보가 올바르지 않습니다.");
+    }
+    if (orderedIds.length < 2) return;
     await db.transaction("rw", db.notes, async () => {
-      for (let index = 0; index < orderedIds.length; index += 1) {
-        const existing = await db.notes.get(orderedIds[index]);
-        if (existing && existing.sortOrder !== index) {
-          await db.notes.put({ ...existing, sortOrder: index });
-        }
+      const notes = await db.notes.orderBy("updatedAt").reverse().toArray();
+      const ordered = notes.sort((a, b) => Number(b.isPinned) - Number(a.isPinned) ||
+        (a.sortOrder ?? -1) - (b.sortOrder ?? -1) || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      const selected = new Set(orderedIds);
+      const noteMap = new Map(ordered.map((note) => [note.id, note]));
+      if (orderedIds.some((id) => !noteMap.has(id))) throw new Error("정렬할 노트 일부를 찾을 수 없습니다.");
+      // Replace only the selected positions in the complete order. Filtering
+      // must not renumber a subset from zero and move unrelated notes.
+      let nextSelected = 0;
+      const reordered = ordered.map((note) => selected.has(note.id) ? noteMap.get(orderedIds[nextSelected++])! : note);
+      if (reordered.some((note, index) => note.isPinned !== ordered[index].isPinned)) {
+        throw new Error("고정 노트와 일반 노트는 각각의 그룹 안에서 정렬해 주세요.");
       }
+      await db.notes.bulkPut(reordered.map((note, index) => ({ ...note, sortOrder: index }))
+        .filter((note) => noteMap.get(note.id)?.sortOrder !== note.sortOrder));
     });
   }, []);
 
@@ -2028,6 +2065,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       undoDescription: undoStack[undoStack.length - 1]?.description,
       autoBackups,
       createTask,
+      createTasksForNote,
       updateTask,
       removeTask,
       undoLastChange,
@@ -2080,6 +2118,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       undoStack,
       autoBackups,
       createTask,
+      createTasksForNote,
       updateTask,
       removeTask,
       undoLastChange,

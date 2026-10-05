@@ -150,9 +150,13 @@ export function buildNoteMarkdown(note: Note, project?: Project, subproject?: Pr
   const normalizedContent = normalizeLineEndings(note.content).replace(/^\uFEFF/, "");
   const existing = parseLeadingFrontmatter(normalizedContent);
   const generated = buildGeneratedMetadata(note, project, subproject);
-  const existingPlanai = isPlainRecord(existing?.metadata.planai) ? existing.metadata.planai : {};
+  const existingMetadata = { ...(existing?.metadata ?? {}) };
+  const existingPlanai = isPlainRecord(existingMetadata.planai) ? { ...existingMetadata.planai } : {};
+  // 관리 키는 현재 값이 없어졌을 때도 제거한다. 사용자 정의 키는 그대로 보존한다.
+  delete existingMetadata.subproject;
+  delete existingPlanai.subproject_id;
   const metadata = {
-    ...(existing?.metadata ?? {}),
+    ...existingMetadata,
     ...generated,
     planai: {
       ...existingPlanai,
@@ -246,11 +250,19 @@ export async function createNotesArchive(
 
     let fileName = createNoteMarkdownFileName(note);
     let path = `${projectFolder}/${subprojectFolder}/${fileName}`;
-    const collisionKey = path.toLocaleLowerCase("en-US");
-    if (usedPaths.has(collisionKey)) {
+    if (usedPaths.has(path.toLocaleLowerCase("en-US"))) {
       const title = sanitizeNoteExportPathSegment(normalizeNoteTitle(note.title), "제목 없는 노트", MAX_NOTE_FILE_TITLE_LENGTH);
-      fileName = `${title}--${stableIdToken(note.id, 32)}.md`;
+      const stem = `${title}--${stableIdToken(note.id, 32)}`;
+      fileName = `${stem}.md`;
       path = `${projectFolder}/${subprojectFolder}/${fileName}`;
+      // 가져온 ID는 대소문자/기호 제거 후 같은 토큰이 되거나 32자 이후에만
+      // 다를 수 있다. 최종 경로를 반복 검사해 ZIP 항목 덮어쓰기를 방지한다.
+      let suffix = 2;
+      while (usedPaths.has(path.toLocaleLowerCase("en-US"))) {
+        fileName = `${stem}--${suffix}.md`;
+        path = `${projectFolder}/${subprojectFolder}/${fileName}`;
+        suffix += 1;
+      }
     }
     usedPaths.add(path.toLocaleLowerCase("en-US"));
     paths.push(path);

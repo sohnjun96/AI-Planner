@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { diffWords, summarizeDiff, diffLines } from "../utils/lineDiff";
+import { diffWordsDetailed, summarizeDiff, diffLines, hasChanges, type DiffToken } from "../utils/lineDiff";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 type DiffView = "diff" | "original" | "proposed";
@@ -14,8 +14,7 @@ interface NoteInlineDiffProps {
   onReject: () => void;
 }
 
-function renderInlineDiff(previous: string, next: string): ReactNode[] {
-  const tokens = diffWords(previous, next);
+function renderInlineDiff(tokens: DiffToken[]): ReactNode[] {
   const nodes: ReactNode[] = [];
   tokens.forEach((token, i) => {
     if (token.text === "\n") {
@@ -43,8 +42,12 @@ function renderInlineDiff(previous: string, next: string): ReactNode[] {
 
 export function NoteInlineDiff({ previous, next, headline, mode, isApplying, onAccept, onReject }: NoteInlineDiffProps) {
   const [view, setView] = useState<DiffView>("diff");
-  const stats = useMemo(() => summarizeDiff(diffLines(previous, next)), [previous, next]);
-  const inlineNodes = useMemo(() => renderInlineDiff(previous, next), [previous, next]);
+  const stats = useMemo(
+    () => hasChanges(previous, next) ? summarizeDiff(diffLines(previous, next)) : { added: 0, removed: 0 },
+    [previous, next],
+  );
+  const inlineDiff = useMemo(() => view === "diff" ? diffWordsDetailed(previous, next) : null, [previous, next, view]);
+  const inlineNodes = useMemo(() => inlineDiff ? renderInlineDiff(inlineDiff.tokens) : null, [inlineDiff]);
 
   return (
     <section className="note-inline-diff" aria-label="변경 내용">
@@ -57,13 +60,13 @@ export function NoteInlineDiff({ previous, next, headline, mode, isApplying, onA
         </div>
         <div className="note-inline-diff-actions">
           <div className="note-diff-view-toggle" role="group" aria-label="보기 전환">
-            <button type="button" className={view === "diff" ? "active" : ""} onClick={() => setView("diff")}>
+            <button type="button" className={view === "diff" ? "active" : ""} aria-pressed={view === "diff"} onClick={() => setView("diff")}>
               변경
             </button>
-            <button type="button" className={view === "original" ? "active" : ""} onClick={() => setView("original")}>
+            <button type="button" className={view === "original" ? "active" : ""} aria-pressed={view === "original"} onClick={() => setView("original")}>
               원본
             </button>
-            <button type="button" className={view === "proposed" ? "active" : ""} onClick={() => setView("proposed")}>
+            <button type="button" className={view === "proposed" ? "active" : ""} aria-pressed={view === "proposed"} onClick={() => setView("proposed")}>
               제안
             </button>
           </div>
@@ -85,6 +88,7 @@ export function NoteInlineDiff({ previous, next, headline, mode, isApplying, onA
       </header>
 
       <div className="note-inline-diff-body">
+        {inlineDiff?.isCoarse ? <p className="note-inline-diff-legend" role="note">큰 변경 구간은 묶어서 표시합니다. 원본과 제안에서 전체 내용을 확인할 수 있습니다.</p> : null}
         {view === "diff" ? (
           <div className="note-inline-diff-text">{inlineNodes}</div>
         ) : view === "original" ? (

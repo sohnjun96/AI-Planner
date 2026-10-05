@@ -33,9 +33,10 @@ import {
 } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
 import { useCellValue, usePublisher } from "@mdxeditor/gurx";
+import { EditorView } from "@codemirror/view";
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { normalizeLiveMarkdownWhitespace } from "../utils/markdownEditing";
-import { findMarkdownSelection } from "../utils/markdownSelection";
+import { findMarkdownSelection, findMarkdownSourceSelection } from "../utils/markdownSelection";
 import { stableMarkdownShortcutsPlugin } from "./StableMarkdownShortcutsPlugin";
 
 interface LiveMarkdownEditorProps {
@@ -161,18 +162,24 @@ function EditorToolbar({
   return (
     <>
       <UndoRedo />
-      <Separator />
-      <BlockTypeSelect />
+      <span className="note-editor-advanced-tools">
+        <Separator />
+        <BlockTypeSelect />
+      </span>
       <BoldItalicUnderlineToggles options={["Bold"]} />
-      <StrikeThroughSupSubToggles options={["Strikethrough"]} />
-      <CodeToggle />
-      <HighlightToggle />
-      <CreateLink />
+      <span className="note-editor-advanced-tools">
+        <StrikeThroughSupSubToggles options={["Strikethrough"]} />
+        <CodeToggle />
+        <HighlightToggle />
+        <CreateLink />
+      </span>
       <Separator />
       <ListsToggle options={["bullet", "number", "check"]} />
-      <InsertTable />
-      <InsertThematicBreak />
-      <InsertCodeBlock />
+      <span className="note-editor-advanced-tools">
+        <InsertTable />
+        <InsertThematicBreak />
+        <InsertCodeBlock />
+      </span>
     </>
   );
 }
@@ -191,7 +198,7 @@ export function LiveMarkdownEditor({
   const onChangeRef = useRef(onChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const lastEmittedRef = useRef(content);
-  const editorMarkdownRef = useRef(normalizeLiveMarkdownWhitespace(content));
+  const editorMarkdownRef = useRef(content);
   const composingRef = useRef(false);
   const pendingExternalContentRef = useRef<string | null>(null);
   const compositionFrameRef = useRef<number | null>(null);
@@ -228,7 +235,18 @@ export function LiveMarkdownEditor({
           bash: "Shell",
         },
       }),
-      diffSourcePlugin({ viewMode: initialMode === "edit" ? "source" : "rich-text" }),
+      diffSourcePlugin({
+        viewMode: initialMode === "edit" ? "source" : "rich-text",
+        codeMirrorExtensions: [
+          EditorView.updateListener.of(({ state, view, selectionSet, docChanged }) => {
+            if (!view.hasFocus || (!selectionSet && !docChanged)) return;
+            const selection = state.selection.main;
+            const markdown = docChanged ? state.doc.toString() : editorMarkdownRef.current;
+            const range = findMarkdownSourceSelection(markdown, selection.from, selection.to);
+            onSelectionChangeRef.current?.(range.start, range.end);
+          }),
+        ],
+      }),
       markdownShortcutPlugin(),
       stableMarkdownShortcutsPlugin(),
       maxLengthPlugin(MAX_NOTE_CHARACTERS),
@@ -249,6 +267,14 @@ export function LiveMarkdownEditor({
 
   function captureSelection() {
     const root = rootRef.current;
+    const sourceEditor = root?.querySelector<HTMLElement>(".mdxeditor-source-editor .cm-content");
+    const sourceView = sourceEditor ? EditorView.findFromDOM(sourceEditor) : null;
+    if (sourceView) {
+      const selection = sourceView.state.selection.main;
+      const range = findMarkdownSourceSelection(editorMarkdownRef.current, selection.from, selection.to);
+      onSelectionChangeRef.current?.(range.start, range.end);
+      return;
+    }
     const selection = document.getSelection();
     if (!root || !selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode) {
       onSelectionChangeRef.current?.(0, 0);
@@ -342,16 +368,6 @@ export function LiveMarkdownEditor({
   // `markdown` is an initial value in MDXEditor. Only genuine external replacements
   // (restore/AI/version load) are sent back into the editor; typing is never fed back.
   useEffect(() => {
-    const normalizedContent = normalizeLiveMarkdownWhitespace(content);
-    if (normalizedContent !== content) {
-      editorMarkdownRef.current = normalizedContent;
-      lastEmittedRef.current = normalizedContent;
-      if (fallbackSource !== null) setFallbackSource(normalizedContent);
-      else if (composingRef.current) pendingExternalContentRef.current = normalizedContent;
-      else editorRef.current?.setMarkdown(normalizedContent);
-      onChangeRef.current(normalizedContent);
-      return;
-    }
     if (content === lastEmittedRef.current) return;
     if (fallbackSource !== null) {
       setFallbackSource(content);
@@ -429,7 +445,8 @@ export function LiveMarkdownEditor({
         compositionFrameRef.current = window.requestAnimationFrame(() => {
           compositionFrameRef.current = null;
           composingRef.current = false;
-          const committed = normalizeLiveMarkdownWhitespace(editorRef.current?.getMarkdown() ?? editorMarkdownRef.current);
+          const markdown = editorRef.current?.getMarkdown() ?? editorMarkdownRef.current;
+          const committed = requestedViewMode === "source" ? markdown : normalizeLiveMarkdownWhitespace(markdown);
           const pendingExternal = pendingExternalContentRef.current;
           pendingExternalContentRef.current = null;
           if (pendingExternal !== null && pendingExternal !== committed) {
@@ -467,7 +484,9 @@ export function LiveMarkdownEditor({
           translation={translateEditorMessage}
           onChange={(markdownValue, initialMarkdownNormalize) => {
             if (initialMarkdownNormalize) return;
-            const normalizedMarkdown = normalizeLiveMarkdownWhitespace(markdownValue);
+            const normalizedMarkdown = requestedViewMode === "source"
+              ? markdownValue
+              : normalizeLiveMarkdownWhitespace(markdownValue);
             editorMarkdownRef.current = normalizedMarkdown;
             if (composingRef.current) return;
             emitMarkdown(normalizedMarkdown);

@@ -18,6 +18,23 @@ function normalizeWithSourceOffsets(source: string): { value: string; offsets: n
   return { value, offsets };
 }
 
+/** CodeMirror uses LF offsets even when the stored Markdown has CRLF line endings. */
+export function findMarkdownSourceSelection(markdown: string, from: number, to: number): MarkdownSelectionRange {
+  const clamp = (offset: number) => Math.min(markdown.length, Math.max(0, Math.trunc(offset) || 0));
+  const start = clamp(Math.min(from, to));
+  const end = clamp(Math.max(from, to));
+  if (!markdown.includes("\r\n")) return { start, end };
+  let rawOffset = 0;
+  let normalizedOffset = 0;
+  let rawStart = start === 0 ? 0 : markdown.length;
+  while (rawOffset < markdown.length && normalizedOffset < end) {
+    rawOffset += markdown[rawOffset] === "\r" && markdown[rawOffset + 1] === "\n" ? 2 : 1;
+    normalizedOffset += 1;
+    if (normalizedOffset === start) rawStart = rawOffset;
+  }
+  return { start: rawStart, end: rawOffset };
+}
+
 function uniqueRange(source: string, candidate: string): MarkdownSelectionRange | null {
   if (!candidate) return null;
   const normalizedSource = normalizeWithSourceOffsets(source);

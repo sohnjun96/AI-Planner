@@ -334,6 +334,50 @@ function requireReference(ids: Set<string>, value: string | undefined, label: st
   if (value !== undefined && !ids.has(value)) fail(`${label} 참조 대상이 없습니다.`);
 }
 
+function reconcileNoteTaskLinks(tasks: Task[], notes: Note[], links: NoteTaskLink[], version: number, exportedAt: string): NoteTaskLink[] {
+  const pair = (noteId: string, taskId: string) => `${noteId}\u0000${taskId}`;
+  const fromNotes = new Set(notes.flatMap((note) => note.linkedTaskIds.map((taskId) => pair(note.id, taskId))));
+  const fromTasks = new Set(tasks.flatMap((task) => (task.linkedNoteIds ?? []).map((noteId) => pair(noteId, task.id))));
+  const fromLinks = new Set(links.map((link) => pair(link.noteId, link.taskId)));
+  const allPairs = new Set([...fromNotes, ...fromTasks, ...fromLinks]);
+  if (version >= BACKUP_VERSION) {
+    if ([...allPairs].some((key) => !fromNotes.has(key) || !fromTasks.has(key) || !fromLinks.has(key))) {
+      fail("노트와 일정의 양방향 연결 정보가 일치하지 않습니다.");
+    }
+    return links;
+  }
+  // Older exports may contain only one representation. Preserve every valid
+  // relationship rather than silently discarding a one-sided legacy link.
+  if (allPairs.size > LIMITS.noteTaskLinks) fail("노트 연결 항목 수가 허용 한도를 초과했습니다.");
+  const noteMap = new Map(notes.map((note) => [note.id, note]));
+  const taskMap = new Map(tasks.map((task) => [task.id, task]));
+  const noteTasks = new Map(notes.map((note) => [note.id, new Set(note.linkedTaskIds)]));
+  const taskNotes = new Map(tasks.map((task) => [task.id, new Set(task.linkedNoteIds ?? [])]));
+  const result = [...links];
+  const usedIds = new Set(links.map((link) => link.id));
+  let counter = 0;
+  for (const key of allPairs) {
+    const [noteId, taskId] = key.split("\u0000");
+    noteTasks.get(noteId)!.add(taskId);
+    taskNotes.get(taskId)!.add(noteId);
+    if (!fromLinks.has(key)) {
+      let linkId: string;
+      do { linkId = `notelink-import-${++counter}`; } while (usedIds.has(linkId));
+      usedIds.add(linkId);
+      result.push({ id: linkId, noteId, taskId, source: "manual", createdAt: exportedAt });
+    }
+  }
+  for (const [noteId, ids] of noteTasks) {
+    if (ids.size > 200) fail(`note ${noteId} 연결은 최대 200개까지 허용됩니다.`);
+    noteMap.get(noteId)!.linkedTaskIds = [...ids];
+  }
+  for (const [taskId, ids] of taskNotes) {
+    if (ids.size > 200) fail(`task ${taskId} 연결은 최대 200개까지 허용됩니다.`);
+    if (ids.size > 0 || taskMap.get(taskId)!.linkedNoteIds !== undefined) taskMap.get(taskId)!.linkedNoteIds = [...ids];
+  }
+  return result;
+}
+
 export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPayload {
   if (new TextEncoder().encode(raw).byteLength > MAX_IMPORT_FILE_BYTES) fail("파일 크기가 허용 한도를 초과했습니다.");
   let parsed: unknown;
@@ -378,6 +422,7 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
   const taskIds = new Set(tasks.map((item) => item.id));
   const noteIds = new Set(notes.map((item) => item.id));
   const subcategoryIds = new Set(projectSubcategories.map((item) => item.id));
+  const subcategoryMap = new Map(projectSubcategories.map((item) => [item.id, item]));
   const routineIds = new Set(routines.map((item) => item.id));
   routines.forEach((item) => { requireReference(projectIds, item.projectId, "routine.projectId"); requireReference(typeIds, item.taskTypeId, "routine.taskTypeId"); });
   routineOccurrences.forEach((item) => requireReference(routineIds, item.routineId, "routineOccurrence.routineId"));
@@ -392,6 +437,9 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
   notes.forEach((item) => {
     requireReference(projectIds, item.projectId, `note ${item.id}.projectId`);
     requireReference(subcategoryIds, item.subcategoryId, `note ${item.id}.subcategoryId`);
+    if (item.subcategoryId && subcategoryMap.get(item.subcategoryId)?.projectId !== item.projectId) {
+      fail(`note ${item.id}.subcategoryId가 다른 프로젝트에 속합니다.`);
+    }
     item.linkedTaskIds.forEach((taskId) => requireReference(taskIds, taskId, `note ${item.id}.linkedTaskIds`));
     item.sourceNoteIds?.forEach((sourceNoteId) => {
       if (sourceNoteId === item.id) fail(`note ${item.id}.sourceNoteIds에 자기 자신을 참조할 수 없습니다.`);
@@ -407,13 +455,14 @@ export function parseAndSanitizeImportPayload(raw: string): ValidatedImportPaylo
     if (noteTaskPairs.has(pair)) fail("중복된 노트-일정 연결이 있습니다.");
     noteTaskPairs.add(pair);
   });
+  const reconciledNoteTaskLinks = reconcileNoteTaskLinks(tasks, notes, noteTaskLinks, version, exportedAt);
   userContexts.flatMap((context) => context.rules).forEach((rule) => {
     requireReference(projectIds, rule.projectId, `userContextRule ${rule.id}.projectId`);
     requireReference(typeIds, rule.taskTypeId, `userContextRule ${rule.id}.taskTypeId`);
   });
 
   return {
-    routines, routineOccurrences, tasks, projects, taskTypes, memos, settings, userContexts, notes, noteVersions, noteTaskLinks,
+    routines, routineOccurrences, tasks, projects, taskTypes, memos, settings, userContexts, notes, noteVersions, noteTaskLinks: reconciledNoteTaskLinks,
     projectSubcategories, archiveInsightCaches, version: BACKUP_VERSION,
     exportedAt,
   };

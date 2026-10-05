@@ -60,6 +60,20 @@ assert.deepEqual(metadata.planai, {
 assert.match(markdown.slice(closingBoundary + 5), /^\nAI 특허심사\n\n- \[ \] 검토\n$/);
 assert.equal((markdown.match(/^---$/gm) ?? []).length, 2);
 
+// 분류 해제/프로젝트 이동 후에는 이전 관리 키가 재수출되지 않는다.
+// 사용자 프론트매터와 planai 내부의 알 수 없는 사용자 키는 보존한다.
+const oldClassificationContent = "---\nsubproject: 이전 항목\ncustom_property: 유지\ncustom_object:\n  nested: true\nplanai:\n  note_id: old-note\n  project_id: old-project\n  subproject_id: old-subproject\n  custom_flag: keep\n---\n본문";
+const clearedMarkdown = buildNoteMarkdown({ ...note, content: oldClassificationContent, subcategoryId: undefined }, project);
+const clearedMetadata = load(clearedMarkdown.slice(4, clearedMarkdown.indexOf("\n---\n", 4))) as Record<string, unknown>;
+assert.equal(Object.hasOwn(clearedMetadata, "subproject"), false);
+assert.equal(clearedMetadata.custom_property, "유지");
+assert.deepEqual(clearedMetadata.custom_object, { nested: true });
+assert.deepEqual(clearedMetadata.planai, { note_id: note.id, project_id: project.id, custom_flag: "keep" });
+const wrongProjectMarkdown = buildNoteMarkdown({ ...note, content: oldClassificationContent }, { ...project, id: "project-other" }, { ...subproject, projectId: "project-other" });
+const wrongProjectMetadata = load(wrongProjectMarkdown.slice(4, wrongProjectMarkdown.indexOf("\n---\n", 4))) as Record<string, unknown>;
+assert.equal(Object.hasOwn(wrongProjectMetadata, "subproject"), false);
+assert.equal(Object.hasOwn(wrongProjectMetadata.planai as object, "subproject_id"), false);
+
 const uncategorizedNote: Note = {
   ...note,
   id: "note-0fc21981-a3dc-4b77-8899-aabbccddeeff",
@@ -85,5 +99,23 @@ assert.deepEqual(archive.paths, [
 const zip = await JSZip.loadAsync(new Uint8Array(await archive.blob.arrayBuffer()));
 const exportedMarkdown = await zip.file("특허-프로젝트/K-SCAN/AI 특허심사--a3f91c72b8de.md")?.async("string");
 assert.equal(exportedMarkdown, markdown);
+
+// 백업의 유효한 ID도 기호/대소문자 정규화 후에는 같은 파일 토큰이 된다.
+const collidingNotes = ["note-aa.bb", "note-aabb", "note-AA:BB", "note-AA_BB"].map((id, index) => ({
+  ...uncategorizedNote,
+  id,
+  title: "같은 제목",
+  content: `원문 ${index}`,
+}));
+const collisionArchive = await createNotesArchive(collidingNotes, [project], []);
+assert.equal(collisionArchive.fileCount, collidingNotes.length);
+assert.equal(new Set(collisionArchive.paths.map((path) => path.toLowerCase())).size, collidingNotes.length);
+const collisionZip = await JSZip.loadAsync(new Uint8Array(await collisionArchive.blob.arrayBuffer()));
+const collisionFiles = Object.values(collisionZip.files).filter((file) => !file.dir);
+assert.equal(collisionFiles.length, collidingNotes.length);
+const collisionContents = await Promise.all(collisionFiles.map((file) => file.async("string")));
+for (const [index, collisionNote] of collidingNotes.entries()) {
+  assert.equal(collisionContents.filter((content) => content.includes(`note_id: "${collisionNote.id}"`) && content.includes(`원문 ${index}`)).length, 1);
+}
 
 process.stdout.write("Note Markdown export checks passed.\n");

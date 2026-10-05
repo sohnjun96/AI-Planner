@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { parseAndSanitizeImportPayload } from "../src/utils/importBackup";
 import { GLOBAL_MEMO_KEY, isValidMemoDate, isValidMemoStorageKey } from "../src/utils/memos";
+import type { Note, NoteTaskLink, Project, Task, TaskType } from "../src/models";
 
 function createBackup(memoDate: string, version = 5): string {
   return JSON.stringify({
@@ -141,5 +142,58 @@ assert.throws(
   })),
   /userContextRule context-lunch-default\.projectId 참조 대상이 없습니다/,
 );
+
+function createNoteBackup(version = 7) {
+  const project: Project = { id: "project-a", name: "A", color: "#123456", isActive: true, createdAt: exportedAt, updatedAt: exportedAt };
+  const type: TaskType = { id: "type-a", name: "A", color: "#123456", isActive: true, isDefault: false, order: 0, createdAt: exportedAt, updatedAt: exportedAt };
+  const task: Task = { id: "task-a", title: "할 일", content: "", projectId: project.id, taskTypeId: type.id, status: "NOT_DONE",
+    startAt: exportedAt, isMajor: false, linkedNoteIds: ["note-a"], createdAt: exportedAt, updatedAt: exportedAt };
+  const note: Note = { id: "note-a", title: "노트", content: "본문", projectId: project.id, tags: [], status: "active",
+    isPinned: false, linkedTaskIds: [task.id], createdAt: exportedAt, updatedAt: exportedAt };
+  const link: NoteTaskLink = { id: "link-a", noteId: note.id, taskId: task.id, source: "manual", createdAt: exportedAt };
+  return { version, exportedAt, projects: [project], taskTypes: [type], tasks: [task], notes: [note], noteTaskLinks: [link],
+    memos: [], settings: [], userContexts: [], noteVersions: [], projectSubcategories: [] as Array<{ id: string; projectId: string; name: string; order: number; createdAt: string; updatedAt: string }> };
+}
+
+const consistentNoteBackup = parseAndSanitizeImportPayload(JSON.stringify(createNoteBackup()));
+assert.deepEqual(consistentNoteBackup.notes[0].linkedTaskIds, ["task-a"]);
+assert.deepEqual(consistentNoteBackup.tasks[0].linkedNoteIds, ["note-a"]);
+assert.equal(consistentNoteBackup.noteTaskLinks[0].id, "link-a");
+
+for (const missing of ["note", "task", "link"] as const) {
+  const backup = createNoteBackup();
+  if (missing === "note") backup.notes[0].linkedTaskIds = [];
+  if (missing === "task") delete backup.tasks[0].linkedNoteIds;
+  if (missing === "link") backup.noteTaskLinks = [];
+  assert.throws(() => parseAndSanitizeImportPayload(JSON.stringify(backup)), /양방향 연결 정보가 일치하지 않습니다/);
+}
+
+for (const version of [4, 5, 6]) {
+  for (const representation of ["note", "task", "link"] as const) {
+    const backup = createNoteBackup(version);
+    if (representation !== "note") backup.notes[0].linkedTaskIds = [];
+    if (representation !== "task") delete backup.tasks[0].linkedNoteIds;
+    if (representation !== "link") backup.noteTaskLinks = [];
+    const repaired = parseAndSanitizeImportPayload(JSON.stringify(backup));
+    assert.deepEqual(repaired.notes[0].linkedTaskIds, ["task-a"]);
+    assert.deepEqual(repaired.tasks[0].linkedNoteIds, ["note-a"]);
+    assert.equal(repaired.noteTaskLinks.length, 1);
+    assert.equal(repaired.noteTaskLinks[0].noteId, "note-a");
+    assert.equal(repaired.noteTaskLinks[0].taskId, "task-a");
+  }
+}
+
+const wrongProject = createNoteBackup();
+wrongProject.projects.push({ ...wrongProject.projects[0], id: "project-b", name: "B" });
+wrongProject.projectSubcategories.push({ id: "sub-b", projectId: "project-b", name: "B 세부", order: 0, createdAt: exportedAt, updatedAt: exportedAt });
+wrongProject.notes[0].subcategoryId = "sub-b";
+assert.throws(() => parseAndSanitizeImportPayload(JSON.stringify(wrongProject)), /다른 프로젝트에 속합니다/);
+
+const repairIdCollision = createNoteBackup(6);
+repairIdCollision.noteTaskLinks[0].id = "notelink-import-1";
+repairIdCollision.tasks.push({ ...repairIdCollision.tasks[0], id: "task-b", linkedNoteIds: ["note-a"] });
+const repairedWithCollision = parseAndSanitizeImportPayload(JSON.stringify(repairIdCollision));
+assert.equal(new Set(repairedWithCollision.noteTaskLinks.map((link) => link.id)).size, 2);
+assert.deepEqual(repairedWithCollision.notes[0].linkedTaskIds, ["task-a", "task-b"]);
 
 process.stdout.write("Import backup compatibility checks passed.\n");

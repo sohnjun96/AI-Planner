@@ -8,6 +8,9 @@ interface NoteHistoryPanelProps {
   onCompare: (version: NoteVersion) => void;
   onClose?: () => void;
   activeVersionId?: string;
+  isBusy?: boolean;
+  currentTitle?: string;
+  currentContent?: string;
 }
 
 const EDIT_TYPE_LABELS: Record<NoteVersionEditType, string> = {
@@ -18,7 +21,7 @@ const EDIT_TYPE_LABELS: Record<NoteVersionEditType, string> = {
   restore: "버전 복원",
 };
 
-export function NoteHistoryPanel({ versions, timeFormat, onRestore, onCompare, onClose, activeVersionId }: NoteHistoryPanelProps) {
+export function NoteHistoryPanel({ versions, timeFormat, onRestore, onCompare, onClose, activeVersionId, isBusy, currentTitle, currentContent }: NoteHistoryPanelProps) {
   const sorted = [...versions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
@@ -30,11 +33,12 @@ export function NoteHistoryPanel({ versions, timeFormat, onRestore, onCompare, o
           <small>{sorted.length}개 버전</small>
         </div>
         {onClose ? (
-          <button type="button" className="btn btn-soft" onClick={onClose}>
+          <button type="button" className="btn btn-soft" disabled={isBusy} onClick={onClose}>
             닫기
           </button>
         ) : null}
       </header>
+      {isBusy ? <p role="status">이전 버전을 복원하고 있습니다…</p> : null}
 
       {sorted.length === 0 ? (
         <p className="empty-text">아직 저장된 버전이 없습니다.</p>
@@ -45,14 +49,15 @@ export function NoteHistoryPanel({ versions, timeFormat, onRestore, onCompare, o
               <div className="note-history-info">
                 <span className={`note-history-badge edit-${version.editType}`}>{EDIT_TYPE_LABELS[version.editType]}</span>
                 <time>{formatDateTime(version.createdAt, timeFormat)}</time>
-                {index === 0 ? <span className="note-history-current">현재</span> : null}
+                {index === 0 ? <span className="note-history-current">{version.title === currentTitle && version.content === currentContent ? "현재 내용" : "최근 저장본"}</span> : null}
               </div>
+              <strong className="note-history-preview-title">{version.title}</strong><p className="note-history-preview-content">{version.content.replace(/\s+/g, " ").slice(0, 140) || "본문 없음"}</p>
               <div className="button-row">
-                <button type="button" className="btn btn-soft btn-compact" onClick={() => onCompare(version)}>
+                <button type="button" className="btn btn-soft btn-compact" disabled={isBusy} onClick={() => onCompare(version)}>
                   비교
                 </button>
-                {index === 0 ? null : (
-                  <button type="button" className="btn btn-outline btn-compact" onClick={() => onRestore(version.id)}>
+                {version.title === currentTitle && version.content === currentContent ? null : (
+                  <button type="button" className="btn btn-outline btn-compact" disabled={isBusy} onClick={() => onRestore(version.id)}>
                     복원
                   </button>
                 )}

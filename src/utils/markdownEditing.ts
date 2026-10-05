@@ -1,3 +1,6 @@
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+
 export interface MarkdownEditResult {
   value: string;
   selectionStart: number;
@@ -44,67 +47,42 @@ export function nextMarkdownListDepth(
 export type MarkdownLineStyle = "heading1" | "heading2" | "heading3" | "bullet" | "ordered" | "checklist" | "quote";
 
 const MARKDOWN_SPACE_ENTITY = /&(?:#x0*20|#0*32|nbsp);/gi;
-
-function decodeSpaceEntitiesOutsideInlineCode(line: string): string {
-  let result = "";
-  let cursor = 0;
-  let inlineFenceLength = 0;
-
-  while (cursor < line.length) {
-    const nextBacktick = line.indexOf("`", cursor);
-    const textEnd = nextBacktick < 0 ? line.length : nextBacktick;
-    const text = line.slice(cursor, textEnd);
-    result += inlineFenceLength === 0 ? text.replace(MARKDOWN_SPACE_ENTITY, " ") : text;
-    if (nextBacktick < 0) break;
-
-    let runEnd = nextBacktick + 1;
-    while (line[runEnd] === "`") runEnd += 1;
-    const run = line.slice(nextBacktick, runEnd);
-    result += run;
-    if (inlineFenceLength === 0) inlineFenceLength = run.length;
-    else if (inlineFenceLength === run.length) inlineFenceLength = 0;
-    cursor = runEnd;
-  }
-
-  return result;
-}
+const whitespaceParser = unified().use(remarkParse);
 
 /**
  * 라이브 편집기의 Markdown 직렬화 과정에서 생기는 공백 문자 참조를 일반 공백으로 되돌린다.
- * 사용자가 실제 문자 참조를 작성할 수 있는 인라인 코드와 fenced code block은 그대로 보존한다.
+ * 모든 코드 구문(들여쓰기·중첩 fence·여러 줄 inline code)과 HTML 원문을 보존한다.
+ * 저장된 원본을 조회할 때에는 호출하지 않고, 라이브 입력 직렬화 결과에만 사용한다.
  */
 export function normalizeLiveMarkdownWhitespace(value: string): string {
-  const parts = value.split(/(\r\n|\r|\n)/);
-  let fencedCharacter = "";
-  let fencedLength = 0;
-
-  return parts
-    .map((part) => {
-      if (/^\r?\n$|^\r$/.test(part)) return part;
-
-      const fence = part.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-      if (fencedCharacter) {
-        if (
-          fence &&
-          fence[1][0] === fencedCharacter &&
-          fence[1].length >= fencedLength &&
-          fence[2].trim() === ""
-        ) {
-          fencedCharacter = "";
-          fencedLength = 0;
-        }
-        return part;
-      }
-
-      if (fence) {
-        fencedCharacter = fence[1][0];
-        fencedLength = fence[1].length;
-        return part;
-      }
-
-      return decodeSpaceEntitiesOutsideInlineCode(part);
-    })
-    .join("");
+  if (!/&(?:#x0*20|#0*32|nbsp);/i.test(value)) return value;
+  const textRanges: { start: number; end: number }[] = [];
+  type PositionedNode = {
+    type: string;
+    children?: PositionedNode[];
+    position?: { start: { offset?: number }; end: { offset?: number } };
+  };
+  const visit = (node: PositionedNode) => {
+    if (node.type === "text") {
+      const start = node.position?.start.offset;
+      const end = node.position?.end.offset;
+      if (start !== undefined && end !== undefined) textRanges.push({ start, end });
+      return;
+    }
+    if (["code", "inlineCode", "html"].includes(node.type)) return;
+    // Inline HTML is parsed as sibling opening/text/closing nodes. Keep the
+    // surrounding paragraph intact so <code>/<pre> contents remain literal.
+    if (node.children?.some((child) => child.type === "html")) return;
+    node.children?.forEach(visit);
+  };
+  visit(whitespaceParser.parse(value));
+  textRanges.sort((a, b) => a.start - b.start);
+  let rangeIndex = 0;
+  return value.replace(MARKDOWN_SPACE_ENTITY, (entity: string, offset: number) => {
+    while (textRanges[rangeIndex] && offset >= textRanges[rangeIndex].end) rangeIndex += 1;
+    const range = textRanges[rangeIndex];
+    return range && offset >= range.start ? " " : entity;
+  });
 }
 
 function replaceRange(value: string, start: number, end: number, replacement: string, selectionOffset = replacement.length): MarkdownEditResult {

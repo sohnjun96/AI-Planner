@@ -1,4 +1,5 @@
 import type { Note, Project, ProjectSubcategory, Task, TaskType } from "../models";
+import { LLM_MAX_TOTAL_PROMPT_CHARS } from "../constants";
 import { toIsoNow } from "../utils/date";
 import {
   ToolCallCache,
@@ -91,6 +92,12 @@ function summarizeToolCounts(counts: Map<string, number>): string {
 }
 
 const MAX_TOOL_ROUNDS = 3;
+// JSON 재시도의 보조 메시지(최대 800자 응답 포함)를 위한 여유를 둔다.
+const MAX_NOTE_PROMPT_CHARS = LLM_MAX_TOTAL_PROMPT_CHARS - 2_048;
+const SUMMARY_CHUNK_CHARS = 80_000;
+const MAX_SUMMARY_CHUNKS = 32;
+const MAX_SUMMARY_REDUCTION_ROUNDS = 3;
+type TargetNote = NonNullable<RunNotesAgentInput["targetNotes"]>[number];
 
 const ALLOWED_TOOLS: NotesAgentToolName[] = [
   "search_notes",
@@ -263,7 +270,7 @@ function buildPromptMessages(input: RunNotesAgentInput, toolResults: ToolExecuti
     userRequest: input.userMessage,
     activeNote,
     selectedText: input.selectedText,
-    targetNotes: input.targetNotes?.map((note) => ({ ...note, content: note.content.slice(0, 12_000) })),
+    targetNotes: input.targetNotes,
     // Editing a supplied note is self-contained. Catalogs and tools are only
     // sent for an explicit cross-note search.
     knownProjects: needsLookup ? input.projects.map((project) => ({ id: project.id, name: project.name })) : undefined,
@@ -281,6 +288,101 @@ function buildPromptMessages(input: RunNotesAgentInput, toolResults: ToolExecuti
   ];
 }
 
+function promptFits(messages: LlmChatMessage[]): boolean {
+  return messages.reduce((total, message) => total + message.content.length, 0) <= MAX_NOTE_PROMPT_CHARS;
+}
+
+function assertPromptFits(messages: LlmChatMessage[], mode: NotesAgentMode): void {
+  if (promptFits(messages)) return;
+  const operation = mode === "merge" ? "통합" : mode === "inline_edit" ? "선택 영역 편집" : mode === "search" ? "검색" : "편집";
+  throw new Error(`노트 ${operation} 요청이 AI 입력 한도(${MAX_NOTE_PROMPT_CHARS.toLocaleString("ko-KR")}자, 요청 정보 포함)를 초과했습니다. 내용을 잘라 보내지 않았습니다. 노트 수나 편집 범위를 줄이거나 먼저 요약해 주세요.`);
+}
+
+/** 모든 원문을 보내되 JSON 이스케이프와 제목/요청문까지 포함해 요청 크기를 확인한다. */
+function splitSummaryTargets(input: RunNotesAgentInput): TargetNote[][] {
+  const chunks: TargetNote[][] = [];
+  let current: TargetNote[] = [];
+  const fits = (targets: TargetNote[]) => promptFits(buildPromptMessages({ ...input, targetNotes: targets }, []));
+  if (!fits([])) {
+    throw new Error("요약 요청문이 AI 입력 한도를 초과했습니다. 요청문을 줄여 주세요.");
+  }
+  for (const note of input.targetNotes ?? []) {
+    if (fits([...current, note])) {
+      current.push(note);
+      continue;
+    }
+    if (current.length > 0) {
+      chunks.push(current);
+      current = [];
+    }
+    let offset = 0;
+    do {
+      let low = 0;
+      let high = Math.min(SUMMARY_CHUNK_CHARS, note.content.length - offset);
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (fits([{ ...note, content: note.content.slice(offset, offset + middle) }])) low = middle;
+        else high = middle - 1;
+      }
+      let length = low;
+      // UTF-16 서로게이트 쌍을 나누어 다음 요청에서 문자가 깨지지 않게 한다.
+      const lastCode = note.content.charCodeAt(offset + length - 1);
+      if (offset + length < note.content.length && lastCode >= 0xd800 && lastCode <= 0xdbff) length -= 1;
+      if (length === 0 && offset < note.content.length) {
+        throw new Error("노트 제목 또는 요약 요청문이 너무 길어 원문을 전달할 수 없습니다. 제목과 요청문을 줄여 주세요.");
+      }
+      const part = { ...note, content: note.content.slice(offset, offset + length) };
+      if (!fits([part])) throw new Error("노트 제목이 AI 입력 한도를 초과했습니다. 제목을 줄여 주세요.");
+      chunks.push([part]);
+      offset += length;
+    } while (offset < note.content.length);
+    if (chunks.length > MAX_SUMMARY_CHUNKS) {
+      throw new Error(`요약 대상이 너무 많아 ${MAX_SUMMARY_CHUNKS}개 분할 요청 한도를 초과했습니다. 노트 수를 줄여 다시 요청해 주세요. 원문을 잘라 보내지 않았습니다.`);
+    }
+  }
+  if (current.length > 0) chunks.push(current);
+  if (chunks.length > MAX_SUMMARY_CHUNKS) {
+    throw new Error(`요약 대상이 너무 많아 ${MAX_SUMMARY_CHUNKS}개 분할 요청 한도를 초과했습니다. 노트 수를 줄여 다시 요청해 주세요. 원문을 잘라 보내지 않았습니다.`);
+  }
+  return chunks;
+}
+
+async function summarizeLongTargets(input: RunNotesAgentInput, reductionRound = 0): Promise<NotesAgentResult> {
+  if (reductionRound >= MAX_SUMMARY_REDUCTION_ROUNDS) {
+    throw new Error("분할 요약 결과가 AI 입력 한도보다 큽니다. 노트 수를 줄여 다시 요약해 주세요. 불완전한 요약은 저장하지 않았습니다.");
+  }
+  const partRequest = `${input.userMessage}\n\n원문 전체 중 제공된 구간을 요약하세요. 원본 제목과 주요 사실, 날짜, 숫자, 결정, 체크리스트를 보존하세요. 다른 구간을 보지 못했음을 고려하여 전체 결론을 단정하지 마세요.`;
+  const partInput = { ...input, userMessage: partRequest };
+  const chunks = splitSummaryTargets(partInput);
+  const summaries: TargetNote[] = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    input.signal?.throwIfAborted();
+    const label = `원문 ${index + 1}/${chunks.length}구간 요약 중`;
+    input.onProgress?.({ phase: "writing", label, chars: 0 });
+    const result = await runNotesAgentRequest({
+      ...partInput,
+      targetNotes: chunks[index],
+      onProgress: input.onProgress ? (progress) => input.onProgress?.({ ...progress, label }) : undefined,
+    });
+    if (!result.proposedContent?.trim()) {
+      throw new Error(`${index + 1}번째 구간의 요약을 완성하지 못했습니다. 전체 요약을 저장하지 않았습니다. 다시 요청해 주세요.`);
+    }
+    summaries.push({ id: `summary-${index + 1}`, title: `원문 ${index + 1}구간 요약`, content: result.proposedContent });
+  }
+  input.signal?.throwIfAborted();
+  input.onProgress?.({ phase: "writing", label: "전체 구간 요약 통합 중", chars: 0 });
+  const finalInput = {
+    ...input,
+    userMessage: `${input.userMessage}\n\n제공된 부분 요약은 원문 전체 구간을 순서대로 처리한 결과입니다. 모든 구간을 반영하여 하나로 통합하세요.`,
+    targetNotes: summaries,
+  };
+  const result = promptFits(buildPromptMessages(finalInput, []))
+    ? await runNotesAgentRequest(finalInput)
+    : await summarizeLongTargets(finalInput, reductionRound + 1);
+  if (!result.proposedContent?.trim()) throw new Error("전체 구간 요약을 통합하지 못했습니다. 다시 요청해 주세요.");
+  return { ...result, trace: `원문 ${chunks.length}구간 전체 요약 후 통합${result.trace ? ` · ${result.trace}` : ""}` };
+}
+
 function buildResult(mode: NotesAgentMode, payload: Record<string, unknown>): NotesAgentResult {
   const assistantMessage =
     typeof payload.assistantMessage === "string" && payload.assistantMessage.trim()
@@ -289,7 +391,9 @@ function buildResult(mode: NotesAgentMode, payload: Record<string, unknown>): No
 
   const proposedTitle = pickFirstString(payload, ["proposedTitle", "title"]) || undefined;
   const proposedContent = pickFirstString(payload, ["proposedContent", "content"]) || undefined;
-  const replacementText = pickFirstString(payload, ["replacementText", "replacement"]) || undefined;
+  // 빈 문자열은 선택 영역 삭제이며 앞뒤 공백도 유효한 편집 결과다.
+  const replacementText = [payload.replacementText, payload.replacement]
+    .find((value): value is string => typeof value === "string");
   const matchedNoteIds = pickFirstStringArray(payload, ["matchedNoteIds", "noteIds", "ids"], 20);
 
   const result: NotesAgentResult = { assistantMessage };
@@ -305,12 +409,22 @@ function buildResult(mode: NotesAgentMode, payload: Record<string, unknown>): No
 }
 
 export async function runNotesAgent(input: RunNotesAgentInput): Promise<NotesAgentResult> {
+  const initialMessages = buildPromptMessages(input, []);
+  if (input.mode === "summarize" && !promptFits(initialMessages)) {
+    return summarizeLongTargets(input);
+  }
+  assertPromptFits(initialMessages, input.mode);
+  return runNotesAgentRequest(input);
+}
+
+async function runNotesAgentRequest(input: RunNotesAgentInput): Promise<NotesAgentResult> {
   const accumulatedToolResults: ToolExecutionResult[] = [];
   const toolCounts = new Map<string, number>();
   const callCache = new ToolCallCache();
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     const messages = buildPromptMessages(input, capToolResults(accumulatedToolResults));
+    assertPromptFits(messages, input.mode);
     let streamedChars = 0;
     const writingLabel = toolCounts.size > 0 ? "조회 결과로 작성 중" : "AI가 작성 중";
     const { payload, raw } = await requestJsonWithRetry({
@@ -425,7 +539,7 @@ Rules:
             description: project.description ?? "",
           })),
           availableSubcategories: input.subcategories
-            .filter((subcategory) => subcategory.projectId === fallbackProjectId)
+            .filter((subcategory) => projectIds.has(subcategory.projectId))
             .map((subcategory) => ({
             id: subcategory.id,
             projectId: subcategory.projectId,

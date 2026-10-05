@@ -14,6 +14,8 @@ const result = await build({
     "tests/llmClient.compat.test.ts",
     "tests/markdownEditing.test.ts",
     "tests/noteMarkdownExport.test.ts",
+    "tests/noteChecklist.test.ts",
+    "tests/notesAgent.test.ts",
     "tests/featureGaps.test.ts",
     "tests/scheduleReminders.test.ts",
     "tests/routines.test.ts",
@@ -37,7 +39,7 @@ const result = await build({
   },
 });
 
-if (result.outputFiles.length !== 15) throw new Error("테스트 번들을 생성하지 못했습니다.");
+if (result.outputFiles.length !== 17) throw new Error("테스트 번들을 생성하지 못했습니다.");
 for (const output of result.outputFiles) {
   await import(`data:text/javascript;base64,${Buffer.from(output.contents).toString("base64")}`);
 }

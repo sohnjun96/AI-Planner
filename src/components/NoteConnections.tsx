@@ -23,6 +23,7 @@ interface NoteConnectionsProps {
   onLink: (taskId: string) => void;
   onUnlink: (taskId: string) => void;
   isBusy?: boolean;
+  onOpenLinkPicker?: () => void;
 }
 
 export function NoteConnections({
@@ -35,11 +36,13 @@ export function NoteConnections({
   onLink,
   onUnlink,
   isBusy,
+  onOpenLinkPicker,
 }: NoteConnectionsProps) {
   return (
     <section className="note-connections" aria-label="노트 관련 정보">
       <div className="note-connection-group">
         <span className="note-connection-label">관련 일정</span>
+        {onOpenLinkPicker ? <button type="button" className="btn btn-soft btn-compact" disabled={isBusy} onClick={onOpenLinkPicker}>일정 찾아 연결</button> : null}
         <div className="note-connection-chips">
           {linkedTasks.length > 0
             ? linkedTasks.map((task) => (

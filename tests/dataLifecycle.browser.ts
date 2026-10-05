@@ -2,7 +2,7 @@ import Dexie from "dexie";
 import { db, ScheduleDB } from "../src/db";
 import { deleteTasksWithLinks, restoreDeletedTasks, deleteEmptyProject } from "../src/utils/taskLifecycle";
 import { backupDb, readStoredAutoBackups, storeAutoBackup } from "../src/utils/autoBackupStore";
-import type { Note, Project, RoutineOccurrence, Task, TaskType } from "../src/models";
+import type { Note, NoteFormInput, NoteTaskLink, NoteVersion, Project, RoutineOccurrence, Task, TaskType } from "../src/models";
 import { createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { AppDataProvider, useAppData } from "../src/context/AppDataContext";
@@ -17,6 +17,108 @@ async function rejects(fn: () => Promise<unknown>, message: string) {
   let rejected = false;
   try { await fn(); } catch { rejected = true; }
   check(rejected, message);
+}
+
+function noteForm(note: Note): NoteFormInput {
+  return { title: note.title, content: note.content, projectId: note.projectId, subcategoryId: note.subcategoryId,
+    tags: note.tags, status: note.status, isPinned: note.isPinned, sourceNoteIds: note.sourceNoteIds };
+}
+
+async function verifyNoteDataApi(api: ReturnType<typeof useAppData>, noteId: string, projectId: string, taskTypeId: string, now: string) {
+  const original = (await db.notes.get(noteId))!;
+  const originalVersion = (await db.noteVersions.where("noteId").equals(noteId).toArray())[0];
+  const firstRevision = await api.updateNote(noteId, { ...noteForm(original), content: "첫 탭 수정" }, "manual", undefined, original.updatedAt);
+  check(firstRevision && firstRevision !== original.updatedAt, "노트 저장 결과 revision 반환");
+  const historyCount = await db.noteVersions.count();
+  await rejects(() => api.updateNote(noteId, { ...noteForm(original), content: "오래된 탭 수정" }, "manual", undefined, original.updatedAt), "초안 기준 stale 저장 거부");
+  check((await db.notes.get(noteId))?.content === "첫 탭 수정" && await db.noteVersions.count() === historyCount, "충돌 시 본문과 이력 보존");
+  const parallel = await Promise.allSettled(["동시 A", "동시 B"].map((content) => api.updateNote(noteId, { ...noteForm(original), content }, "manual", undefined, firstRevision)));
+  check(parallel.filter((result) => result.status === "fulfilled").length === 1, "동일 revision의 동시 저장은 하나만 성공");
+  const current = (await db.notes.get(noteId))!;
+  check(await api.updateNote(noteId, noteForm(current), "manual", undefined, current.updatedAt) === current.updatedAt, "변경 없는 저장은 현재 revision 반환");
+  await rejects(() => api.restoreNoteVersion(noteId, originalVersion.id, original.updatedAt), "stale 버전 복원 거부");
+  const restoredRevision = await api.restoreNoteVersion(noteId, originalVersion.id, current.updatedAt);
+  check(restoredRevision && restoredRevision !== current.updatedAt && (await db.notes.get(noteId))?.content === original.content, "검증된 복원과 새 revision 반환");
+
+  // At the exact per-note cap, restoring the oldest version must still work.
+  await db.noteVersions.where("noteId").equals(noteId).delete();
+  const checkpoints: NoteVersion[] = Array.from({ length: 100 }, (_, index) => ({ id: `checkpoint-${index}`, noteId,
+    title: `버전 ${index}`, content: `이력 ${index}`, editType: "manual", createdAt: new Date(new Date(now).getTime() - 200000 + index).toISOString() }));
+  await db.noteVersions.bulkAdd(checkpoints);
+  const beforeRestore = (await db.notes.get(noteId))!;
+  await db.projectSubcategories.add({ id: "pending-restore-sub", projectId, name: "미저장 분류", order: 0, createdAt: now, updatedAt: now });
+  const pendingDraft: NoteFormInput = { ...noteForm(beforeRestore), title: "미저장 제목", content: "복원 전 미저장 본문",
+    subcategoryId: "pending-restore-sub", tags: ["미저장 태그"], status: "draft", isPinned: true };
+  await api.restoreNoteVersion(noteId, checkpoints[0].id, beforeRestore.updatedAt, pendingDraft);
+  const oldestRestored = (await db.notes.get(noteId))!;
+  check(oldestRestored.content === "이력 0" && oldestRestored.title === "버전 0" && await db.noteVersions.where("noteId").equals(noteId).count() === 100, "한도에서 dirty 초안을 보존하며 가장 오래된 버전 복원");
+  check((await db.noteVersions.where("noteId").equals(noteId).toArray()).some((version) => version.editType === "manual" && version.title === pendingDraft.title && version.content === pendingDraft.content), "복원 전 미저장 초안은 수동 이력으로 보존");
+  check(oldestRestored.subcategoryId === pendingDraft.subcategoryId && oldestRestored.tags[0] === "미저장 태그" && oldestRestored.status === "draft" && oldestRestored.isPinned, "복원은 미저장 초안 메타데이터 반영");
+  const beforeFailedRestore = await db.noteVersions.where("noteId").equals(noteId).sortBy("createdAt");
+  const failRestoreCheckpoint = (_key: unknown, version: NoteVersion) => { if (version.noteId === noteId && version.editType === "restore") throw new Error("복원 이력 저장 실패 주입"); };
+  db.noteVersions.hook("creating", failRestoreCheckpoint);
+  try {
+    await rejects(() => api.restoreNoteVersion(noteId, beforeFailedRestore[0].id, oldestRestored.updatedAt, { ...pendingDraft, content: "실패해도 보존할 초안" }), "미저장 초안 동반 복원 실패 전파");
+  } finally { db.noteVersions.hook("creating").unsubscribe(failRestoreCheckpoint); }
+  check(JSON.stringify(await db.notes.get(noteId)) === JSON.stringify(oldestRestored), "복원 실패 시 본문과 메타데이터 롤백");
+  check(JSON.stringify(await db.noteVersions.where("noteId").equals(noteId).sortBy("createdAt")) === JSON.stringify(beforeFailedRestore), "복원 실패 시 prune 및 미저장 초안 checkpoint 모두 롤백");
+
+  // The global cap should rotate this note's oldest checkpoint atomically.
+  const otherId = await api.createNote({ ...noteForm(original), title: "다른 노트" });
+  await db.noteVersions.clear();
+  await db.noteVersions.bulkAdd(Array.from({ length: 20000 }, (_, index): NoteVersion => ({
+    id: `global-checkpoint-${index}`, noteId: index === 0 ? noteId : otherId, title: "한도", content: "본문", editType: "manual", createdAt: now,
+  })));
+  const capped = (await db.notes.get(noteId))!;
+  await api.updateNote(noteId, { ...noteForm(capped), content: "전역 한도에서도 저장" }, "manual", undefined, capped.updatedAt);
+  check(await db.noteVersions.count() === 20000 && (await db.notes.get(noteId))?.content === "전역 한도에서도 저장", "전역 버전 한도에서 기존 노트 저장 가능");
+  await api.removeNote(otherId);
+
+  const addedIds: string[] = [];
+  for (const title of ["A", "B", "C"]) addedIds.push(await api.createNote({ ...noteForm(original), title }));
+  await db.notes.update(noteId, { sortOrder: 0 });
+  for (let index = 0; index < addedIds.length; index++) await db.notes.update(addedIds[index], { sortOrder: index + 1 });
+  const beforeOrderRevision = (await db.notes.get(addedIds[1]))!.updatedAt;
+  await api.reorderNotes([addedIds[2], addedIds[0]]);
+  check((await db.notes.toArray()).sort((a, b) => (a.sortOrder ?? -1) - (b.sortOrder ?? -1)).map((note) => note.id).join() === [noteId, addedIds[2], addedIds[1], addedIds[0]].join(), "부분 목록 정렬에서 다른 노트의 전역 위치 보존");
+  check((await db.notes.get(addedIds[1]))?.updatedAt === beforeOrderRevision, "정렬은 수정 시각 보존");
+  await db.notes.update(addedIds[0], { isPinned: true });
+  await rejects(() => api.reorderNotes([addedIds[2], addedIds[0]]), "고정 그룹 경계를 넘는 정렬 거부");
+  await db.notes.update(addedIds[0], { isPinned: false });
+
+  const sourceA = (await db.notes.get(addedIds[0]))!;
+  const sourceB = (await db.notes.get(addedIds[1]))!;
+  const sourceRevisions = { [sourceA.id]: sourceA.updatedAt, [sourceB.id]: sourceB.updatedAt };
+  await api.updateNote(sourceA.id, { ...noteForm(sourceA), content: "AI 요청 이후 바뀐 원본" }, "manual", undefined, sourceA.updatedAt);
+  const noteCount = await db.notes.count();
+  await rejects(() => api.createMergedNote({ ...noteForm(original), title: "통합", content: "오래된 AI 결과" }, [sourceA.id, sourceB.id], "ai_full", "통합", sourceRevisions), "stale AI 결과의 통합 생성 거부");
+  check(await db.notes.count() === noteCount && (await db.notes.get(sourceA.id))?.status === "active" && (await db.notes.get(sourceB.id))?.status === "active", "통합 충돌 시 생성과 원본 보관 모두 중단");
+
+  const taskInput = { title: "액션", content: "", projectId, taskTypeId, status: "NOT_DONE" as const, startAt: now, isMajor: false };
+  const tasksBefore = await db.tasks.count();
+  const linksBefore = await db.noteTaskLinks.count();
+  let linkAttempt = 0;
+  const failSecondLink = (_key: unknown, link: NoteTaskLink) => { if (link.noteId === noteId && ++linkAttempt === 2) throw new Error("두 번째 연결 실패 주입"); };
+  db.noteTaskLinks.hook("creating", failSecondLink);
+  try { await rejects(() => api.createTasksForNote(noteId, [taskInput, { ...taskInput, title: "액션 2" }]), "일괄 일정 연결 실패 전파"); }
+  finally { db.noteTaskLinks.hook("creating").unsubscribe(failSecondLink); }
+  check(await db.tasks.count() === tasksBefore && await db.noteTaskLinks.count() === linksBefore && (await db.notes.get(noteId))?.linkedTaskIds.length === 0, "일괄 생성 실패 시 일정·연결·노트 모두 롤백");
+  const ids = await api.createTasksForNote(noteId, [taskInput, { ...taskInput, title: "액션 2" }]);
+  check(ids.length === 2 && (await db.notes.get(noteId))?.linkedTaskIds.length === 2, "액션 2개 원자적 생성 및 연결");
+  check((await db.tasks.bulkGet(ids)).every((task) => task?.linkedNoteIds?.includes(noteId)), "생성 일정의 역방향 노트 연결");
+  await api.undoLastChange();
+  check(await db.tasks.count() === tasksBefore && (await db.notes.get(noteId))?.linkedTaskIds.length === 0, "일괄 생성 한 번의 실행 취소");
+  await db.notes.update(noteId, { linkedTaskIds: Array.from({ length: 200 }, (_, index) => `limit-${index}`) });
+  await rejects(() => api.createTasksForNote(noteId, [taskInput]), "200개 연결 한도에서 생성 거부");
+  check(await db.tasks.count() === tasksBefore, "연결 한도 실패 시 일정도 생성하지 않음");
+  await db.notes.update(noteId, { linkedTaskIds: [] });
+
+  // Historical inconsistent reverse references must be removed on deletion.
+  const orphanTask = await api.createTask(taskInput);
+  await db.tasks.update(orphanTask, { linkedNoteIds: [addedIds[0]] });
+  await api.removeNote(addedIds[0]);
+  check((await db.tasks.get(orphanTask))?.linkedNoteIds?.length === 0, "노트 삭제가 오래된 한쪽 참조도 정리");
+  await api.removeTask(orphanTask);
 }
 
 async function verifyRoutineDatabaseMigration(now: string) {
@@ -170,6 +272,8 @@ export async function runTests() {
   check((await db.notes.get(noteId))?.linkedTaskIds.length === 0, "생성 실행 취소 연결 정리");
   const exported = await api.exportData();
   check(api.inspectImportData(exported).notes === 1, "실행 취소 후 백업 참조 무결성");
+  await verifyNoteDataApi(api, noteId, projectId, taskTypeId, now);
+  await api.importData(exported);
   const today = getDateKey(new Date());
   await saveRoutine({ title: "영수증 취합", content: "루틴 테스트", projectId, taskTypeId,
     intervalMonths: 1, startMonth: today.slice(0, 7), dayOfMonth: Number(today.slice(-2)), time: "09:00", leadDays: 0,
