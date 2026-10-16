@@ -43,7 +43,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const reminders = useScheduleReminders(openAiScheduleSession);
   const isReminderOpen = reminders.isOpen && !hasOtherDialog && !isAiAddOpen && !isHelpOpen && !isAskOpen;
   const aiFabRef = useRef<HTMLButtonElement>(null);
+  const topNavRef = useRef<HTMLElement>(null);
   const openedFromAiFab = useRef(false);
+
+  // 고정 도구 모음이 줄바꿈·화면 확대 후에도 상단 메뉴 아래에 머물도록 한다.
+  useEffect(() => {
+    const topNav = topNavRef.current;
+    const shell = topNav?.parentElement;
+    if (!topNav || !shell) return;
+    const updateHeight = () => shell.style.setProperty("--app-top-nav-height", `${topNav.getBoundingClientRect().height}px`);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(topNav);
+    return () => observer.disconnect();
+  }, []);
   const aiDialogRef = useDialogFocus<HTMLElement>({
     isOpen: isAiAddOpen,
     onClose: closeAiScheduleSession,
@@ -190,7 +203,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         본문으로 건너뛰기
       </a>
 
-      <header className="app-top-nav">
+      <header className="app-top-nav" ref={topNavRef}>
         <NavLink className="top-nav-brand" to="/dashboard" aria-label="플래나이 대시보드로 이동">
           <img className="brand-mark" src={planaiLogo} alt="PLANAI 로고" />
           <div>

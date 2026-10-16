@@ -8615,7 +8615,8 @@ textarea:focus-visible,
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   background: var(--canvas);
-  overflow: hidden;
+  /* clip은 테두리를 유지하면서 sticky의 스크롤 기준을 가로채지 않는다. */
+  overflow: clip;
 }
 
 .note-editor-overlay-panel {
@@ -8644,7 +8645,7 @@ textarea:focus-visible,
 
 .note-mdx-editor .mdxeditor-toolbar {
   position: sticky;
-  top: 0;
+  top: var(--app-top-nav-height, 64px);
   z-index: 4;
   min-height: 48px;
   flex-wrap: wrap;
