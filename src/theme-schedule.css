@@ -1,0 +1,215 @@
+/* Keep saved project/type colors intact; adapt only their rendered surfaces. */
+.task-item :is(.project-tag, .type-tag),
+.archive-tag-row :is(.project-tag, .type-tag) {
+  background-color: var(--task-tag-background);
+  color: var(--task-tag-color);
+}
+
+.compact-project {
+  color: var(--compact-project-color);
+}
+
+html[data-theme="dark"] .task-item :is(.project-tag, .type-tag),
+html[data-theme="dark"] .archive-tag-row :is(.project-tag, .type-tag) {
+  background-color: color-mix(in srgb, var(--task-tag-color) 22%, var(--canvas));
+  color: color-mix(in srgb, var(--task-tag-color) 32%, #fff);
+}
+
+html[data-theme="dark"] .compact-project {
+  color: color-mix(in srgb, var(--compact-project-color) 32%, #fff);
+}
+
+html[data-theme="dark"] .dashboard-summary-period-icon {
+  color: color-mix(in srgb, var(--summary-project-color, var(--body-muted)) 40%, #fff);
+}
+
+html[data-theme="dark"] .notes-stack-chip.project {
+  border-color: color-mix(in srgb, var(--note-project-color) 50%, var(--hairline));
+  color: color-mix(in srgb, var(--note-project-color) 40%, #fff);
+}
+
+html[data-theme="dark"] .calendar-day.has-marker-leave {
+  background: linear-gradient(180deg, var(--marker-leave-bg), var(--canvas) 90%);
+}
+
+html[data-theme="dark"] .calendar-day.has-marker-trip {
+  background: linear-gradient(180deg, var(--marker-trip-bg), var(--canvas) 90%);
+}
+
+html[data-theme="dark"] .calendar-day.has-marker-leave.has-marker-trip {
+  background: linear-gradient(135deg, var(--marker-leave-bg) 0 50%, var(--marker-trip-bg) 50% 100%);
+}
+
+html[data-theme="dark"] .calendar-day.has-holiday:not(.has-marker-leave):not(.has-marker-trip) {
+  background: linear-gradient(180deg, var(--status-conflict-bg), var(--canvas) 90%);
+}
+
+html[data-theme="dark"] .calendar-day.has-holiday:not(.has-marker-leave):not(.has-marker-trip):not(.selected):not(.today) {
+  border-color: var(--status-conflict-border);
+}
+
+html[data-theme="dark"] :is(
+  .calendar-day.has-holiday .calendar-day-number,
+  .week-day-row.has-holiday .week-day-num,
+  .week-day-row.has-holiday .week-day-dow
+) {
+  color: var(--status-conflict-text);
+}
+
+html[data-theme="dark"] :is(.calendar-holiday-mark, .calendar-holiday-label),
+html[data-theme="dark"] .task-date-group header .calendar-holiday-label,
+html[data-theme="dark"] .calendar-day-detail-popover header .calendar-holiday-label {
+  border-color: var(--status-conflict-border);
+  background: var(--status-conflict-bg);
+  color: var(--status-conflict-text);
+}
+
+html[data-theme="dark"] .calendar-day-popover {
+  border-color: var(--hairline-strong);
+  background: var(--canvas);
+  box-shadow: var(--product-shadow);
+}
+
+html[data-theme="dark"] .calendar-day-detail-item.project-tinted:is(.not_done, .done) {
+  background: color-mix(in srgb, var(--calendar-detail-project-color) 12%, var(--canvas));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--calendar-detail-project-color) 45%, #fff);
+}
+
+html[data-theme="dark"] .calendar-day-detail-item.project-tinted.conflict {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--calendar-detail-project-color) 45%, #fff),
+    inset 0 0 0 1px var(--status-conflict-border);
+}
+
+/* Status remains visible through its label and decoration, without fading all
+   of the still-operable content (including its time and project labels). */
+html[data-theme] .compact-task-card.canceled,
+html[data-theme] .project-detail-panel .task-item.clickable.canceled,
+html[data-theme] .calendar-day.muted,
+html[data-theme] .calendar-day.muted:not(.selected):hover {
+  opacity: 1;
+}
+
+html[data-theme] .dashboard-selected-day-card .compact-task-card:not(.not_done),
+html[data-theme] .dashboard-selected-day-card .compact-task-card:not(.not_done):hover {
+  filter: none;
+  opacity: 1;
+  border-left-color: var(--task-project-color, var(--body-muted));
+}
+
+html[data-theme="dark"] .calendar-day.muted {
+  background: var(--canvas-parchment);
+  color: var(--body-muted);
+}
+
+html[data-theme="dark"] .calendar-day.muted .calendar-event-line {
+  color: var(--body-muted);
+}
+
+/* A black or navy project stripe also needs a visible edge in dark mode. The
+   saved project color and the color picker continue to use the original hue. */
+html[data-theme="dark"] :is(.task-item, .compact-task-card),
+html[data-theme="dark"] .project-detail-panel .task-item.clickable,
+html[data-theme="dark"] .dashboard-selected-day-card .compact-task-card:not(.not_done),
+html[data-theme="dark"] .dashboard-selected-day-card .compact-task-card:not(.not_done):hover,
+html[data-theme="dark"] .task-item:is(.clickable, .draggable):hover,
+html[data-theme="dark"] .compact-task-card:hover {
+  border-left-color: color-mix(in srgb, var(--task-project-color, var(--body-muted)) 45%, #fff);
+}
+
+html[data-theme="dark"] .dashboard-summary-project-dot {
+  background: color-mix(in srgb, var(--summary-project-color, var(--body-muted)) 45%, #fff);
+}
+
+html[data-theme="dark"] .calendar-day-detail-item.done.project-tinted {
+  border-color: color-mix(in srgb, var(--calendar-detail-project-color) 45%, var(--hairline));
+}
+
+html[data-theme="dark"] .calendar-day-detail-item.done:not(.project-tinted) {
+  border-color: var(--status-done-border);
+  background: var(--status-done-surface);
+  color: var(--body-muted);
+  opacity: 1;
+}
+
+html[data-theme="dark"] .calendar-day-detail-item.canceled {
+  opacity: 1;
+}
+
+html[data-theme="dark"] .calendar-day-detail-item:is(.done:not(.project-tinted), .canceled)
+  :is(.calendar-day-detail-time, strong, small, .status-badge) {
+  color: var(--body-muted);
+}
+
+html[data-theme="dark"] .task-item.conflict {
+  border-color: var(--status-conflict-border);
+}
+
+@media (hover: hover) {
+  html[data-theme="dark"] .calendar-day.has-holiday:not(.selected):hover .calendar-day-number {
+    color: var(--status-conflict-text);
+  }
+}
+
+@media (max-width: 640px) {
+  html[data-theme="dark"] .calendar-day-count {
+    color: var(--theme-accent-ink);
+  }
+
+  html[data-theme="dark"] .calendar-day.today .calendar-day-number {
+    background: var(--primary);
+    color: var(--theme-accent-ink);
+  }
+
+  html[data-theme="dark"] .calendar-holiday-mark {
+    background: transparent;
+  }
+
+  html[data-theme="dark"] .calendar-day.has-holiday.today .calendar-day-number {
+    background: var(--status-conflict-text);
+    color: var(--canvas);
+  }
+}
+
+/* Light mode also needs a readable foreground for white/yellow user colors.
+   Tint the text towards ink while preserving the saved hue in the background. */
+html[data-theme="light"] {
+  --status-done-text: #475569;
+  --status-canceled-text: #4b5563;
+}
+
+html[data-theme="light"] .task-item :is(.project-tag, .type-tag),
+html[data-theme="light"] .archive-tag-row :is(.project-tag, .type-tag) {
+  color: color-mix(in srgb, var(--task-tag-color) 32%, #0f172a);
+}
+
+html[data-theme="light"] .compact-project {
+  color: color-mix(in srgb, var(--compact-project-color) 32%, #0f172a);
+}
+
+html[data-theme="light"] .calendar-day.muted {
+  background: var(--surface-pearl);
+  color: var(--body-muted);
+}
+
+html[data-theme="light"] .calendar-day.muted .calendar-event-line {
+  color: var(--body-muted);
+}
+
+html[data-theme="light"] .calendar-day-detail-item:is(.done:not(.project-tinted), .canceled) {
+  opacity: 1;
+  color: var(--status-done-text);
+}
+
+html[data-theme="light"] .calendar-day-detail-item:is(.done:not(.project-tinted), .canceled)
+  :is(.calendar-day-detail-time, strong, small, .status-badge) {
+  color: var(--status-done-text);
+}
+
+html[data-theme="light"] .calendar-day-detail-item.project-tinted
+  :is(.calendar-day-detail-time, small) {
+  color: #475569;
+}
+
+html[data-theme="light"] .archive-task-card .badge-pill.warning {
+  color: #854510;
+}

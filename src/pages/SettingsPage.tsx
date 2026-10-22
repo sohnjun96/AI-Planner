@@ -3,6 +3,7 @@ import { ColorSelector } from "../components/ColorSelector";
 import { HelpModal } from "../components/HelpModal";
 import { ModalBackdrop } from "../components/ModalBackdrop";
 import { SettingsCategoryIcon } from "../components/SettingsCategoryIcon";
+import { ThemeModeSelector } from "../components/ThemeModeSelector";
 import { useSearchParams } from "../routing";
 import {
   BUILD_PROFILE_LABEL,
@@ -170,7 +171,7 @@ function serializeTaskTypeInput(input: TaskTypeInputPayload): string {
 type SettingsSection = "environment" | "schedule" | "notes" | "ai" | "data" | "stats";
 
 const SETTINGS_TABS: Array<{ id: SettingsSection; label: string; description: string }> = [
-  { id: "environment", label: "환경", description: "달력과 시간 표시" },
+  { id: "environment", label: "환경", description: "화면 모드·달력과 시간" },
   { id: "schedule", label: "일정", description: "표시·창 호출·종류·규칙" },
   { id: "notes", label: "노트", description: "연결 추천과 AI 편집" },
   { id: "ai", label: "AI 연결", description: "서버·모델·응답 옵션" },
@@ -1029,6 +1030,8 @@ export function SettingsPage() {
           </div>
           <div className="settings-section-host">
             {activeSection === "environment" ? (
+              <>
+              <ThemeModeSelector />
               <section className="settings-card">
                 <header className="settings-card-header"><h3>달력과 시간</h3></header>
                 <div className="settings-preference-list">
@@ -1036,6 +1039,7 @@ export function SettingsPage() {
                   <label className="settings-preference-row"><span>시간 표시 형식</span><select value={setting.timeFormat} onChange={(event) => void updateSetting({ timeFormat: event.target.value as "24h" | "12h" })}><option value="24h">24시간제</option><option value="12h">12시간제</option></select></label>
                 </div>
               </section>
+              </>
             ) : null}
 
             {activeSection === "schedule" ? (

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 
 // Real extension permissions and alarms; never touches the user's profile/data.
 const profile = await mkdtemp(path.join(os.tmpdir(), "planai-reminder-test-"));
@@ -70,6 +71,7 @@ try {
     viewport: { width: 1440, height: 1000 },
     args: ["--disable-extensions-except=" + extension, "--load-extension=" + extension],
   });
+  await skipFirstRunGuide(context);
   await context.route(/^https?:/, (route) => route.abort());
   context.on("page", (page) => page.on("pageerror", (error) => errors.push(error.message)));
   const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");

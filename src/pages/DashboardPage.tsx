@@ -476,7 +476,7 @@ function CompactTaskCard({
 
       <div className="compact-task-footer">
         <span className="compact-task-meta">
-          <span className="compact-project" style={{ color: project?.color ?? "#475569" }}>
+          <span className="compact-project" style={{ "--compact-project-color": project?.color ?? "#475569" } as CSSProperties}>
             {project?.name ?? "프로젝트 없음"}
           </span>
           <span className="compact-type">{taskType?.name ?? "종류 없음"}</span>

@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
@@ -26,6 +27,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   await mkdir(artifactDirectory, { recursive: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "Asia/Seoul", acceptDownloads: true });
+  await skipFirstRunGuide(context);
   await context.route(/^https?:/, async route => { report.blockedRemoteRequests += 1; await route.abort(); });
   const page = await context.newPage();
   await page.clock.setFixedTime(new Date(now));

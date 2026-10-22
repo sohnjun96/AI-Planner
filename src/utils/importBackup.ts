@@ -27,6 +27,7 @@ import type {
   UserContextRule,
 } from "../models";
 import { isValidMemoStorageKey } from "./memos";
+import { normalizeThemeMode } from "./theme";
 import { reconcileDefaultUserContextReferences } from "./defaultReferenceRepair";
 
 export const BACKUP_VERSION = 7;
@@ -251,6 +252,7 @@ function parseSetting(value: unknown): AppSetting {
     showPastCompleted: item.showPastCompleted === true,
     weekStartsOn: item.weekStartsOn === "mon" ? "mon" : "sun",
     timeFormat: item.timeFormat === "12h" ? "12h" : "24h",
+    themeMode: normalizeThemeMode(item.themeMode),
     llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
     rememberLlmApiKey: item.rememberLlmApiKey === true,
     llmModel: isValidLlmModelId(item.llmModel) ? item.llmModel.trim() : DEFAULT_SETTING.llmModel,

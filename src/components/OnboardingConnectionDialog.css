@@ -1,0 +1,136 @@
+.onboarding-connection-dialog {
+  width: min(560px, 100%);
+  background: var(--canvas);
+  box-shadow: var(--product-shadow);
+  color: var(--ink);
+}
+
+.onboarding-connection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.onboarding-connection-step {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.onboarding-connection-dialog h2 {
+  margin: 0 0 10px;
+  font-size: clamp(22px, 4.8vw, 28px);
+  letter-spacing: -0.04em;
+  line-height: 1.35;
+}
+
+.onboarding-connection-description {
+  margin: 0 0 24px;
+  color: var(--body-muted);
+  line-height: 1.7;
+}
+
+.onboarding-connection-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.onboarding-connection-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+}
+
+.onboarding-connection-remember {
+  margin-top: 14px;
+  font-size: 14px;
+}
+
+.onboarding-connection-help {
+  margin: 8px 0 0;
+  color: var(--body-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.onboarding-connection-model {
+  margin-top: 22px;
+  padding: 14px 0;
+  border-block: 1px solid var(--hairline);
+  font-size: 13px;
+}
+
+.onboarding-connection-model summary {
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.onboarding-connection-model-content {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.onboarding-connection-model-content > button {
+  justify-self: start;
+}
+
+.onboarding-connection-endpoint {
+  overflow-wrap: anywhere;
+}
+
+.onboarding-connection-status {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-connection-status.is-ok {
+  background: var(--tint-mint);
+  color: var(--success);
+}
+
+.onboarding-connection-status.is-error {
+  background: var(--status-conflict-bg);
+  color: var(--danger);
+}
+
+.onboarding-connection-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.onboarding-connection-actions .btn {
+  min-height: 44px;
+}
+
+@media (max-width: 480px) {
+  .onboarding-connection-dialog {
+    padding: 22px 18px;
+    max-height: calc(100dvh - 32px);
+  }
+
+  .onboarding-connection-description {
+    font-size: 14px;
+  }
+
+  .onboarding-connection-actions {
+    flex-wrap: wrap;
+  }
+
+  .onboarding-connection-actions > .btn-primary {
+    flex: 1;
+  }
+}

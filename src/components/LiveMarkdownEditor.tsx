@@ -33,11 +33,14 @@ import {
 } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
 import { useCellValue, usePublisher } from "@mdxeditor/gurx";
+import { syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
+import { classHighlighter, tagHighlighter, tags } from "@lezer/highlight";
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { normalizeLiveMarkdownWhitespace } from "../utils/markdownEditing";
 import { findMarkdownSelection, findMarkdownSourceSelection } from "../utils/markdownSelection";
 import { stableMarkdownShortcutsPlugin } from "./StableMarkdownShortcutsPlugin";
+import { useResolvedTheme } from "../hooks/useResolvedTheme";
 
 interface LiveMarkdownEditorProps {
   content: string;
@@ -50,6 +53,9 @@ interface LiveMarkdownEditorProps {
 }
 
 const MAX_NOTE_CHARACTERS = 500_000;
+// Stable token classes let the saved theme style source Markdown without
+// depending on CodeMirror's generated classes or runtime stylesheet order.
+const sourceQuoteHighlighter = tagHighlighter([{ tag: tags.quote, class: "tok-quote" }]);
 const CODE_BLOCK_EDITOR: CodeBlockEditorDescriptor = {
   priority: -10,
   match: () => true,
@@ -194,6 +200,7 @@ export function LiveMarkdownEditor({
   onViewModeChange,
 }: LiveMarkdownEditorProps) {
   const editorRef = useRef<MDXEditorMethods | null>(null);
+  const resolvedTheme = useResolvedTheme();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const onChangeRef = useRef(onChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
@@ -238,6 +245,8 @@ export function LiveMarkdownEditor({
       diffSourcePlugin({
         viewMode: initialMode === "edit" ? "source" : "rich-text",
         codeMirrorExtensions: [
+          syntaxHighlighting(classHighlighter),
+          syntaxHighlighting(sourceQuoteHighlighter),
           EditorView.updateListener.of(({ state, view, selectionSet, docChanged }) => {
             if (!view.hasFocus || (!selectionSet && !docChanged)) return;
             const selection = state.selection.main;
@@ -473,7 +482,7 @@ export function LiveMarkdownEditor({
       >
         <MDXEditor
           ref={editorRef}
-          className="note-mdx-editor"
+          className={`note-mdx-editor${resolvedTheme === "dark" ? " dark-theme" : ""}`}
           contentEditableClassName="note-mdx-content"
           markdown={editorMarkdownRef.current}
           placeholder={placeholder}

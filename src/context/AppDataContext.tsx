@@ -1,4 +1,5 @@
 import { trimTaskInput } from "../utils/taskInput";
+import { applyThemeMode, normalizeThemeMode } from "../utils/theme";
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -154,6 +155,7 @@ interface AppDataContextValue {
         | "showPastCompleted"
         | "weekStartsOn"
         | "timeFormat"
+        | "themeMode"
         | "llmEndpoint"
         | "llmApiKey"
         | "rememberLlmApiKey"
@@ -191,6 +193,7 @@ const LLM_CREDENTIAL_STORAGE_KEY = "planai_llm_credential_v1";
 const IMPORT_BATCH_SIZE = 500;
 const MAX_ALARM_SYNC_TASKS = 2_000;
 const EMPTY_TASKS: Task[] = [];
+const EMPTY_PROJECTS: Project[] = [];
 const AUTOSAVE_VERSION_COALESCE_MS = 5 * 60 * 1_000;
 const LIVE_QUERY_LIMITS = {
   tasks: 20_000,
@@ -362,6 +365,7 @@ function normalizeSetting(setting: AppSetting): AppSetting {
     showPastCompleted: Boolean(setting.showPastCompleted),
     weekStartsOn: setting.weekStartsOn === "mon" ? "mon" : "sun",
     timeFormat: setting.timeFormat === "12h" ? "12h" : "24h",
+    themeMode: normalizeThemeMode(setting.themeMode),
     notificationsEnabled: setting.notificationsEnabled ?? DEFAULT_SETTING.notificationsEnabled,
     notifyBeforeMinutes: setting.notifyBeforeMinutes ?? DEFAULT_NOTIFY_BEFORE_MINUTES,
     autoBackupEnabled: setting.autoBackupEnabled ?? DEFAULT_SETTING.autoBackupEnabled,
@@ -777,7 +781,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const queriedTasks = useLiveQuery(() => db.tasks.orderBy("startAt").limit(LIVE_QUERY_LIMITS.tasks).toArray());
   const tasks = queriedTasks ?? EMPTY_TASKS;
-  const projects = useLiveQuery(() => db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(), [], []);
+  const queriedProjects = useLiveQuery(() => db.projects.limit(LIVE_QUERY_LIMITS.projects).toArray(), [], undefined);
+  const projects = queriedProjects ?? EMPTY_PROJECTS;
   const taskTypes = useLiveQuery(() => db.taskTypes.orderBy("order").limit(LIVE_QUERY_LIMITS.taskTypes).toArray(), [], []);
   const memos = useLiveQuery(() => db.memos.orderBy("date").reverse().limit(LIVE_QUERY_LIMITS.memos).toArray(), [], []);
   const notes = useLiveQuery(() => db.notes.orderBy("updatedAt").reverse().limit(LIVE_QUERY_LIMITS.notes).toArray(), [], []);
@@ -831,6 +836,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     () => ({ ...normalizeSetting(rawSetting ?? DEFAULT_SETTING), llmApiKey }),
     [llmApiKey, rawSetting],
   );
+  useEffect(() => {
+    if (hasRawSetting) applyThemeMode(setting.themeMode);
+  }, [hasRawSetting, setting.themeMode]);
   const userContext = useMemo(() => normalizeUserContext(rawUserContext), [rawUserContext]);
   const lunchProjectMap = useMemo<Record<string, Project | undefined>>(
     () => Object.fromEntries(projects.map((project) => [project.id, project])),
@@ -1659,6 +1667,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           | "showPastCompleted"
           | "weekStartsOn"
           | "timeFormat"
+          | "themeMode"
           | "llmEndpoint"
           | "llmApiKey"
           | "rememberLlmApiKey"
@@ -2043,7 +2052,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(timerId);
   }, [tasks, queriedTasks, setting.notificationsEnabled, setting.notifyBeforeMinutes, reminderRevision]);
 
-  const isReady = Boolean(rawSetting) && isLlmCredentialReady && queriedTasks !== undefined;
+  const isReady = Boolean(rawSetting) && isLlmCredentialReady && queriedTasks !== undefined && queriedProjects !== undefined;
 
   const value = useMemo<AppDataContextValue>(
     () => ({

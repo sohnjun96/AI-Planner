@@ -31,7 +31,7 @@ interface AiAssistantWorkspaceProps {
   quickPrompts?: string[];
   className?: string;
   initialDraft?: string;
-  onApplied?: () => void;
+  onApplied?: (result: { createdTaskCount: number }) => void;
   onRequestClose?: () => void;
   onDraftPreserved?: (draft: string) => void;
   onOpenAiSettings?: () => void;
@@ -104,9 +104,8 @@ async function probeEndpoint(
     apiKey,
     model,
     generationOptions,
-    maxTokens: 2,
     signal,
-    messages: [{ role: "user", content: "ping" }],
+    messages: [{ role: "user", content: "Reply with OK only." }],
   });
 }
 
@@ -235,6 +234,7 @@ export function AiAssistantWorkspace({
 }: AiAssistantWorkspaceProps) {
   const { tasks, projects, taskTypes, setting, userContext, createTask, updateTask, removeTask, acceptUserContextSuggestion } = useAppData();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const createdTaskCountRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const draftRef = useRef(initialDraft);
   const onDraftPreservedRef = useRef(onDraftPreserved);
@@ -617,6 +617,7 @@ export function AiAssistantWorkspace({
 
       try {
         await applyOperation(operation);
+        if (operation.action === "create_task") createdTaskCountRef.current += 1;
         successLogs.push(formatOperationLabel(operation, taskTitle));
       } catch (applyError) {
         const message = applyError instanceof Error ? applyError.message : "반영 실패";
@@ -669,7 +670,7 @@ export function AiAssistantWorkspace({
       setError(`일부 변경을 반영하지 못했습니다. 실패한 ${failedLogs.length}건을 선택한 상태로 남겨두었습니다. 다시 시도해 주세요.\n${failedLogs.join("\n")}`);
       return;
     }
-    onApplied?.();
+    onApplied?.({ createdTaskCount: createdTaskCountRef.current });
   }
 
   async function handleAcceptContextSuggestion(suggestion: AgentContextSuggestion, index: number) {

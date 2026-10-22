@@ -135,7 +135,10 @@ export function TaskItem({
         <button
           type="button"
           className="tag project-tag project-tag-button"
-          style={{ backgroundColor: `${project?.color ?? "#334155"}22`, color: project?.color ?? "#334155" }}
+          style={{
+            "--task-tag-color": project?.color ?? "#334155",
+            "--task-tag-background": `${project?.color ?? "#334155"}22`,
+          } as CSSProperties}
           onClick={(event) => {
             event.stopPropagation();
             if (project?.id) {
@@ -149,7 +152,10 @@ export function TaskItem({
         </button>
         <span
           className="tag type-tag"
-          style={{ backgroundColor: `${taskType?.color ?? "#64748b"}22`, color: taskType?.color ?? "#64748b" }}
+          style={{
+            "--task-tag-color": taskType?.color ?? "#64748b",
+            "--task-tag-background": `${taskType?.color ?? "#64748b"}22`,
+          } as CSSProperties}
         >
           {taskType?.name ?? "종류 없음"}
         </span>

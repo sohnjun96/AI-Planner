@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useNavigate } from "../routing";
 import { analyzeLunchMateAliases, type LunchMateGroup } from "../agent/lunchMateAgent";
@@ -258,10 +258,22 @@ function ArchiveTaskCard({
           {task.endAt ? ` - ${formatDateTime(task.endAt, timeFormat)}` : ""}
         </span>
         <div className="archive-tag-row">
-          <span style={{ backgroundColor: `${project?.color ?? "#6b7280"}1f`, color: project?.color ?? "#4b5563" }}>
+          <span
+            className="project-tag"
+            style={{
+              "--task-tag-color": project?.color ?? "#4b5563",
+              "--task-tag-background": `${project?.color ?? "#6b7280"}1f`,
+            } as CSSProperties}
+          >
             {project?.name ?? "프로젝트 없음"}
           </span>
-          <span style={{ backgroundColor: `${taskType?.color ?? "#6b7280"}1f`, color: taskType?.color ?? "#4b5563" }}>
+          <span
+            className="type-tag"
+            style={{
+              "--task-tag-color": taskType?.color ?? "#4b5563",
+              "--task-tag-background": `${taskType?.color ?? "#6b7280"}1f`,
+            } as CSSProperties}
+          >
             {taskType?.name ?? "종류 없음"}
           </span>
           <span className="archive-completed-tag">

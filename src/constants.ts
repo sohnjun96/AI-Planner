@@ -368,6 +368,7 @@ export const DEFAULT_SETTING: AppSetting = {
   showPastCompleted: false,
   weekStartsOn: "sun",
   timeFormat: "24h",
+  themeMode: "system",
   llmEndpoint: DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   rememberLlmApiKey: false,
   llmModel: LLM_DEFAULT_MODEL,

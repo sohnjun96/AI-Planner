@@ -3,6 +3,7 @@ import { ModalBackdrop } from "./ModalBackdrop";
 
 interface HelpModalProps {
   onClose: () => void;
+  onStartGuide?: () => void;
 }
 
 interface ShortcutGroup {
@@ -48,7 +49,7 @@ const GROUPS: ShortcutGroup[] = [
   },
 ];
 
-export function HelpModal({ onClose }: HelpModalProps) {
+export function HelpModal({ onClose, onStartGuide }: HelpModalProps) {
   const dialogRef = useDialogFocus<HTMLElement>({ isOpen: true, onClose });
 
   return (
@@ -88,6 +89,11 @@ export function HelpModal({ onClose }: HelpModalProps) {
             </div>
           ))}
         </div>
+        {onStartGuide ? (
+          <div className="help-onboarding">
+            <button className="btn btn-primary" type="button" onClick={onStartGuide}>처음 사용 안내</button>
+          </div>
+        ) : null}
       </section>
     </ModalBackdrop>
   );

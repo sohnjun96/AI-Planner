@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,6 +10,7 @@ const outputDir = path.resolve("artifacts/routine-notifications");
 await mkdir(outputDir, { recursive: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "Asia/Seoul", reducedMotion: "reduce" });
+  await skipFirstRunGuide(context);
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));

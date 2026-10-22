@@ -196,4 +196,15 @@ const repairedWithCollision = parseAndSanitizeImportPayload(JSON.stringify(repai
 assert.equal(new Set(repairedWithCollision.noteTaskLinks.map((link) => link.id)).size, 2);
 assert.deepEqual(repairedWithCollision.notes[0].linkedTaskIds, ["task-a", "task-b"]);
 
+// The optional theme preference must survive backup import without requiring a
+// schema/version migration; legacy or unexpected values follow the system.
+for (const themeMode of ["system", "light", "dark", undefined, "invalid", { dark: true }]) {
+  const backup = JSON.parse(createBackup(GLOBAL_MEMO_KEY));
+  backup.settings = [{ id: "default", themeMode, updatedAt: exportedAt }];
+  const restored = parseAndSanitizeImportPayload(JSON.stringify(backup));
+  assert.equal(restored.settings[0].themeMode, themeMode === "light" || themeMode === "dark" ? themeMode : "system");
+  const roundTrip = parseAndSanitizeImportPayload(JSON.stringify(restored));
+  assert.equal(roundTrip.settings[0].themeMode, restored.settings[0].themeMode);
+}
+
 process.stdout.write("Import backup compatibility checks passed.\n");

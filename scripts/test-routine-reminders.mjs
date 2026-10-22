@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import path from "node:path";
 
 const extension = path.resolve("dist");
@@ -7,6 +8,7 @@ const context = await chromium.launchPersistentContext("", {
   channel: "chromium", headless: true,
   args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
 });
+await skipFirstRunGuide(context);
 try {
   const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
   const base = worker.url().replace(/\/background\.js$/, "/index.html");

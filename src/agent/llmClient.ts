@@ -1,4 +1,5 @@
 import {
+  BUILD_PROFILE_ID,
   clampLlmTemperature,
   DEFAULT_LLM_CHAT_COMPLETIONS_URL,
   DEFAULT_LLM_MODELS_URLS,
@@ -171,7 +172,7 @@ export function buildLlmChatRequestBody(params: BuildLlmChatRequestBodyParams): 
     messages: validateMessages(params.messages),
     stream: params.stream ?? false,
     temperature: clampLlmTemperature(params.generationOptions?.temperature),
-    max_tokens: maxTokens,
+    [BUILD_PROFILE_ID === "external" ? "max_completion_tokens" : "max_tokens"]: maxTokens,
   };
 
   const reasoningEffort = normalizeLlmReasoningEffort(params.generationOptions?.reasoningEffort);
@@ -184,6 +185,43 @@ export function buildLlmChatRequestBody(params: BuildLlmChatRequestBodyParams): 
     if (enableThinking) body.skip_special_tokens = false;
   }
   return body;
+}
+
+function getCompatibleRequestBody(
+  raw: string,
+  body: Record<string, unknown>,
+  tokenParameterSwitched: boolean,
+): Record<string, unknown> | undefined {
+  let payload: { error?: { type?: unknown; code?: unknown; param?: unknown } } | null;
+  try {
+    payload = JSON.parse(raw) as typeof payload;
+  } catch {
+    return undefined;
+  }
+  const error = payload?.error;
+  if (error?.type !== "invalid_request_error") return undefined;
+
+  // 서버가 명시적으로 거부한 항목만 조정하며 원본 오류 내용은 노출하지 않는다.
+  if (
+    error.param === "temperature" && body.temperature !== undefined &&
+    (error.code === "unsupported_parameter" || error.code === "unsupported_value")
+  ) {
+    const compatible = { ...body };
+    delete compatible.temperature;
+    return compatible;
+  }
+  if (
+    !tokenParameterSwitched && error.code === "unsupported_parameter" &&
+    (error.param === "max_tokens" || error.param === "max_completion_tokens") &&
+    typeof body[error.param] === "number"
+  ) {
+    const compatible = { ...body };
+    const replacement = error.param === "max_tokens" ? "max_completion_tokens" : "max_tokens";
+    compatible[replacement] = body[error.param];
+    delete compatible[error.param];
+    return compatible;
+  }
+  return undefined;
 }
 
 function readTextContent(content: unknown): string {
@@ -453,28 +491,39 @@ export async function requestLlmResponse(params: {
     };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const messages = validateMessages(params.messages);
-    const response = await fetch(validateLlmEndpoint(params.endpoint), {
-      method: "POST",
-      headers,
-      signal: abortScope.signal,
-      cache: "no-store",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
-      body: JSON.stringify(
-        buildLlmChatRequestBody({
-          model: params.model,
-          messages,
-          stream: useStream,
-          maxTokens: params.maxTokens,
-          generationOptions: params.generationOptions,
-        }),
-      ),
+    const endpoint = validateLlmEndpoint(params.endpoint);
+    let requestBody = buildLlmChatRequestBody({
+      model: params.model,
+      messages,
+      stream: useStream,
+      maxTokens: params.maxTokens,
+      generationOptions: params.generationOptions,
     });
-    abortScope.activity();
-    assertContentLength(response, response.ok ? LLM_MAX_RESPONSE_BYTES : LLM_MAX_ERROR_BYTES);
+    let tokenParameterSwitched = false;
+    let response: Response;
+    for (let attempt = 0; ; attempt += 1) {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        signal: abortScope.signal,
+        cache: "no-store",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        body: JSON.stringify(requestBody),
+      });
+      abortScope.activity();
+      assertContentLength(response, response.ok ? LLM_MAX_RESPONSE_BYTES : LLM_MAX_ERROR_BYTES);
+      if (response.ok) break;
 
-    if (!response.ok) {
-      await readBodyWithLimit(response.body, LLM_MAX_ERROR_BYTES, abortScope.activity).catch(() => "");
+      const raw = await readBodyWithLimit(response.body, LLM_MAX_ERROR_BYTES, abortScope.activity).catch(() => "");
+      const compatibleBody: Record<string, unknown> | undefined = response.status === 400 && attempt < 2 && !abortScope.signal.aborted
+        ? getCompatibleRequestBody(raw, requestBody, tokenParameterSwitched)
+        : undefined;
+      if (compatibleBody) {
+        tokenParameterSwitched ||= compatibleBody.max_tokens !== requestBody.max_tokens;
+        requestBody = compatibleBody;
+        continue;
+      }
       throw new Error(`LLM 호출에 실패했습니다. 상태 코드: ${response.status}`);
     }
 

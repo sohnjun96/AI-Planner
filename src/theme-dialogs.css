@@ -1,0 +1,10 @@
+/* Reminder section labels also need the dark palette; the upcoming section
+   retains its blue emphasis from theme.css. */
+html[data-theme="dark"] .reminder-review-group-title:not(.is-soon) {
+  color: var(--body-muted);
+}
+
+/* Unselected extraction rows remain editable and must keep readable labels. */
+html[data-theme="dark"] .note-action-modal .action-item {
+  opacity: 1;
+}

@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import { pathToFileURL } from "node:url";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -74,6 +75,7 @@ function fingerprint(values) {
 const browser = await chromium.launch({ headless: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "Asia/Seoul" });
+  await skipFirstRunGuide(context);
   const page = await context.newPage();
   await page.clock.setFixedTime(new Date(now));
   const errors = [];

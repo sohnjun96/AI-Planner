@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -33,6 +34,7 @@ try {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 }, timezoneId: "Asia/Seoul",
   });
+  await skipFirstRunGuide(context);
   const page = await context.newPage();
   const pageErrors = [];
   const attemptedNetwork = [];

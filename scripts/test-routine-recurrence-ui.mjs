@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import { pathToFileURL } from "node:url";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -8,6 +9,7 @@ const appUrl = process.argv[2] ?? pathToFileURL(path.resolve("dist-web/planai.ht
 const outputDirectory = "artifacts/routine-recurrence-ui";
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "Asia/Seoul" });
+  await skipFirstRunGuide(context);
   const page = await context.newPage();
   await page.clock.setFixedTime(new Date("2026-10-01T03:00:00Z"));
   await page.route(/^https?:/, (route) => appUrl.startsWith("http") && route.request().url().startsWith(new URL(appUrl).origin) ? route.continue() : route.abort());

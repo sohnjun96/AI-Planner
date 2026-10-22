@@ -1,4 +1,5 @@
 import { chromium, expect } from '@playwright/test';
+import { skipFirstRunGuide } from './ui-fixtures.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -21,6 +22,7 @@ const fixtureNotes = [
 ];
 async function createPage(viewport={width:1440,height:1000}, ai=false) {
   const context = await browser.newContext({viewport,timezoneId:'Asia/Seoul',acceptDownloads:true});
+  await skipFirstRunGuide(context);
   await context.route(/^https?:/,async route=>{
     const url = route.request().url();
     if(appOrigin !== 'null' && url.startsWith(`${appOrigin}/`)) return route.continue();
@@ -364,7 +366,8 @@ try {
         const rect=dialog.getBoundingClientRect();
         return {background:getComputedStyle(dialog).backgroundColor,withinViewport:rect.top>=0&&rect.bottom<=innerHeight&&rect.left>=0&&rect.right<=innerWidth,buttonsWithinViewport:buttons.every(button=>button.top>=0&&button.bottom<=innerHeight&&button.left>=0&&button.right<=innerWidth),bodyScrolls:body.scrollHeight>body.clientHeight,dialogDoesNotScroll:dialog.scrollHeight<=dialog.clientHeight+1,footerGap:buttons.at(-1).top-body.getBoundingClientRect().bottom,scrollWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth};
       });
-      expect(geometry).toMatchObject({background:'rgb(255, 255, 255)',withinViewport:true,buttonsWithinViewport:true,bodyScrolls:true,dialogDoesNotScroll:true});
+      const expectedBackground = await page.locator('html').getAttribute('data-theme') === 'dark' ? 'rgb(32, 36, 43)' : 'rgb(255, 255, 255)';
+      expect(geometry).toMatchObject({background:expectedBackground,withinViewport:true,buttonsWithinViewport:true,bodyScrolls:true,dialogDoesNotScroll:true});
       expect(geometry.footerGap).toBeGreaterThanOrEqual(12);
       expect(geometry.scrollWidth).toBe(geometry.viewportWidth);
       await capture(page,`preview-${viewport.width}x${viewport.height}`);

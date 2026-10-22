@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import { pathToFileURL } from "node:url";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -44,6 +45,7 @@ const allTitles = tasks.map((item) => item.title);
 const browser = await chromium.launch({ headless: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "Asia/Seoul" });
+  await skipFirstRunGuide(context);
   const page = await context.newPage();
   await page.clock.setFixedTime(new Date(now));
   const errors = [];
@@ -183,7 +185,9 @@ try {
       const buttons = [...element.querySelectorAll("button")];
       const filter = buttons.find((button) => button.getAttribute("aria-label") === "일정 보드 필터").getBoundingClientRect();
       const view = buttons.find((button) => button.textContent.trim() === "목록").getBoundingClientRect();
-      const sameRow = Math.abs(filter.top - view.top) < 2;
+      // The filter and segmented buttons have different heights. Check their
+      // vertical overlap rather than assuming identical top coordinates.
+      const sameRow = Math.min(filter.bottom, view.bottom) - Math.max(filter.top, view.top) > Math.min(filter.height, view.height) / 2;
       return { ordered: sameRow ? filter.right <= view.left + 1 : filter.bottom <= view.top + 1 };
     });
     expect(placement).toEqual({ ordered: true });

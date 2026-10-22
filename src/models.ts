@@ -185,11 +185,14 @@ export interface NoteAiAction {
 
 export type LlmReasoningEffort = "default" | "none" | "low" | "medium" | "high";
 
+export type ThemeMode = "system" | "light" | "dark";
+
 export interface AppSetting {
   id: string;
   showPastCompleted: boolean;
   weekStartsOn: "sun" | "mon";
   timeFormat: "24h" | "12h";
+  themeMode?: ThemeMode;
   llmEndpoint?: string;
   llmApiKey?: string;
   rememberLlmApiKey?: boolean;

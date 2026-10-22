@@ -43,3 +43,19 @@ if (result.outputFiles.length !== 17) throw new Error("테스트 번들을 생�
 for (const output of result.outputFiles) {
   await import(`data:text/javascript;base64,${Buffer.from(output.contents).toString("base64")}`);
 }
+
+for (const profileId of ["internal", "external"]) {
+  const compatibilityResult = await build({
+    absWorkingDir: rootDir,
+    entryPoints: ["tests/llmParameters.compat.test.ts"],
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: ["node20"],
+    write: false,
+    define: createBuildDefines(loadBuildProfile(rootDir, profileId)),
+    logLevel: "silent",
+  });
+  if (compatibilityResult.outputFiles.length !== 1) throw new Error("LLM 매개변수 호환성 테스트 번들을 생성하지 못했습니다.");
+  await import(`data:text/javascript;base64,${Buffer.from(compatibilityResult.outputFiles[0].contents).toString("base64")}`);
+}

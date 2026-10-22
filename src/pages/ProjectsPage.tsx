@@ -44,6 +44,7 @@ type ProjectTaskModalState =
 type ProjectSettingsModalState =
   | {
       mode: "create";
+      onboarding?: boolean;
     }
   | {
       mode: "edit";
@@ -223,6 +224,7 @@ function SubcategoryManager({ subcategories, onCreate, onRename, onDelete }: Sub
 interface ProjectEditorPanelProps {
   initialProject?: Project;
   createMode: boolean;
+  onboardingMode?: boolean;
   subcategories: ProjectSubcategory[];
   onSaveProject: (input: ProjectInput) => Promise<void>;
   onDeleteProject: (projectId: string) => Promise<void>;
@@ -237,6 +239,7 @@ interface ProjectEditorPanelProps {
 function ProjectEditorPanel({
   initialProject,
   createMode,
+  onboardingMode = false,
   subcategories,
   onSaveProject,
   onDeleteProject,
@@ -256,19 +259,6 @@ function ProjectEditorPanel({
   const formRef = useRef<HTMLFormElement>(null);
   const initialFormSnapshotRef = useRef(JSON.stringify(form));
   const isDirty = JSON.stringify(form) !== initialFormSnapshotRef.current;
-
-  useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      const nextForm = createMode ? createEmptyProjectForm() : createProjectFormFromProject(initialProject);
-      initialFormSnapshotRef.current = JSON.stringify(nextForm);
-      setForm(nextForm);
-      setError("");
-      setSuccess("");
-    }, 0);
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [createMode, initialProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     onStateChange({ isDirty, isBusy: isSubmitting });
@@ -326,6 +316,12 @@ function ProjectEditorPanel({
         </button>
       </header>
 
+      {onboardingMode ? (
+        <p className="description-text" role="note">
+          업무별로 프로젝트를 추가하고 설명을 작성하면, AI가 일정 추가 시 알맞은 프로젝트로 자동 분류합니다.
+        </p>
+      ) : null}
+
       <form
         ref={formRef}
         className="task-form"
@@ -356,9 +352,18 @@ function ProjectEditorPanel({
             rows={6}
             value={form.description}
             onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-            placeholder="프로젝트 관련 메모와 요약을 작성하세요."
+            placeholder={
+              onboardingMode ? "어떤 업무와 일정을 포함하는 프로젝트인지 작성하세요." : "프로젝트 관련 메모와 요약을 작성하세요."
+            }
+            aria-describedby={onboardingMode ? "onboarding-project-description-example" : undefined}
           />
         </label>
+        {onboardingMode ? (
+          <p className="description-text" id="onboarding-project-description-example">
+            설명 예시: ‘고객사 A 구축’ 프로젝트 — 고객사 A의 시스템 구축 업무입니다. 요구사항 회의, 개발, 테스트,
+            납품 일정을 포함합니다.
+          </p>
+        ) : null}
 
         <label className="checkbox-inline">
           <input
@@ -434,6 +439,7 @@ export function ProjectsPage() {
     isBusy: false,
   });
   const [projectSettingsModal, setProjectSettingsModal] = useState<ProjectSettingsModalState>(null);
+  const onboardingProjectCreatedRef = useRef(false);
   const [projectFormInteraction, setProjectFormInteraction] = useState<TaskFormInteractionState>({
     isDirty: false,
     isBusy: false,
@@ -442,6 +448,25 @@ export function ProjectsPage() {
   const [taskFormSerial, setTaskFormSerial] = useState(0);
 
   const selectedProjectIdFromQuery = searchParams.get("projectId");
+
+  useEffect(() => {
+    if (searchParams.get("setup") !== "project") {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("setup");
+    setSearchParams(nextParams, { replace: true });
+    setProjectSettingsModal((current) => current ?? { mode: "create", onboarding: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (projectSettingsModal || !onboardingProjectCreatedRef.current) {
+      return;
+    }
+    onboardingProjectCreatedRef.current = false;
+    window.dispatchEvent(new CustomEvent("ai-planner:onboarding-project-created"));
+  }, [projectSettingsModal]);
 
   const sortedProjects = useMemo(() => {
     const keyword = projectKeyword.trim().toLowerCase();
@@ -754,6 +779,9 @@ export function ProjectsPage() {
 
   async function handleSaveProject(input: ProjectInput) {
     await upsertProject(input);
+    if (!input.id && projectSettingsModal?.mode === "create") {
+      onboardingProjectCreatedRef.current = true;
+    }
   }
 
   async function handleDeleteProject(projectId: string) {
@@ -1049,6 +1077,7 @@ export function ProjectsPage() {
               key={projectSettingsModal.mode === "create" ? "new-project" : editingProject?.id ?? "project"}
               initialProject={projectSettingsModal.mode === "edit" ? editingProject : undefined}
               createMode={projectSettingsModal.mode === "create"}
+              onboardingMode={projectSettingsModal.mode === "create" && projectSettingsModal.onboarding}
               subcategories={
                 projectSettingsModal.mode === "edit" && editingProject
                   ? projectSubcategories.filter((sub) => sub.projectId === editingProject.id)

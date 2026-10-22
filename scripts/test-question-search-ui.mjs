@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { skipFirstRunGuide } from "./ui-fixtures.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
@@ -19,7 +20,9 @@ function task(id, title, content, date, endDate = date) {
   return { id, title, content, projectId: "qa-project", taskTypeId: "qa-type", status: "DONE", startAt: new Date(`${date}T09:00:00+09:00`).toISOString(), endAt: new Date(`${endDate}T17:00:00+09:00`).toISOString(), completedAt: new Date(`${endDate}T18:00:00+09:00`).toISOString(), isMajor: false, createdAt: nowIso, updatedAt: nowIso };
 }
 function note(id, title, content, updatedAt) {
-  return { id, title, content, projectId: "qa-project", tags: [], status: "active", isPinned: false, linkedTaskIds: id.startsWith("qa-education-") ? ["qa-education-task"] : id === "qa-trip-note" ? ["qa-trip-task"] : [], createdAt: new Date("2026-09-01T09:00:00+09:00").toISOString(), updatedAt: new Date(updatedAt).toISOString() };
+  // This suite tests search request privacy, independently of the existing
+  // automatic classification that intentionally sends an unclassified note.
+  return { id, title, content, projectId: "qa-project", tags: [], status: "active", isPinned: false, aiClassifiedAt: nowIso, linkedTaskIds: id.startsWith("qa-education-") ? ["qa-education-task"] : id === "qa-trip-note" ? ["qa-trip-task"] : [], createdAt: new Date("2026-09-01T09:00:00+09:00").toISOString(), updatedAt: new Date(updatedAt).toISOString() };
 }
 const tasks = [
   task("qa-trip-task", "분류 자료 확인 · 예산 출장", `분류 자료를 확인하기 위해 예산 현장에 출장한다. ${privateBodyMarker}`, "2026-09-17", "2026-09-18"),
@@ -56,11 +59,13 @@ let calls = 0;
 let aborted = 0;
 let releaseHeldRequest;
 let requestPrivacyViolation = false;
+const requestPrivacyMatches = new Set();
 let unmockedRequests = 0;
 
 const browser = await chromium.launch({ headless: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1024, height: 900 }, timezoneId: "Asia/Seoul" });
+  await skipFirstRunGuide(context);
   const page = await context.newPage();
   await page.clock.setFixedTime(new Date(now));
   page.on("pageerror", error => report.runtimeErrors.push(error.message));
@@ -74,7 +79,11 @@ try {
     }
     calls += 1;
     const body = request.postData() ?? "";
-    if (body.includes(privateBodyMarker) || seededRecords.some(record => body.includes(record.id) || (record.title && body.includes(record.title)))) requestPrivacyViolation = true;
+    if (body.includes(privateBodyMarker)) requestPrivacyMatches.add("synthetic body marker");
+    for (const record of seededRecords) {
+      if (body.includes(record.id) || (record.title && body.includes(record.title))) requestPrivacyMatches.add(record.id);
+    }
+    if (requestPrivacyMatches.size) requestPrivacyViolation = true;
     if (mode === "error") {
       await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "synthetic unavailable" } }) });
       return;
@@ -284,7 +293,7 @@ try {
 
   const noteSearch = page.getByLabel("노트 검색", { exact: true });
   await noteSearch.fill("현재노트와절대로일치하지않는검색");
-  await expect(page.locator(".notes-list")).toContainText("노트가 없습니다.");
+  await expect(page.locator(".notes-list")).toContainText("검색 결과가 없습니다.");
   await openSearch();
   await search("trip");
   await list.getByRole("link", { name: noteLinkName, exact: true }).click();
@@ -479,6 +488,7 @@ try {
   await dialog.getByRole("button", { name: "원문 닫기", exact: true }).click();
   await expect(reducedRow).toBeFocused();
   pass("reduced motion", "With the system preference enabled, results and source still open and close with focus intact, while panel transitions and result entrance animation are disabled");
+  expect([...requestPrivacyMatches], "Only synthetic fixture identifiers are included in diagnostics, never request bodies").toEqual([]);
   expect(requestPrivacyViolation).toBe(false);
   pass("request privacy", "Model requests contain no seeded source body, local record id, or record title");
   expect(report.runtimeErrors).toEqual([]);

@@ -1,0 +1,562 @@
+/* Theme selection is resolved from the saved preference and prefers-color-scheme. */
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  color: #edf0f5;
+  background: #171a20;
+  --canvas: #20242b;
+  --canvas-parchment: #171a20;
+  --surface-pearl: #272d36;
+  --surface-soft: #313946;
+  --surface-sunken: #11151b;
+  --surface-tile-1: #152033;
+  --surface-tile-2: #182234;
+  --surface-tile-3: #111a29;
+  --surface-black: #36445b;
+  --surface-chip-translucent: rgba(49, 57, 70, 0.86);
+  --primary: #8db7ff;
+  --primary-focus: #aacaff;
+  --primary-pressed: #77a7f8;
+  --primary-on-dark: #bfdbfe;
+  --link-blue: #8fbeff;
+  --note-heading-black: #f1f4fa;
+  --note-heading-blue: #82c7ef;
+  --note-heading-sky-blue: #9edbff;
+  --note-heading-vermilion: #ffb181;
+  --note-heading-bluish-green: #68d9b2;
+  --note-bold: #ff9e9e;
+  --tint-peach: #413025;
+  --tint-rose: #422b38;
+  --tint-mint: #1d3b32;
+  --tint-blue: #243854;
+  --tint-sky: #203b4b;
+  --tint-yellow: #453b22;
+  --tint-yellow-bold: #b28b29;
+  --tint-cream: #363023;
+  --ink: #edf0f5;
+  --body: #d9dee7;
+  --body-muted: #a8b0bd;
+  --body-on-dark: #f5f7fb;
+  --body-muted-on-dark: rgba(245, 247, 251, 0.76);
+  --ink-muted-80: #d3d9e2;
+  --ink-muted-48: #a8b0bd;
+  --divider-soft: rgba(212, 222, 237, 0.08);
+  --hairline: #3b4350;
+  --hairline-soft: rgba(212, 222, 237, 0.14);
+  --hairline-strong: #657185;
+  --danger: #ff9b98;
+  --success: #7dddb3;
+  --info: #8fbeff;
+  --warning: #f2be7d;
+  --focus: #9ac0ff;
+  --status-not-done-text: #a8c8ff;
+  --status-not-done-bg: #233653;
+  --status-not-done-surface: #202f45;
+  --status-not-done-border: rgba(141, 183, 255, 0.38);
+  --status-on-hold-text: #f4c389;
+  --status-on-hold-bg: #413321;
+  --status-on-hold-surface: #352c23;
+  --status-on-hold-border: rgba(244, 195, 137, 0.36);
+  --status-done-text: #b2bfce;
+  --status-done-bg: #2c3440;
+  --status-done-surface: #252c36;
+  --status-done-border: rgba(178, 191, 206, 0.28);
+  --status-canceled-text: #b0b4bd;
+  --status-canceled-bg: #303139;
+  --status-canceled-surface: #272930;
+  --status-canceled-border: rgba(176, 180, 189, 0.28);
+  --status-conflict-text: #ffa7a4;
+  --status-conflict-bg: #43292e;
+  --status-conflict-border: rgba(255, 167, 164, 0.36);
+  --status-major-text: #a8c8ff;
+  --status-major-bg: #233653;
+  --status-major-border: rgba(141, 183, 255, 0.38);
+  --marker-lunch-text: #9bd8e7;
+  --marker-lunch-bg: #203c45;
+  --marker-lunch-border: rgba(155, 216, 231, 0.34);
+  --marker-leave-text: #8ee2b1;
+  --marker-leave-bg: #203c30;
+  --marker-leave-border: rgba(142, 226, 177, 0.34);
+  --marker-trip-text: #a8c8ff;
+  --marker-trip-bg: #233653;
+  --marker-trip-border: rgba(141, 183, 255, 0.38);
+  --op-create-text: #a8c8ff;
+  --op-create-bg: #233653;
+  --op-update-text: #f4c389;
+  --op-update-bg: #413321;
+  --op-delete-text: #ffa7a4;
+  --op-delete-bg: #43292e;
+  --activity-level-0: #29313c;
+  --activity-level-1: #284365;
+  --activity-level-2: #386396;
+  --activity-level-3: #5087c9;
+  --activity-level-4: #91bfff;
+  --product-shadow: rgba(0, 0, 0, 0.48) 0 24px 48px -8px;
+  --card-shadow: rgba(0, 0, 0, 0.24) 0 4px 12px 0;
+  --theme-accent-ink: #10233f;
+}
+
+html[data-theme="dark"] ::selection {
+  color: var(--ink);
+  background: #3a547a;
+}
+
+html[data-theme="dark"] :is(input, textarea)::placeholder {
+  color: var(--body-muted);
+  opacity: 1;
+}
+
+/* Translucent surfaces previously used literal white. */
+html[data-theme="dark"] .app-top-nav {
+  background: rgba(23, 26, 32, 0.97);
+}
+
+html[data-theme="dark"] .top-nav-list {
+  border-color: var(--hairline);
+  background: var(--canvas);
+}
+
+html[data-theme="dark"] .top-nav-reminders {
+  color: var(--primary);
+}
+
+html[data-theme="dark"] .top-nav-reminders-count {
+  border-color: var(--canvas-parchment);
+}
+
+html[data-theme="dark"] .ai-schedule-fab {
+  border-color: var(--status-not-done-border);
+  background: linear-gradient(145deg, var(--canvas), var(--tint-blue));
+  box-shadow: var(--card-shadow);
+}
+
+html[data-theme="dark"] .ai-schedule-fab:hover {
+  border-color: var(--primary);
+}
+
+html[data-theme="dark"] .dashboard-calendar-card {
+  border-color: var(--hairline);
+  background: linear-gradient(180deg, var(--canvas), var(--canvas-parchment));
+}
+
+html[data-theme="dark"] .dashboard-today-schedules {
+  border-color: var(--hairline);
+  background: linear-gradient(180deg, var(--surface-pearl), var(--canvas));
+  box-shadow: var(--card-shadow);
+}
+
+/* Light blue actions use dark text, including their nested labels. */
+html[data-theme="dark"] :is(
+  .btn-primary, .skip-link, .segmented-control button.active,
+  .settings-version-badge, .note-mode-toggle button.active,
+  .note-diff-view-toggle button.active, .settings-tab.active,
+  .task-status-primary-action.complete,
+  .dashboard-board-filter-count
+) {
+  color: var(--theme-accent-ink);
+}
+
+html[data-theme="dark"] .proposal-item-toggle input:checked + .proposal-checkmark {
+  color: var(--theme-accent-ink);
+}
+
+html[data-theme="dark"] .settings-redesigned .settings-category-button.active,
+html[data-theme="dark"] .settings-redesigned .settings-category-button.active :is(
+  .settings-category-label, .settings-category-description, .settings-category-icon
+),
+html[data-theme="dark"] .settings-redesigned .settings-page-header .settings-version-badge,
+html[data-theme="dark"] .settings-redesigned :is(
+  .settings-managed-row, .settings-data-file-row
+) > .btn-soft:hover:not(:disabled) {
+  color: var(--theme-accent-ink);
+}
+
+html[data-theme="dark"] .settings-redesigned :is(
+  .settings-content-header h2, .settings-card-header h3
+) {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .global-memo-panel textarea, .global-memo-panel input, .global-memo-panel select,
+  .context-suggestion-list li, .ai-add-modal-close, .task-status-alternate-select select,
+  .task-form-actions, .archive-card-action
+) {
+  background: var(--canvas);
+  border-color: var(--hairline);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .ai-request-grid > .ai-input-label, .ai-result-card.has-output, .ai-message-card,
+  .proposal-count-card, .proposal-card.selected, .context-suggestion-block,
+  .ai-add-modal-card > .panel-header, .ai-result-modal-card > .panel-header,
+  .task-modal-header, .task-status-quick-control, .dashboard-onboarding,
+  .day-complete-banner
+) {
+  background: linear-gradient(135deg, var(--canvas), var(--status-not-done-surface));
+  border-color: var(--status-not-done-border);
+}
+
+html[data-theme="dark"] .ai-add-modal-card > .ai-add-modal-header {
+  background: linear-gradient(180deg, var(--canvas), var(--status-not-done-surface));
+  border-bottom-color: var(--hairline);
+}
+
+html[data-theme="dark"] :is(.ai-add-modal-card, .ai-result-modal-card, .task-modal-card) {
+  border-color: var(--hairline);
+  box-shadow: var(--product-shadow);
+}
+
+html[data-theme="dark"] :is(
+  .modal-backdrop, .modal-backdrop:has(.ai-add-modal-card), .task-modal-backdrop,
+  .reminder-review-backdrop
+) {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+html[data-theme="dark"] .ai-add-modal-heading h2,
+html[data-theme="dark"] .ai-add-workspace .proposal-card-body strong {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .ai-add-modal-heading .eyebrow,
+html[data-theme="dark"] .ai-add-workspace :is(.proposal-date-time, .proposal-date-time-arrow) {
+  color: var(--primary);
+}
+
+html[data-theme="dark"] .ai-add-modal-heading small,
+html[data-theme="dark"] .ai-add-workspace .proposal-summary-row .description-text {
+  color: var(--body-muted);
+}
+
+html[data-theme="dark"] .ai-add-modal-close:hover {
+  background: var(--surface-soft);
+  color: var(--primary);
+}
+
+html[data-theme="dark"] .ai-add-workspace .ai-input-label textarea {
+  background: var(--canvas);
+  border-color: var(--hairline-strong);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .ai-add-workspace .ai-composer-footer .btn-primary {
+  background: linear-gradient(135deg, #aacaff, #77a7f8);
+  color: var(--theme-accent-ink);
+}
+
+html[data-theme="dark"] .ai-add-workspace .ai-result-card,
+html[data-theme="dark"] .ai-add-workspace .proposal-count-card,
+html[data-theme="dark"] :is(.overview-stat-button.all, .agenda-stat-grid .all) {
+  border-color: var(--status-not-done-border);
+  background: var(--status-not-done-bg);
+  color: var(--status-not-done-text);
+}
+
+html[data-theme="dark"] :is(
+  .settings-model-picker-option:hover:not(:disabled),
+  .settings-model-picker-option:focus-visible,
+  .settings-context-card .settings-inline-note
+) {
+  background: var(--surface-pearl);
+}
+
+html[data-theme="dark"] :is(
+  .task-form-field [aria-invalid="true"], .task-time-select.is-invalid,
+  .ai-error-recovery, .dayticker-item.conflict, .conflict-warning
+) {
+  background: var(--status-conflict-bg);
+  border-color: var(--status-conflict-border);
+}
+
+html[data-theme="dark"] .calendar-special-mark.lunch {
+  border-color: var(--status-on-hold-border);
+  background: var(--status-on-hold-bg);
+  color: var(--status-on-hold-text);
+}
+
+html[data-theme="dark"] .calendar-special-mark.lunch::before {
+  border-color: var(--status-on-hold-text);
+  background: var(--status-on-hold-bg);
+  box-shadow: inset 0 0 0 2px var(--status-on-hold-bg);
+}
+
+/* Archive cards retain their category colors at a lower surface brightness. */
+html[data-theme="dark"] :is(.archive-record-card.lunch, .lunch-ranking-row.first) {
+  border-color: var(--status-on-hold-border);
+  background: var(--status-on-hold-bg);
+}
+
+html[data-theme="dark"] :is(
+  .archive-lunch-ranking-hint, .lunch-ranking-row.first .lunch-ranking-position
+) {
+  color: var(--status-on-hold-text);
+}
+
+html[data-theme="dark"] .archive-record-card.focus {
+  background: var(--status-not-done-bg);
+}
+
+html[data-theme="dark"] .archive-record-card.planning {
+  background: var(--tint-mint);
+}
+
+html[data-theme="dark"] .archive-record-card.project {
+  background: #352e48;
+}
+
+html[data-theme="dark"] .archive-record-icon {
+  background: var(--surface-soft);
+}
+
+html[data-theme="dark"] .archive-lunch-ranking-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .ctx-chip.keyword {
+  color: var(--marker-lunch-text);
+}
+
+html[data-theme="dark"] .ctx-chip.time {
+  color: var(--status-not-done-text);
+}
+
+html[data-theme="dark"] .ctx-chip.major {
+  color: var(--status-on-hold-text);
+}
+
+/* The editor's menus are also rendered into body portals. */
+html[data-theme="dark"] .note-mdx-editor {
+  --baseBase: var(--canvas);
+  --basePageBg: var(--canvas);
+  --baseBgSubtle: var(--canvas-parchment);
+  --baseBg: var(--surface-pearl);
+  --baseBgHover: var(--surface-soft);
+  --baseBgActive: var(--tint-blue);
+  --baseLine: var(--hairline);
+  --baseBorder: var(--hairline);
+  --baseBorderHover: var(--hairline-strong);
+  --baseSolid: var(--body-muted);
+  --baseSolidHover: var(--body);
+  --baseText: var(--body);
+  --baseTextContrast: var(--ink);
+  --accentSolid: var(--primary);
+  --accentSolidHover: var(--primary-focus);
+  --accentText: var(--primary);
+  --accentTextContrast: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .markdown-renderer mark, .live-markdown-canvas .cm-live-highlight,
+  .note-mdx-content mark
+) {
+  background: var(--tint-yellow);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(.note-mdx-content code, .live-markdown-canvas .cm-live-code) {
+  color: var(--primary-focus);
+}
+
+html[data-theme="dark"] .note-mdx-editor :is(.cm-gutters, .cm-activeLineGutter) {
+  background: var(--canvas-parchment);
+  border-color: var(--hairline);
+  color: var(--body-muted);
+}
+
+/* The block selector uses the library's border token for its empty label. */
+html[data-theme="dark"] .note-mdx-editor [data-placeholder] > span:first-child {
+  color: var(--body-muted);
+}
+
+html[data-theme="dark"] .note-card-snippet.empty {
+  opacity: 1;
+}
+
+/* Source mode includes a light syntax theme; override its stable token classes. */
+html[data-theme="dark"] .mdxeditor-source-editor .tok-heading {
+  color: var(--note-heading-sky-blue);
+}
+
+html[data-theme="dark"] .mdxeditor-source-editor .tok-strong {
+  color: var(--note-bold);
+}
+
+html[data-theme="dark"] .mdxeditor-source-editor :is(.tok-emphasis, .tok-punctuation, .tok-operator) {
+  color: var(--body);
+}
+
+html[data-theme="dark"] .mdxeditor-source-editor :is(.tok-quote, .tok-comment) {
+  color: var(--body-muted);
+}
+
+html[data-theme="dark"] .mdxeditor-source-editor :is(
+  .tok-link, .tok-url, .tok-keyword, .tok-atom, .tok-bool,
+  .tok-typeName, .tok-className, .tok-namespace, .tok-labelName
+) {
+  color: var(--primary-focus);
+}
+
+html[data-theme="dark"] .mdxeditor-source-editor :is(
+  .tok-string, .tok-string2, .tok-literal, .tok-number, .tok-variableName,
+  .tok-variableName2, .tok-propertyName, .tok-macroName
+) {
+  color: var(--warning);
+}
+
+html[data-theme="dark"] .mdxeditor-source-editor :is(.tok-meta, .tok-inserted) {
+  color: var(--success);
+}
+
+html[data-theme="dark"] .mdxeditor-source-editor :is(.tok-invalid, .tok-deleted) {
+  color: var(--danger);
+}
+
+html[data-theme="dark"] .note-mdx-editor :is(.cm-panels, .cm-tooltip) {
+  background: var(--canvas);
+  color: var(--body);
+  border-color: var(--hairline);
+}
+
+html[data-theme="dark"] .note-mdx-editor :is(.cm-activeLine, .cm-selectionMatch) {
+  background: var(--surface-pearl);
+}
+
+html[data-theme="dark"] .note-mdx-editor :is(.cm-button, .cm-search button[name="close"]) {
+  background: var(--surface-soft);
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+html[data-theme="dark"] .note-mdx-editor .cm-textfield {
+  background: var(--canvas-parchment);
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+html[data-theme="dark"] .note-mdx-editor .cm-searchMatch {
+  background: var(--tint-yellow);
+  outline-color: var(--hairline-strong);
+}
+
+html[data-theme="dark"] .note-mdx-editor :is(.cm-searchMatch-selected, .cm-matchingBracket) {
+  background: var(--tint-blue);
+}
+
+html[data-theme="dark"] .note-mdx-editor .cm-cursor {
+  border-left-color: var(--primary);
+}
+
+html[data-theme="dark"] .note-mdx-editor .cm-selectionBackground {
+  background: var(--tint-blue);
+}
+
+html[data-theme="dark"] .notes-conflict-panel {
+  border-color: var(--status-on-hold-border);
+  background: var(--status-on-hold-bg);
+  color: var(--status-on-hold-text);
+}
+
+/* Reminder dialogs use their own palette rather than shared surface tokens. */
+html[data-theme="dark"] :is(.reminder-review-modal, .reminder-review-row) {
+  background: var(--canvas);
+  border-color: var(--hairline);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .reminder-review-header, .reminder-review-list, .reminder-review-footer,
+  .reminder-review-row
+) {
+  border-color: var(--hairline);
+}
+
+html[data-theme="dark"] :is(.reminder-review-count-title, .reminder-review-focus-heading h2) {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] :is(
+  .reminder-review-header p, .reminder-review-kicker, .reminder-review-count,
+  .reminder-review-text-action, .reminder-review-group-title.is-soon,
+  .reminder-review-relative.is-soon
+) {
+  color: var(--primary);
+}
+
+html[data-theme="dark"] :is(
+  .reminder-review-time, .reminder-review-details dd, .reminder-review-row-meta,
+  .reminder-review-relative, .reminder-review-more-toggle, .reminder-postpone-options p
+) {
+  color: var(--body-muted);
+}
+
+html[data-theme="dark"] :is(
+  .reminder-review-close, .reminder-review-details div, .reminder-postpone-options,
+  .reminder-review-group-title, .reminder-review-footer,
+  .reminder-review-row:hover:not(:disabled)
+) {
+  border-color: var(--hairline);
+  background: var(--surface-pearl);
+}
+
+html[data-theme="dark"] .reminder-review-close,
+html[data-theme="dark"] .reminder-postpone-options button {
+  color: var(--body);
+}
+
+html[data-theme="dark"] .reminder-review-close:hover:not(:disabled) {
+  background: var(--surface-soft);
+}
+
+html[data-theme="dark"] :is(
+  .reminder-review-count, .reminder-review-ai-edit,
+  .reminder-review-row.is-selected, .reminder-review-row.is-selected:hover:not(:disabled)
+) {
+  background: var(--status-not-done-bg);
+  border-color: var(--status-not-done-border);
+}
+
+html[data-theme="dark"] .reminder-review-ai-edit {
+  color: var(--status-not-done-text);
+}
+
+html[data-theme="dark"] .reminder-review-ai-edit:hover:not(:disabled) {
+  background: var(--tint-blue);
+}
+
+html[data-theme="dark"] .reminder-action-complete {
+  background: var(--primary);
+  color: var(--theme-accent-ink);
+}
+
+html[data-theme="dark"] :is(.reminder-action-snooze, .reminder-review-relative.is-past) {
+  color: var(--status-on-hold-text);
+}
+
+html[data-theme="dark"] .reminder-action-snooze {
+  background: var(--status-on-hold-bg);
+}
+
+html[data-theme="dark"] :is(.reminder-action-cancel, .reminder-review-error) {
+  color: var(--danger);
+}
+
+html[data-theme="dark"] .reminder-action-cancel {
+  border-color: var(--status-conflict-border) !important;
+  background: var(--status-conflict-bg);
+}
+
+html[data-theme="dark"] .reminder-action-postpone {
+  border-color: var(--hairline-strong) !important;
+  background: var(--canvas);
+  color: var(--body);
+}
+
+html[data-theme="dark"] .reminder-postpone-options button {
+  background: var(--canvas);
+  border-color: var(--hairline-strong);
+}

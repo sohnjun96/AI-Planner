@@ -14,6 +14,9 @@ import { ModalBackdrop } from "./ModalBackdrop";
 import { ToastHost } from "./ToastHost";
 import { AppReminderStack } from "./AppReminderStack";
 import { ScheduleReminderModal } from "./ScheduleReminderModal";
+import { useOnboarding } from "../hooks/useOnboarding";
+import { FirstRunGuide } from "./FirstRunGuide";
+import { OnboardingConnectionDialog } from "./OnboardingConnectionDialog";
 
 const planaiLogo = __PLANAI_APP_ICON_URL__;
 
@@ -39,9 +42,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [aiSessionRevision, setAiSessionRevision] = useState(0);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAskOpen, setIsAskOpen] = useState(false);
-  const [hasOtherDialog, setHasOtherDialog] = useState(false);
+  const [hasOtherDialog, setHasOtherDialog] = useState(true);
+  const onboarding = useOnboarding();
+  const onboardingRef = useRef(onboarding);
+  onboardingRef.current = onboarding;
+  const guideStartedRef = useRef(false);
   const reminders = useScheduleReminders(openAiScheduleSession);
-  const isReminderOpen = reminders.isOpen && !hasOtherDialog && !isAiAddOpen && !isHelpOpen && !isAskOpen;
+  const isReminderOpen = reminders.isOpen && !hasOtherDialog && !isAiAddOpen && !isHelpOpen && !isAskOpen && !onboarding.active;
   const aiFabRef = useRef<HTMLButtonElement>(null);
   const topNavRef = useRef<HTMLElement>(null);
   const openedFromAiFab = useRef(false);
@@ -63,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   function openAiScheduleSession(initialDraft = "") {
+    if (onboardingRef.current.active && onboardingRef.current.step === "shortcut") onboardingRef.current.finish();
     openedFromAiFab.current = document.activeElement === aiFabRef.current;
     setAiInitialDraft(initialDraft);
     setAiSessionRevision((revision) => revision + 1);
@@ -78,10 +86,78 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }
 
+  function openGuideProject() {
+    if (!setting.llmApiKey?.trim()) {
+      onboarding.requireConnection("project");
+      return;
+    }
+    navigate("/projects?setup=project");
+  }
+
+  function openGuideSchedule() {
+    if (!setting.llmApiKey?.trim()) {
+      onboarding.requireConnection("schedule");
+      return;
+    }
+    navigate("/dashboard");
+    openAiScheduleSession();
+  }
+
+  function handleGuideConnected() {
+    const next = onboarding.nextAfterConnection;
+    onboarding.go(next);
+    if (next === "project") {
+      navigate("/projects?setup=project");
+    } else {
+      navigate("/dashboard");
+      if (next === "schedule") openAiScheduleSession();
+    }
+  }
+
+  function resumeGuide() {
+    setIsHelpOpen(false);
+    const step = onboarding.resume();
+    if (step === "project") navigate("/projects?setup=project");
+    if (step === "schedule") {
+      navigate("/dashboard");
+      openAiScheduleSession();
+    }
+  }
+
+  // 처음 실행하거나 새로고침해도 저장한 단계의 실제 작업 화면으로 안내한다.
+  useEffect(() => {
+    if (guideStartedRef.current || hasOtherDialog) return;
+    guideStartedRef.current = true;
+    const guide = onboardingRef.current;
+    if (!guide.active) return;
+    if (guide.step === "project" && location.pathname !== "/projects") navigate("/projects?setup=project", { replace: true });
+    if (guide.step === "schedule") {
+      navigate("/dashboard", { replace: true });
+      openAiScheduleSession();
+    }
+  }, [hasOtherDialog, location.pathname, navigate]);
+
+  useEffect(() => {
+    const projectCreated = () => {
+      const guide = onboardingRef.current;
+      if (!guide.active || guide.step !== "project") return;
+      if (!guide.hasKey) {
+        guide.requireConnection("schedule");
+        return;
+      }
+      const next = guide.nextAfterProject;
+      guide.go(next);
+      navigate("/dashboard");
+      if (next === "schedule") openAiScheduleSession();
+    };
+    window.addEventListener("ai-planner:onboarding-project-created", projectCreated);
+    return () => window.removeEventListener("ai-planner:onboarding-project-created", projectCreated);
+  }, [navigate]);
+
   // Wait until an existing editing dialog closes before presenting reminders.
   useEffect(() => {
     const checkDialogs = () => setHasOtherDialog(Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'))
-      .some((dialog) => dialog.id !== "schedule-reminder-dialog" && dialog.getClientRects().length > 0));
+      .some((dialog) => dialog.id !== "schedule-reminder-dialog" && dialog.id !== "onboarding-connection-dialog" && dialog.getClientRects().length > 0));
     const observer = new MutationObserver(checkDialogs);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "style", "class"] });
     const timer = window.setTimeout(checkDialogs, 0);
@@ -247,17 +323,25 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="page-content" id="main-content" tabIndex={-1}>
+        {onboarding.active && !hasOtherDialog && !isAiAddOpen && !isHelpOpen && !isAskOpen ? (
+          <FirstRunGuide step={onboarding.step} pathname={location.pathname}
+            onProject={openGuideProject} onSchedule={openGuideSchedule}
+            onPause={onboarding.pause} onFinish={onboarding.finish} />
+        ) : null}
         <div key={location.pathname} className="route-transition">
           {children}
         </div>
       </main>
 
-      <footer className="app-copyright">(c) 2026. 손준혁 All rights reserved.</footer>
+      <footer className="app-copyright">
+        <span>(c) 2026. 손준혁 All rights reserved.</span>
+        <button className="app-help-link" type="button" onClick={() => setIsHelpOpen(true)}>도움말</button>
+      </footer>
 
       <button
         ref={aiFabRef}
         type="button"
-        className="ai-schedule-fab"
+        className={`ai-schedule-fab${onboarding.active && onboarding.step === "shortcut" ? " first-run-highlight" : ""}`}
         aria-label="AI 일정 추가"
         aria-haspopup="dialog"
         aria-expanded={isAiAddOpen}
@@ -310,6 +394,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </header>
 
+            {onboarding.active && onboarding.step === "schedule" ? (
+              <div className="first-run-ai-hint" data-onboarding-step="schedule-input">
+                <p><strong>시작 안내 · 3 / 3</strong> — 첫 일정을 입력해 보세요.<br />예: 내일 오전 10시 마케팅 회의 1시간 추가. 초안을 확인하고 반영하면 저장됩니다.</p>
+                <button className="btn btn-soft" type="button" onClick={onboarding.pause}>안내 그만보기</button>
+              </div>
+            ) : null}
+
             <AiAssistantWorkspace
               key={`ai-schedule-session-${aiSessionRevision}`}
               isActive={isAiAddOpen}
@@ -323,9 +414,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               placeholder="예: 다음 주 월요일 오전 10시에 디자인 리뷰 1시간 추가"
               className="embedded ai-add-workspace"
               initialDraft={aiInitialDraft}
-              onApplied={() => {
+              onApplied={({ createdTaskCount }) => {
                 setAiInitialDraft("");
                 closeAiScheduleSession();
+                if (onboarding.active && onboarding.step === "schedule" && createdTaskCount > 0) {
+                  onboarding.go("shortcut");
+                }
               }}
               onRequestClose={closeAiScheduleSession}
               onOpenAiSettings={() => {
@@ -336,7 +430,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </section>
       </ModalBackdrop>
 
-      {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} /> : null}
+      {isHelpOpen ? <HelpModal onClose={() => setIsHelpOpen(false)} onStartGuide={resumeGuide} /> : null}
 
       {isAskOpen ? <AskDataModal onClose={() => setIsAskOpen(false)} /> : null}
 
@@ -351,6 +445,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <AppReminderStack compact={location.pathname === "/notes"} />
 
       <ToastHost />
+      {onboarding.active && onboarding.step === "connection" && !hasOtherDialog && !isAiAddOpen && !isHelpOpen && !isAskOpen ? (
+        <OnboardingConnectionDialog onConnected={handleGuideConnected} onSkip={onboarding.pause} />
+      ) : null}
     </div>
   );
 }
